@@ -64,6 +64,7 @@
   },
   "scripts": {
     "compile": "tsc -p .",
+    "trial:codex-practice": "npm run compile && node dist/src/cli/codexPracticeTrial.js",
     "trial:gpt-practice": "npm run compile && node dist/src/cli/gptPracticeTrial.js",
     "trial:mimo": "npm run compile && node dist/src/cli/mimoAutocompleteTrial.js",
     "test": "vitest run",

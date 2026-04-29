@@ -93,6 +93,14 @@ npm run trial:gpt-practice -- --model gpt-5-nano --max-usd 0.02
 npm run trial:gpt-practice -- --problem-id P1427 --pain-points output_order,loop_boundary
 ```
 
+Run a no-key Codex-subagent practice sample:
+
+```powershell
+npm run trial:codex-practice
+```
+
+This reads `fixtures/practice/P1427.codex.json`, validates it with the same practice report parser, and prints a pain-point summary. It is useful when no OpenAI API key is available and we want to test the learning loop with Codex-generated samples.
+
 To try the extension in VS Code, open this folder, press `F5`, and choose the extension host launch option. The activity bar will show `Student Autocomplete`, with a `Problem Bank` sidebar.
 
 ## Source Policy

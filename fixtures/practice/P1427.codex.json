@@ -1,0 +1,36 @@
+{
+  "problem_id": "P1427",
+  "reference_solution": "nums = list(map(int, input().split()))\nans = []\nfor x in nums:\n    if x == 0:\n        break\n    ans.append(x)\nprint(' '.join(map(str, ans[::-1])))\n",
+  "wrong_submissions": [
+    {
+      "code": "nums = list(map(int, input().split()))\nans = []\nfor x in nums:\n    if x == 0:\n        break\n    ans.append(x)\nprint(' '.join(map(str, ans)))\n",
+      "expected_error": "Outputs the numbers in the original input order instead of reversing the numbers before the sentinel 0.",
+      "pain_points": [
+        "output_order"
+      ]
+    },
+    {
+      "code": "nums = list(map(int, input().split()))\nans = nums[::-1]\nprint(' '.join(map(str, ans)))\n",
+      "expected_error": "Includes the sentinel 0 in the output and reverses everything after reading, instead of stopping at 0 and excluding it.",
+      "pain_points": [
+        "sentinel_input",
+        "output_order"
+      ]
+    },
+    {
+      "code": "nums = list(map(int, input().split()))\nans = []\nfor x in nums:\n    if x == 0:\n        break\n    ans.append(x)\nans.reverse()\nprint(ans)\n",
+      "expected_error": "Reverses the selected numbers, but prints the Python list representation with brackets and commas instead of space-separated integers.",
+      "pain_points": [
+        "list_mutation_or_formatting"
+      ]
+    }
+  ],
+  "skill_update_candidate": {
+    "name": "python-output-order",
+    "rules": [
+      "When a problem asks for reverse output, separate the collection step from the output-order transformation.",
+      "For sentinel-terminated input, stop before appending or printing the sentinel value.",
+      "Use join over mapped strings for space-separated contest output instead of printing a Python list directly."
+    ]
+  }
+}
