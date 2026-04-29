@@ -1,0 +1,76 @@
+{
+  "name": "student-autocomplete-lab",
+  "displayName": "Student Autocomplete Lab",
+  "description": "A student-friendly VS Code autocomplete and problem-note prototype.",
+  "version": "0.0.1",
+  "publisher": "kaiserunix",
+  "private": true,
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Education",
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:studentAutocomplete.problemBank",
+    "onCommand:studentAutocomplete.saveProblem",
+    "onCommand:studentAutocomplete.giveHint",
+    "onCommand:studentAutocomplete.moreSpecificHint",
+    "onCommand:studentAutocomplete.revealAnswer",
+    "onCommand:studentAutocomplete.recommendNext"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "studentAutocomplete.saveProblem",
+        "title": "Student Autocomplete: Save Problem"
+      },
+      {
+        "command": "studentAutocomplete.giveHint",
+        "title": "Student Autocomplete: Give Me a Hint"
+      },
+      {
+        "command": "studentAutocomplete.moreSpecificHint",
+        "title": "Student Autocomplete: More Specific Hint"
+      },
+      {
+        "command": "studentAutocomplete.revealAnswer",
+        "title": "Student Autocomplete: Show Answer / I Give Up"
+      },
+      {
+        "command": "studentAutocomplete.recommendNext",
+        "title": "Student Autocomplete: Recommend Next Problem"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "studentAutocomplete",
+          "title": "Student Autocomplete",
+          "icon": "resources/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "studentAutocomplete": [
+        {
+          "id": "studentAutocomplete.problemBank",
+          "name": "Problem Bank"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "test": "vitest run",
+    "watch": "tsc -w -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "@types/vscode": "^1.95.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  }
+}

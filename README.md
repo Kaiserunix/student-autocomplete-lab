@@ -19,14 +19,45 @@ The goal is not to build another full agent IDE. The goal is a narrow autocomple
 - `docs/codex-start-prompt.md`: prompt to give Codex for the first build attempt.
 - `secrets/models.env`: local API credentials and model routing. This is ignored by git.
 
-## Suggested First Build
+## Current Build Target
 
-Start with a local prototype instead of a VS Code extension:
+The first implementation is now a VS Code extension prototype.
 
-1. A tiny local HTTP service.
-2. A CLI endpoint that accepts `prefix`, `suffix`, `language`, and `file_path`.
-3. A habit store backed by SQLite or JSON files.
-4. A MiMo `/v1/completions` request using FIM-style prompting.
-5. A strict post-filter that returns at most 1 to 3 lines.
+It starts with:
 
-Only after the behavior feels good should this become a VS Code inline completion extension.
+1. A VS Code sidebar for a local problem bank.
+2. Luogu starter problem metadata from the supplied problem list.
+3. Public Luogu problem import through `GET /problem/:pid` with `x-lentille-request: content-only`.
+4. Manual paste fallback for problem statements.
+5. A local JSONL store for imported/manual problems.
+6. Safe autocomplete prompt/filter modules that do not include problem statements.
+
+LeetCode support is planned as an adapter. Until a stable GraphQL path is wired, LeetCode problems should be pasted manually.
+
+## Development
+
+Install dependencies:
+
+```powershell
+npm install
+```
+
+Run tests:
+
+```powershell
+npm test
+```
+
+Compile the extension:
+
+```powershell
+npm run compile
+```
+
+To try the extension in VS Code, open this folder, press `F5`, and choose the extension host launch option. The activity bar will show `Student Autocomplete`, with a `Problem Bank` sidebar.
+
+## Source Policy
+
+Luogu import is best-effort from the public problem JSON endpoint. If the request fails, the plugin keeps the manual paste path available.
+
+The extension should not do login bypass, CAPTCHA bypass, or rate-limit evasion. It should cache local records and prefer user-initiated imports.
