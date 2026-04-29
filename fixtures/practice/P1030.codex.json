@@ -1,0 +1,35 @@
+{
+  "problem_id": "P1030",
+  "reference_solution": "import sys\n\ninorder = sys.stdin.readline().strip()\npostorder = sys.stdin.readline().strip()\n\npos = {ch: i for i, ch in enumerate(inorder)}\n\ndef build(in_l, in_r, post_l, post_r):\n    if in_l > in_r:\n        return ''\n    root = postorder[post_r]\n    mid = pos[root]\n    left_size = mid - in_l\n    left = build(in_l, mid - 1, post_l, post_l + left_size - 1)\n    right = build(mid + 1, in_r, post_l + left_size, post_r - 1)\n    return root + left + right\n\nprint(build(0, len(inorder) - 1, 0, len(postorder) - 1))\n",
+  "wrong_submissions": [
+    {
+      "code": "import sys\n\ninorder = sys.stdin.readline().strip()\npostorder = sys.stdin.readline().strip()\n\ndef solve(in_s, post_s):\n    if not in_s:\n        return ''\n    root = post_s[-1]\n    k = in_s.index(root)\n    left = solve(in_s[:k], post_s[:k])\n    right = solve(in_s[k + 1:], post_s[k:-1])\n    return left + right + root\n\nprint(solve(inorder, postorder))\n",
+      "expected_error": "Reconstructs the subtrees correctly but returns left + right + root, which is postorder again, instead of root + left + right for preorder.",
+      "pain_points": [
+        "traversal_order_confusion"
+      ]
+    },
+    {
+      "code": "import sys\n\ninorder = sys.stdin.readline().strip()\npostorder = sys.stdin.readline().strip()\n\ndef solve(in_s, post_s):\n    if not in_s:\n        return ''\n    root = post_s[-1]\n    k = in_s.index(root)\n    left_in = in_s[:k]\n    right_in = in_s[k + 1:]\n    left_post = post_s[:k]\n    right_post = post_s[k + 1:-1]\n    return root + solve(left_in, left_post) + solve(right_in, right_post)\n\nprint(solve(inorder, postorder))\n",
+      "expected_error": "Uses k + 1 as the start of the right subtree in postorder. The right postorder slice should start at k, because the first k characters belong to the left subtree.",
+      "pain_points": [
+        "subtree_boundary"
+      ]
+    },
+    {
+      "code": "import sys\n\ninorder = sys.stdin.readline().strip()\npostorder = sys.stdin.readline().strip()\n\ndef solve(in_s, post_s):\n    if not in_s:\n        return ''\n    root = in_s[0]\n    k = in_s.index(root)\n    left = solve(in_s[:k], post_s[:k])\n    right = solve(in_s[k + 1:], post_s[k:-1])\n    return root + left + right\n\nprint(solve(inorder, postorder))\n",
+      "expected_error": "Takes the first character of the inorder traversal as the root. For inorder + postorder reconstruction, the root is the last character of the current postorder segment.",
+      "pain_points": [
+        "root_identification"
+      ]
+    }
+  ],
+  "skill_update_candidate": {
+    "name": "binary-tree-traversal-reconstruction",
+    "rules": [
+      "For inorder plus postorder reconstruction, the root of the current subtree is the last item of the current postorder segment.",
+      "Use the root position in inorder to compute the left subtree size before slicing or indexing the postorder segment.",
+      "Preorder output visits root first, then recursively outputs the left subtree and the right subtree."
+    ]
+  }
+}

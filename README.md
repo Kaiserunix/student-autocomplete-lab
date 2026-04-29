@@ -101,6 +101,20 @@ npm run trial:codex-practice
 
 This reads `fixtures/practice/P1427.codex.json`, validates it with the same practice report parser, and prints a pain-point summary. It is useful when no OpenAI API key is available and we want to test the learning loop with Codex-generated samples.
 
+Run the first binary-tree practice pack:
+
+```powershell
+npm run trial:binary-tree
+```
+
+This verifies `P4913`, `P1030`, and `P1364` against small local teaching oracles. It runs the reference solution and wrong submissions, then emits verified pain-point events such as `depth_definition`, `subtree_boundary`, and `weighted_cost`.
+
+Write verified events to a local JSONL ledger:
+
+```powershell
+npm run trial:binary-tree -- --write-events .student-autocomplete/learning_events.jsonl
+```
+
 To try the extension in VS Code, open this folder, press `F5`, and choose the extension host launch option. The activity bar will show `Student Autocomplete`, with a `Problem Bank` sidebar.
 
 ## Source Policy
