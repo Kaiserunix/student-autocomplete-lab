@@ -3,12 +3,15 @@ import * as vscode from "vscode";
 import { luoguSeedProblems } from "../problemBank/catalog";
 import { fetchLuoguProblem } from "../problemBank/luoguClient";
 import { fetchLuoguProblemSet } from "../problemBank/luoguProblemSetClient";
+import { searchLuoguProblems, searchLuoguProblemSets } from "../problemBank/luoguSearchClient";
 import type { ProblemRecord, ProblemSetRecord } from "../problemBank/types";
 import { appendJsonlRecord } from "../storage/jsonlStore";
 
 type WebviewMessage =
   | { command: "importLuogu"; pid: string }
   | { command: "importLuoguProblemSet"; id: string }
+  | { command: "searchLuoguProblems"; keyword: string }
+  | { command: "searchLuoguProblemSets"; keyword: string }
   | { command: "saveManual"; title: string; statement: string }
   | { command: "placeholder"; action: string };
 
@@ -26,8 +29,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     webviewView.webview.onDidReceiveMessage(async (message: WebviewMessage) => {
       try {
-        await this.handleMessage(message);
-        webviewView.webview.postMessage({
+        const result = await this.handleMessage(message);
+        webviewView.webview.postMessage(result ?? {
           type: "status",
           text: "Saved."
         });
@@ -40,11 +43,31 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  private async handleMessage(message: WebviewMessage): Promise<void> {
+  private async handleMessage(message: WebviewMessage): Promise<Record<string, unknown> | void> {
     if (message.command === "importLuogu") {
       const problem = await fetchLuoguProblem(message.pid);
       await this.saveProblem(problem);
       return;
+    }
+
+    if (message.command === "searchLuoguProblems") {
+      const results = await searchLuoguProblems(message.keyword);
+      return {
+        type: "problemSearchResults",
+        keyword: message.keyword,
+        total: results.total,
+        items: results.items.slice(0, 20)
+      };
+    }
+
+    if (message.command === "searchLuoguProblemSets") {
+      const results = await searchLuoguProblemSets(message.keyword);
+      return {
+        type: "problemSetSearchResults",
+        keyword: message.keyword,
+        total: results.total,
+        items: results.items.slice(0, 20)
+      };
     }
 
     if (message.command === "importLuoguProblemSet") {
@@ -163,6 +186,17 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   <h3>Luogu starter set</h3>
   <ul>${problems}</ul>
 
+  <h3>Luogu search</h3>
+  <label>
+    Keyword
+    <input id="luoguSearchKeyword" placeholder="压缩技术 / 入门 / 动态规划">
+  </label>
+  <div class="actions">
+    <button id="searchProblems">Search problems</button>
+    <button id="searchProblemSets">Search problem sets</button>
+  </div>
+  <div id="searchResults"></div>
+
   <h3>Luogu problem set</h3>
   <label>
     Training ID
@@ -207,6 +241,30 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       });
     });
 
+    function getKeyword() {
+      return document.getElementById("luoguSearchKeyword").value.trim();
+    }
+
+    document.getElementById("searchProblems").addEventListener("click", () => {
+      const keyword = getKeyword();
+      if (!keyword) {
+        status.textContent = "Enter a search keyword first.";
+        return;
+      }
+      status.textContent = "Searching Luogu problems...";
+      vscode.postMessage({ command: "searchLuoguProblems", keyword });
+    });
+
+    document.getElementById("searchProblemSets").addEventListener("click", () => {
+      const keyword = getKeyword();
+      if (!keyword) {
+        status.textContent = "Enter a search keyword first.";
+        return;
+      }
+      status.textContent = "Searching Luogu problem sets...";
+      vscode.postMessage({ command: "searchLuoguProblemSets", keyword });
+    });
+
     document.getElementById("importProblemSet").addEventListener("click", () => {
       const id = document.getElementById("luoguProblemSetId").value.trim();
       if (!id) {
@@ -227,7 +285,53 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       if (event.data.type === "status") {
         status.textContent = event.data.text;
       }
+      if (event.data.type === "problemSearchResults") {
+        renderProblemResults(event.data);
+      }
+      if (event.data.type === "problemSetSearchResults") {
+        renderProblemSetResults(event.data);
+      }
     });
+
+    function renderProblemResults(data) {
+      status.textContent = "Found " + data.total + " problems for " + data.keyword + ".";
+      document.getElementById("searchResults").innerHTML = "<ul>" + data.items.map((item) =>
+        "<li><button data-pid='" + item.id + "'>Import</button><a href='" + item.sourceUrl + "'>" + item.id + "</a><span>" + escapeText(item.title) + "</span></li>"
+      ).join("") + "</ul>";
+      bindDynamicImportButtons();
+    }
+
+    function renderProblemSetResults(data) {
+      status.textContent = "Found " + data.total + " problem sets for " + data.keyword + ".";
+      document.getElementById("searchResults").innerHTML = "<ul>" + data.items.map((item) =>
+        "<li><button data-set-id='" + item.id + "'>Import</button><a href='" + item.sourceUrl + "'>" + item.id + "</a><span>" + escapeText(item.title) + " (" + item.problemCount + ")</span></li>"
+      ).join("") + "</ul>";
+      bindDynamicImportButtons();
+    }
+
+    function bindDynamicImportButtons() {
+      const root = document.getElementById("searchResults");
+      root.querySelectorAll("button[data-pid]").forEach((button) => {
+        button.addEventListener("click", () => {
+          status.textContent = "Importing " + button.dataset.pid + "...";
+          vscode.postMessage({ command: "importLuogu", pid: button.dataset.pid });
+        });
+      });
+      root.querySelectorAll("button[data-set-id]").forEach((button) => {
+        button.addEventListener("click", () => {
+          status.textContent = "Importing training " + button.dataset.setId + "...";
+          vscode.postMessage({ command: "importLuoguProblemSet", id: button.dataset.setId });
+        });
+      });
+    }
+
+    function escapeText(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;");
+    }
   </script>
 </body>
 </html>`;

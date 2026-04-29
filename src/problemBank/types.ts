@@ -54,3 +54,23 @@ export interface ProblemSetRecord {
   problemCount: number;
   problems: ProblemSetProblemSummary[];
 }
+
+export interface ProblemSearchResult {
+  id: string;
+  title: string;
+  sourceUrl: string;
+  difficulty?: number;
+  tags: string[];
+}
+
+export interface ProblemSetSearchResult {
+  id: string;
+  title: string;
+  sourceUrl: string;
+  problemCount: number;
+}
+
+export interface SearchResults<T> {
+  total: number;
+  items: T[];
+}
