@@ -88,7 +88,7 @@ The first live trial showed that `mimo-v2.5-pro` responds well to prefix-only au
 Model notes from local trials:
 
 - `mimo-v2.5-pro`: best current MiMo default for stable code autocomplete and future teaching hints.
-- `mimo-v2.5`: works on the simple add-function case and is a reasonable cheaper autocomplete candidate, but may emit markdown fences.
+- `mimo-v2.5`: current default for inline autocomplete. It works on the simple add-function case and gives the MiMo team useful high-frequency autocomplete traffic, while Pro stays available for richer teaching work.
 - `mimo-v2-omni`: can complete the simplest sample, but returned a cursor placeholder on a slightly more OJ-like loop sample. Keep it for multimodal/problem-understanding experiments, not default inline completion.
 - TTS models are voice models and should not be used for code autocomplete.
 

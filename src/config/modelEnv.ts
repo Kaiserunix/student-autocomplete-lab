@@ -43,13 +43,25 @@ export function requireMimoAutocompleteConfig(env: ModelEnv): {
 } {
   const baseUrl = env.MIMO_OPENAI_BASE_URL;
   const apiKey = env.MIMO_API_KEY;
-  const model = env.MIMO_AUTOCOMPLETE_MODEL;
+  const model = normalizeAutocompleteModel(env.MIMO_AUTOCOMPLETE_MODEL);
 
   if (!baseUrl || !apiKey || !model) {
     throw new Error("Missing MiMo autocomplete config in secrets/models.env.");
   }
 
   return { baseUrl, apiKey, model };
+}
+
+function normalizeAutocompleteModel(model: string | undefined): string | undefined {
+  if (!model) {
+    return undefined;
+  }
+
+  if (model === "mimo-v2.5-pro") {
+    return "mimo-v2.5";
+  }
+
+  return model;
 }
 
 export function withModelOverride(
