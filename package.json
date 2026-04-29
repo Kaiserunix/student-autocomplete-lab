@@ -69,6 +69,7 @@
     "trial:gpt-practice": "npm run compile && node dist/src/cli/gptPracticeTrial.js",
     "trial:mimo-teacher": "npm run compile && node dist/src/cli/mimoTeachingTrial.js",
     "trial:mimo": "npm run compile && node dist/src/cli/mimoAutocompleteTrial.js",
+    "mcp:problem-search": "node dist/src/mcp/problemSearchServer.js",
     "test": "vitest run",
     "watch": "tsc -w -p ."
   },
@@ -77,5 +78,9 @@
     "@types/vscode": "^1.95.0",
     "typescript": "^5.8.3",
     "vitest": "^3.1.2"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.3.6"
   }
 }
