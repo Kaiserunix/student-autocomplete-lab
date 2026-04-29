@@ -115,6 +115,22 @@ Write verified events to a local JSONL ledger:
 npm run trial:binary-tree -- --write-events .student-autocomplete/learning_events.jsonl
 ```
 
+Run a MiMo-powered teaching diagnosis trial:
+
+```powershell
+npm run trial:mimo-teacher
+```
+
+The teaching trial turns one verified wrong submission into a student attempt, sends the evidence to the teacher diagnosis layer, updates `.runtime/student_profile.json`, and returns a hint, pain-point diagnosis, skill candidate, and recommendation. It uses `mimo-v2.5-pro` through `MIMO_CHAT_MODEL` or the default teaching model when `secrets/models.env` is configured; otherwise it falls back to a deterministic local stub.
+
+Useful overrides:
+
+```powershell
+npm run trial:mimo-teacher -- --provider stub
+npm run trial:mimo-teacher -- --provider live --wrong-index 1
+npm run trial:mimo-teacher -- --fixture fixtures/practice/P4913.codex.json --wrong-index 2
+```
+
 To try the extension in VS Code, open this folder, press `F5`, and choose the extension host launch option. The activity bar will show `Student Autocomplete`, with a `Problem Bank` sidebar.
 
 ## Source Policy

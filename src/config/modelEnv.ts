@@ -52,6 +52,22 @@ export function requireMimoAutocompleteConfig(env: ModelEnv): {
   return { baseUrl, apiKey, model };
 }
 
+export function requireMimoTeachingConfig(env: ModelEnv): {
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+} {
+  const baseUrl = env.MIMO_OPENAI_BASE_URL;
+  const apiKey = env.MIMO_API_KEY;
+  const model = env.MIMO_CHAT_MODEL ?? "mimo-v2.5-pro";
+
+  if (!baseUrl || !apiKey || !model) {
+    throw new Error("Missing MiMo teaching config in secrets/models.env.");
+  }
+
+  return { baseUrl, apiKey, model };
+}
+
 function normalizeAutocompleteModel(model: string | undefined): string | undefined {
   if (!model) {
     return undefined;

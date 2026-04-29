@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { loadModelEnvFromText, requireMimoAutocompleteConfig, withModelOverride } from "../src/config/modelEnv";
+import {
+  loadModelEnvFromText,
+  requireMimoAutocompleteConfig,
+  requireMimoTeachingConfig,
+  withModelOverride
+} from "../src/config/modelEnv";
 
 describe("model env loading", () => {
   test("parses model env text without exposing comments or blank lines", () => {
@@ -41,5 +46,18 @@ MIMO_AUTOCOMPLETE_MODEL=mimo-v2.5-pro
 `);
 
     expect(requireMimoAutocompleteConfig(env).model).toBe("mimo-v2.5");
+  });
+
+  test("uses MiMo Pro by default for teaching diagnosis", () => {
+    const env = loadModelEnvFromText(`
+MIMO_OPENAI_BASE_URL=https://example.test/openai
+MIMO_API_KEY=secret-value
+`);
+
+    expect(requireMimoTeachingConfig(env)).toEqual({
+      baseUrl: "https://example.test/openai",
+      apiKey: "secret-value",
+      model: "mimo-v2.5-pro"
+    });
   });
 });

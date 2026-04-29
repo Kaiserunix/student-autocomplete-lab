@@ -67,6 +67,7 @@
     "trial:binary-tree": "npm run compile && node dist/src/cli/codexPracticeTrial.js --fixture fixtures/practice/P4913.codex.json --fixture fixtures/practice/P1030.codex.json --fixture fixtures/practice/P1364.codex.json",
     "trial:codex-practice": "npm run compile && node dist/src/cli/codexPracticeTrial.js",
     "trial:gpt-practice": "npm run compile && node dist/src/cli/gptPracticeTrial.js",
+    "trial:mimo-teacher": "npm run compile && node dist/src/cli/mimoTeachingTrial.js",
     "trial:mimo": "npm run compile && node dist/src/cli/mimoAutocompleteTrial.js",
     "test": "vitest run",
     "watch": "tsc -w -p ."
