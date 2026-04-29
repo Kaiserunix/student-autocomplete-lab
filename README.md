@@ -71,6 +71,28 @@ npm run trial:mimo -- --model mimo-v2-omni
 
 The trial reads `secrets/models.env`, calls the MiMo OpenAI-compatible `/v1/completions` endpoint, and prints only the provider, model, and filtered completion. It does not print API keys.
 
+Run a GPT practice-generation dry run:
+
+```powershell
+npm run trial:gpt-practice
+```
+
+The GPT practice trial is for generating audited practice material: a reference solution, plausible wrong submissions, pain-point labels, and a conservative skill-update candidate. It defaults to `gpt-4.1-nano`, estimates cost before any request, and does not spend money by default.
+
+To allow a real paid request, set `OPENAI_API_KEY` and pass an explicit spend flag:
+
+```powershell
+$env:OPENAI_API_KEY="..."
+npm run trial:gpt-practice -- --spend --max-usd 0.02
+```
+
+Useful overrides:
+
+```powershell
+npm run trial:gpt-practice -- --model gpt-5-nano --max-usd 0.02
+npm run trial:gpt-practice -- --problem-id P1427 --pain-points output_order,loop_boundary
+```
+
 To try the extension in VS Code, open this folder, press `F5`, and choose the extension host launch option. The activity bar will show `Student Autocomplete`, with a `Problem Bank` sidebar.
 
 ## Source Policy
