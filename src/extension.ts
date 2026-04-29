@@ -1,10 +1,15 @@
 import * as vscode from "vscode";
+import { createMimoInlineCompletionProvider } from "./autocomplete/inlineProvider";
 import { ProblemBankViewProvider } from "./sidebar/ProblemBankViewProvider";
 
 export function activate(context: vscode.ExtensionContext): void {
   const provider = new ProblemBankViewProvider(context);
 
   context.subscriptions.push(
+    vscode.languages.registerInlineCompletionItemProvider(
+      [{ scheme: "file" }],
+      createMimoInlineCompletionProvider()
+    ),
     vscode.window.registerWebviewViewProvider(ProblemBankViewProvider.viewType, provider),
     vscode.commands.registerCommand("studentAutocomplete.saveProblem", () => {
       vscode.commands.executeCommand("studentAutocomplete.problemBank.focus");
