@@ -1,10 +1,11 @@
 import * as path from "node:path";
 import { requestMimoAutocomplete } from "../autocomplete/mimoAutocomplete";
-import { loadModelEnv, requireMimoAutocompleteConfig } from "../config/modelEnv";
+import { loadModelEnv, requireMimoAutocompleteConfig, withModelOverride } from "../config/modelEnv";
 
 async function main(): Promise<void> {
   const envPath = path.join(process.cwd(), "secrets", "models.env");
-  const config = requireMimoAutocompleteConfig(await loadModelEnv(envPath));
+  const modelOverride = readModelArg(process.argv.slice(2));
+  const config = withModelOverride(requireMimoAutocompleteConfig(await loadModelEnv(envPath)), modelOverride);
   const prefix = [
     "import sys",
     "input = sys.stdin.readline",
@@ -26,3 +27,13 @@ main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
   process.exit(1);
 });
+
+function readModelArg(args: string[]): string | undefined {
+  const modelFlagIndex = args.findIndex((arg) => arg === "--model");
+  if (modelFlagIndex >= 0) {
+    return args[modelFlagIndex + 1];
+  }
+
+  const inlineModel = args.find((arg) => arg.startsWith("--model="));
+  return inlineModel?.slice("--model=".length);
+}

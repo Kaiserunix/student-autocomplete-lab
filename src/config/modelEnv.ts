@@ -51,3 +51,17 @@ export function requireMimoAutocompleteConfig(env: ModelEnv): {
 
   return { baseUrl, apiKey, model };
 }
+
+export function withModelOverride(
+  config: ReturnType<typeof requireMimoAutocompleteConfig>,
+  modelOverride?: string
+): ReturnType<typeof requireMimoAutocompleteConfig> {
+  if (!modelOverride) {
+    return config;
+  }
+
+  return {
+    ...config,
+    model: modelOverride
+  };
+}

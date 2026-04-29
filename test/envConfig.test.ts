@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { loadModelEnvFromText } from "../src/config/modelEnv";
+import { loadModelEnvFromText, withModelOverride } from "../src/config/modelEnv";
 
 describe("model env loading", () => {
   test("parses model env text without exposing comments or blank lines", () => {
@@ -16,5 +16,20 @@ DEEPSEEK_BASE_URL=https://fallback.test
     expect(env.MIMO_API_KEY).toBe("secret-value");
     expect(env.MIMO_AUTOCOMPLETE_MODEL).toBe("mimo-v2.5-pro");
     expect(env.DEEPSEEK_BASE_URL).toBe("https://fallback.test");
+  });
+
+  test("allows a CLI trial model override without mutating the base config", () => {
+    const config = {
+      baseUrl: "https://example.test/openai",
+      apiKey: "secret-value",
+      model: "mimo-v2.5-pro"
+    };
+
+    expect(withModelOverride(config, "mimo-v2-omni")).toEqual({
+      baseUrl: "https://example.test/openai",
+      apiKey: "secret-value",
+      model: "mimo-v2-omni"
+    });
+    expect(config.model).toBe("mimo-v2.5-pro");
   });
 });

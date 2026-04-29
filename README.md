@@ -62,6 +62,13 @@ Run a live MiMo autocomplete trial:
 npm run trial:mimo
 ```
 
+Compare a specific MiMo model:
+
+```powershell
+npm run trial:mimo -- --model mimo-v2.5
+npm run trial:mimo -- --model mimo-v2-omni
+```
+
 The trial reads `secrets/models.env`, calls the MiMo OpenAI-compatible `/v1/completions` endpoint, and prints only the provider, model, and filtered completion. It does not print API keys.
 
 To try the extension in VS Code, open this folder, press `F5`, and choose the extension host launch option. The activity bar will show `Student Autocomplete`, with a `Problem Bank` sidebar.
@@ -77,5 +84,12 @@ Search matters for the learning loop: future recommendation code can query nearb
 ## MiMo Trial Notes
 
 The first live trial showed that `mimo-v2.5-pro` responds well to prefix-only autocomplete prompts. XML/FIM-style prompts with both prefix and suffix returned an empty completion in testing, even though the request succeeded. The current MiMo path therefore uses a prefix-completion prompt and relies on the post-filter to stop after the first local continuation.
+
+Model notes from local trials:
+
+- `mimo-v2.5-pro`: best current MiMo default for stable code autocomplete and future teaching hints.
+- `mimo-v2.5`: works on the simple add-function case and is a reasonable cheaper autocomplete candidate, but may emit markdown fences.
+- `mimo-v2-omni`: can complete the simplest sample, but returned a cursor placeholder on a slightly more OJ-like loop sample. Keep it for multimodal/problem-understanding experiments, not default inline completion.
+- TTS models are voice models and should not be used for code autocomplete.
 
 The extension should not do login bypass, CAPTCHA bypass, or rate-limit evasion. It should cache local records and prefer user-initiated imports.

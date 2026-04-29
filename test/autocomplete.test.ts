@@ -21,6 +21,11 @@ return d
     expect(output).toBe("if x:\n    return x\nreturn 0");
   });
 
+  test("removes markdown fences and cursor placeholders", () => {
+    expect(limitCompletionLines("ans += x\nprint(ans)\n```")).toBe("ans += x\nprint(ans)");
+    expect(limitCompletionLines("<|cursor|>")).toBe("");
+  });
+
   test("builds autocomplete prompt without problem statement data", () => {
     const prompt = buildAutocompletePrompt({
       prefix: "def add(a, b):\n    ",
