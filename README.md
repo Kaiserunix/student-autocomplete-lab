@@ -28,9 +28,10 @@ It starts with:
 1. A VS Code sidebar for a local problem bank.
 2. Luogu starter problem metadata from the supplied problem list.
 3. Public Luogu problem import through `GET /problem/:pid` with `x-lentille-request: content-only`.
-4. Manual paste fallback for problem statements.
-5. A local JSONL store for imported/manual problems.
-6. Safe autocomplete prompt/filter modules that do not include problem statements.
+4. Public Luogu problem-set import through `GET /training/:id` with `x-luogu-type: content-only`.
+5. Manual paste fallback for problem statements.
+6. A local JSONL store for imported/manual problems and imported problem sets.
+7. Safe autocomplete prompt/filter modules that do not include problem statements.
 
 LeetCode support is planned as an adapter. Until a stable GraphQL path is wired, LeetCode problems should be pasted manually.
 
@@ -58,6 +59,8 @@ To try the extension in VS Code, open this folder, press `F5`, and choose the ex
 
 ## Source Policy
 
-Luogu import is best-effort from the public problem JSON endpoint. If the request fails, the plugin keeps the manual paste path available.
+Luogu problem import is best-effort from the public problem JSON endpoint. Luogu problem-set import is best-effort from the public training JSON endpoint.
+
+Problem-set import stores the set title, description, and problem metadata. It does not automatically fetch the full statement for every problem in the set; individual full statements can be imported through the problem endpoint when needed.
 
 The extension should not do login bypass, CAPTCHA bypass, or rate-limit evasion. It should cache local records and prefer user-initiated imports.

@@ -36,3 +36,21 @@ export interface ProblemRecord {
   samples: ProblemSample[];
   hint?: string;
 }
+
+export interface ProblemSetProblemSummary {
+  id: string;
+  title: string;
+  sourceUrl: string;
+  difficulty?: number;
+  tags: string[];
+}
+
+export interface ProblemSetRecord {
+  platform: ProblemPlatform;
+  id: string;
+  title: string;
+  sourceUrl: string;
+  description: string;
+  problemCount: number;
+  problems: ProblemSetProblemSummary[];
+}

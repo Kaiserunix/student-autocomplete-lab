@@ -2,11 +2,13 @@ import * as path from "node:path";
 import * as vscode from "vscode";
 import { luoguSeedProblems } from "../problemBank/catalog";
 import { fetchLuoguProblem } from "../problemBank/luoguClient";
-import type { ProblemRecord } from "../problemBank/types";
+import { fetchLuoguProblemSet } from "../problemBank/luoguProblemSetClient";
+import type { ProblemRecord, ProblemSetRecord } from "../problemBank/types";
 import { appendJsonlRecord } from "../storage/jsonlStore";
 
 type WebviewMessage =
   | { command: "importLuogu"; pid: string }
+  | { command: "importLuoguProblemSet"; id: string }
   | { command: "saveManual"; title: string; statement: string }
   | { command: "placeholder"; action: string };
 
@@ -45,6 +47,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
+    if (message.command === "importLuoguProblemSet") {
+      const problemSet = await fetchLuoguProblemSet(message.id);
+      await this.saveProblemSet(problemSet);
+      return;
+    }
+
     if (message.command === "saveManual") {
       const problem: ProblemRecord = {
         platform: "manual",
@@ -67,6 +75,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const storagePath = path.join(this.context.globalStorageUri.fsPath, "problems.jsonl");
     await appendJsonlRecord(storagePath, {
       ...problem,
+      savedAt: new Date().toISOString()
+    });
+  }
+
+  private async saveProblemSet(problemSet: ProblemSetRecord): Promise<void> {
+    const storagePath = path.join(this.context.globalStorageUri.fsPath, "problemSets.jsonl");
+    await appendJsonlRecord(storagePath, {
+      ...problemSet,
       savedAt: new Date().toISOString()
     });
   }
@@ -147,6 +163,13 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   <h3>Luogu starter set</h3>
   <ul>${problems}</ul>
 
+  <h3>Luogu problem set</h3>
+  <label>
+    Training ID
+    <input id="luoguProblemSetId" placeholder="100">
+  </label>
+  <button id="importProblemSet">Import problem set</button>
+
   <h3>Manual problem note</h3>
   <label>
     Title
@@ -182,6 +205,16 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         title: document.getElementById("manualTitle").value,
         statement: document.getElementById("manualStatement").value
       });
+    });
+
+    document.getElementById("importProblemSet").addEventListener("click", () => {
+      const id = document.getElementById("luoguProblemSetId").value.trim();
+      if (!id) {
+        status.textContent = "Enter a Luogu training ID first.";
+        return;
+      }
+      status.textContent = "Importing training " + id + "...";
+      vscode.postMessage({ command: "importLuoguProblemSet", id });
     });
 
     document.querySelectorAll("button[data-action]").forEach((button) => {
