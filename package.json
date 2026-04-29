@@ -64,6 +64,7 @@
   },
   "scripts": {
     "compile": "tsc -p .",
+    "trial:mimo": "npm run compile && node dist/src/cli/mimoAutocompleteTrial.js",
     "test": "vitest run",
     "watch": "tsc -w -p ."
   },
