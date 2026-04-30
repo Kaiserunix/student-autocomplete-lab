@@ -199,6 +199,8 @@ The inner test should include:
 - at least 5 AC-after-score reviews;
 - at least 5 user feedback events, including one "diagnosis wrong" correction.
 
+The larger beta evidence plan is tracked in [large-scale-growth-simulation.md](large-scale-growth-simulation.md). That plan expands the inner test into 200 problems and 1000 preset code samples, with a dry-run-first cost gate before any full live model run.
+
 ## 9. Beta v2 Non-Goals
 
 - No bundled full public problem-bank dump.
@@ -221,4 +223,3 @@ Beta v2 is done when the extension behaves like an algorithm coach rather than a
 - it recommends the next problem from evidence;
 - it distills the student into a local, editable, rollbackable `Student Skill`;
 - it can show enough test evidence that the loop survives real model calls.
-

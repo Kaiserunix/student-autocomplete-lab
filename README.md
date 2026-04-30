@@ -21,6 +21,7 @@ This is now prepared as an MIT-licensed open-source alpha. The public repo shoul
 - `docs/requirements.md`: product requirements and guardrails.
 - `docs/codex-start-prompt.md`: prompt to give Codex for the first build attempt.
 - `docs/beta-v2-final-goals.md`: final beta target, including Student Skill distillation requirements.
+- `docs/large-scale-growth-simulation.md`: costed plan for the 200-problem / 1000-code growth simulation.
 - `docs/open-source-release.md`: release notes, open-source scope, model rationale, and package command.
 - `docs/internal-testing.md`: summarized live MiMo journey-test evidence.
 - `secrets/models.env`: local API credentials and model routing. This is ignored by git.
