@@ -38,4 +38,16 @@ describe("problem bank webview script", () => {
     expect(source).toContain("studentRequest: coachQuestion.value.trim()");
     expect(source).not.toContain('command: "requestSolutionScore",\n        problemKey: keyOf(problem),\n        studentRequest: coachQuestion.value.trim(),\n        ojVerdict: {\n          status: "AC"\n        }');
   });
+
+  test("persists Student Skill updates from AI coaching actions", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain("studentSkillPath()");
+    expect(source).toContain("studentSkillVersionsDir()");
+    expect(source).toContain("runTeachingCycleWithStudentSkill");
+    expect(source).toContain("saveStudentSkill(this.studentSkillPath()");
+    expect(source).toContain("archiveStudentSkillVersion(");
+    expect(source).toContain("this.studentSkillVersionsDir()");
+    expect(source).toContain("studentSkillMerge");
+  });
 });

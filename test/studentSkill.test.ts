@@ -1,0 +1,179 @@
+import { describe, expect, test } from "vitest";
+import {
+  applyStudentSkillPatch,
+  buildAutocompleteSkillContext,
+  buildStudentSkillPatchFromDiagnosis,
+  createEmptyStudentSkill,
+  renderStudentSkillMarkdown,
+  studentSkillFromProfile,
+  studentSkillSummaryForTeaching
+} from "../src/teaching/studentSkill";
+
+describe("student skill", () => {
+  test("starts with strict student-mode hard rules and Chinese teaching defaults", () => {
+    const skill = createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z");
+
+    expect(skill.schemaVersion).toBe("student-skill/v1");
+    expect(skill.hardRules.autocompleteMayReadProblemStatement).toBe(false);
+    expect(skill.hardRules.allowFullSolutionAutocomplete).toBe(false);
+    expect(skill.teachingPreferences.responseLanguage).toBe("zh-CN");
+    expect(studentSkillSummaryForTeaching(skill)).toEqual({
+      painPointCounts: {},
+      activeSkills: []
+    });
+  });
+
+  test("turns repeated diagnosis patches into an active inspectable skill", () => {
+    let skill = createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z");
+
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      const patch = buildStudentSkillPatchFromDiagnosis(
+        {
+          painPoints: [
+            {
+              label: "loop_boundary",
+              confidence: 0.9,
+              evidence: `attempt ${attempt}: missed the final item`
+            }
+          ],
+          hint: "先手推最后一个下标。",
+          skillUpdate: {
+            candidate: "python-loop-boundary-check",
+            reason: "Repeated loop boundary misses.",
+            rules: ["Before writing a loop, write first and last valid indexes."]
+          },
+          recommendation: {
+            problemId: "P1427",
+            reason: "Practice sentinel and reverse output."
+          }
+        },
+        {
+          occurredAt: `2026-05-01T00:0${attempt}:00.000Z`,
+          problemId: "P1427",
+          source: "mimo-v2.5"
+        }
+      );
+
+      skill = applyStudentSkillPatch(skill, patch).skill;
+    }
+
+    expect(skill.errorModel.loop_boundary).toMatchObject({
+      count: 3,
+      score: 2.7,
+      lastSeen: "2026-05-01T00:03:00.000Z"
+    });
+    expect(skill.errorModel.loop_boundary.examples).toHaveLength(3);
+    expect(skill.skills["python-loop-boundary-check"]).toMatchObject({
+      status: "active",
+      evidenceCount: 3,
+      sourcePainPoints: ["loop_boundary"]
+    });
+    expect(studentSkillSummaryForTeaching(skill).activeSkills).toEqual(["python-loop-boundary-check"]);
+    expect(renderStudentSkillMarkdown(skill)).toContain("python-loop-boundary-check");
+  });
+
+  test("keeps user-disabled skills disabled and reports a conflict", () => {
+    let skill = createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z");
+    skill = applyStudentSkillPatch(skill, {
+      source: "user",
+      occurredAt: "2026-05-01T00:01:00.000Z",
+      disableSkills: [
+        {
+          name: "python-loop-boundary-check",
+          reason: "This keeps over-explaining loops."
+        }
+      ]
+    }).skill;
+
+    const result = applyStudentSkillPatch(skill, {
+      source: "mimo-v2.5",
+      occurredAt: "2026-05-01T00:02:00.000Z",
+      skills: [
+        {
+          name: "python-loop-boundary-check",
+          status: "active",
+          reason: "The model saw another loop issue.",
+          rules: ["Write bounds first."],
+          sourcePainPoints: ["loop_boundary"]
+        }
+      ]
+    });
+
+    expect(result.skill.skills["python-loop-boundary-check"].status).toBe("disabled");
+    expect(result.conflicts).toEqual([
+      {
+        field: "skills.python-loop-boundary-check.status",
+        existing: "disabled",
+        incoming: "active",
+        resolution: "kept existing disabled skill"
+      }
+    ]);
+  });
+
+  test("builds an autocomplete context that excludes teacher-only evidence", () => {
+    const skill = applyStudentSkillPatch(createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z"), {
+      source: "mimo-v2.5",
+      occurredAt: "2026-05-01T00:01:00.000Z",
+      problemId: "P1030",
+      painPoints: [
+        {
+          label: "traversal_order_confusion",
+          confidence: 0.88,
+          evidence: "P1030 standard answer emits root before both subtrees."
+        }
+      ],
+      codeHabitRules: [
+        {
+          language: "python",
+          rules: ["prefer sys.stdin.readline in OJ scripts"]
+        }
+      ]
+    }).skill;
+
+    const context = buildAutocompleteSkillContext(skill, "python");
+
+    expect(context.allowFullSolutionAutocomplete).toBe(false);
+    expect(context.autocompleteMayReadProblemStatement).toBe(false);
+    expect(context.rules).toEqual(["prefer sys.stdin.readline in OJ scripts"]);
+    expect(JSON.stringify(context)).not.toContain("P1030 standard answer");
+  });
+
+  test("migrates the legacy profile counters into Student Skill layers", () => {
+    const skill = studentSkillFromProfile(
+      {
+        studentId: "student-a",
+        painPoints: {
+          output_order: {
+            count: 2,
+            score: 1.6,
+            lastSeen: "2026-04-30T00:00:00.000Z"
+          }
+        },
+        skillCandidates: {
+          "format-output-checklist": {
+            count: 3,
+            score: 2.8,
+            status: "ready",
+            reason: "Repeated output-format misses.",
+            rules: ["Compare the required separator before printing."],
+            sourcePainPoints: ["output_order"],
+            lastSeen: "2026-04-30T00:00:00.000Z"
+          }
+        }
+      },
+      "2026-05-01T00:00:00.000Z"
+    );
+
+    expect(skill.errorModel.output_order).toMatchObject({
+      count: 2,
+      score: 1.6,
+      lastSeen: "2026-04-30T00:00:00.000Z"
+    });
+    expect(skill.skills["format-output-checklist"]).toMatchObject({
+      status: "active",
+      evidenceCount: 3,
+      score: 2.8
+    });
+    expect(studentSkillSummaryForTeaching(skill).activeSkills).toEqual(["format-output-checklist"]);
+  });
+});

@@ -23,9 +23,14 @@ import { requestMimoTeachingDiagnosis } from "../teaching/mimoTeacher";
 import { requestMimoOptimizationReport, type OptimizationReport } from "../teaching/optimizationReport";
 import { requestMimoSolutionScore } from "../teaching/solutionScore";
 import { hasSubstantiveStudentCode, normalizeScoreOjVerdict } from "../teaching/solutionScoreGate";
-import { applyTeachingDiagnosis } from "../teaching/studentProfile";
+import { applyTeachingDiagnosis, profileSummary, type StudentProfile } from "../teaching/studentProfile";
 import { loadStudentProfile, saveStudentProfile } from "../teaching/studentProfileStore";
-import { profileSummary } from "../teaching/studentProfile";
+import { studentSkillFromProfile, studentSkillSummaryForTeaching, type StudentSkill } from "../teaching/studentSkill";
+import {
+  archiveStudentSkillVersion,
+  loadStudentSkill,
+  saveStudentSkill
+} from "../teaching/studentSkillStore";
 import { requestMimoSubmissionJudge } from "../teaching/submissionJudge";
 import type { TeachingPainPoint } from "../teaching/teachingReport";
 import {
@@ -35,7 +40,7 @@ import {
   upsertTeacherPack,
   type TeacherPackRecord
 } from "../teaching/teacherPack";
-import { runTeachingCycle } from "../teaching/teachingCycle";
+import { runTeachingCycle, runTeachingCycleWithStudentSkill } from "../teaching/teachingCycle";
 import type { OjVerdict } from "../teaching/types";
 import { localizeTeachingDiagnosisReport } from "./localizeTeachingReport";
 import {
@@ -303,6 +308,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     return path.join(this.context.globalStorageUri.fsPath, "studentProfile.json");
   }
 
+  private studentSkillPath(): string {
+    return path.join(this.context.globalStorageUri.fsPath, "studentSkill.json");
+  }
+
+  private studentSkillVersionsDir(): string {
+    return path.join(this.context.globalStorageUri.fsPath, "studentSkillVersions");
+  }
+
   private completedProblemsPath(): string {
     return path.join(this.context.globalStorageUri.fsPath, "completedProblems.jsonl");
   }
@@ -424,7 +437,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     const config = requireMimoTeachingConfig(await loadModelEnv(this.modelEnvPath()));
     const profile = await loadStudentProfile(this.profilePath());
+    const studentSkill = await this.loadStudentSkillForProfile(profile);
     const teacherPack = await this.ensureTeacherPack(problem, config);
+    const occurredAt = new Date().toISOString();
     const context = buildSidebarTeachingContext({
       problem,
       teacherPack: teacherPack ? toTeacherPackReference(teacherPack) : undefined,
@@ -435,10 +450,24 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       requestPurpose: mergeRequestPurpose(describeAiCoachAction(action, responseLanguage), studentRequest),
       responseLanguage: responseLanguage === "zh" ? "zh-CN" : "raw"
     });
-    const result = await runTeachingCycle(context, profile, (diagnosisContext) =>
-      requestMimoTeachingDiagnosis(config, diagnosisContext)
+    const result = await runTeachingCycleWithStudentSkill(
+      context,
+      profile,
+      studentSkill,
+      (diagnosisContext) => requestMimoTeachingDiagnosis(config, diagnosisContext),
+      {
+        occurredAt,
+        patchSource: config.model
+      }
     );
     await saveStudentProfile(this.profilePath(), result.updatedProfile);
+    await saveStudentSkill(this.studentSkillPath(), result.updatedStudentSkill);
+    await archiveStudentSkillVersion(
+      this.studentSkillVersionsDir(),
+      result.updatedStudentSkill,
+      `${action} ${problem.id} via ${config.model}`,
+      occurredAt
+    );
     await appendJsonlRecord(
       this.attemptEventsPath(),
       buildAttemptEvent({
@@ -446,7 +475,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         problemId: problem.id,
         platform: problem.platform,
         kind: actionToAttemptEventKind(action),
-        occurredAt: new Date().toISOString(),
+        occurredAt,
         action,
         painPoints: result.report.painPoints.map((painPoint) => painPoint.label),
         model: config.model
@@ -461,6 +490,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       report: result.report,
       localizedReport: localizeTeachingDiagnosisReport(result.report),
       profileSummary: profileSummary(result.updatedProfile),
+      studentSkillSummary: studentSkillSummaryForTeaching(result.updatedStudentSkill),
+      studentSkillMerge: result.studentSkillMerge,
       teacherPack: teacherPack
         ? {
             generatedAt: teacherPack.generatedAt,
@@ -471,6 +502,15 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         : undefined,
       status: `AI 已根据当前代码分析 ${problem.id}。`
     };
+  }
+
+  private async loadStudentSkillForProfile(profile: StudentProfile): Promise<StudentSkill> {
+    const existing = await readTextIfExists(this.studentSkillPath());
+    if (existing.trim().length > 0) {
+      return loadStudentSkill(this.studentSkillPath(), profile.studentId);
+    }
+
+    return studentSkillFromProfile(profile);
   }
 
   private async handleLessonReportRequest(problemKey: string, studentRequest?: string): Promise<Record<string, unknown>> {

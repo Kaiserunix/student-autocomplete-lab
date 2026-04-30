@@ -178,6 +178,7 @@ Current inner-test boundary:
 - Imported/pasted full problems can generate a hidden Teacher Pack with standard approach, expected algorithm, complexity, invariants, pitfalls, counterexamples, and brute-force suitability. The pack is cached and used as diagnosis reference, not shown as the default student answer.
 - Teaching diagnosis and self-evolution are usable enough for personal alpha testing; see `docs/internal-testing.md` for live MiMo evidence.
 - The final beta target is now defined as a local, inspectable, rollbackable `Student Skill` loop; see `docs/beta-v2-final-goals.md`.
+- The first beta v2 code slice persists AI-coach diagnosis into `studentSkill.json` and archives version snapshots beside the legacy `studentProfile.json`.
 
 ## Source Policy
 
