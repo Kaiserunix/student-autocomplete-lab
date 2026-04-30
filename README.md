@@ -20,6 +20,7 @@ This is now prepared as an MIT-licensed open-source alpha. The public repo shoul
 
 - `docs/requirements.md`: product requirements and guardrails.
 - `docs/codex-start-prompt.md`: prompt to give Codex for the first build attempt.
+- `docs/beta-v2-final-goals.md`: final beta target, including Student Skill distillation requirements.
 - `docs/open-source-release.md`: release notes, open-source scope, model rationale, and package command.
 - `docs/internal-testing.md`: summarized live MiMo journey-test evidence.
 - `secrets/models.env`: local API credentials and model routing. This is ignored by git.
@@ -176,6 +177,7 @@ Current inner-test boundary:
 - The Chinese sidebar separates problem import/search, AI interaction, archived attempts, lesson reports, solution scoring, and optimization review.
 - Imported/pasted full problems can generate a hidden Teacher Pack with standard approach, expected algorithm, complexity, invariants, pitfalls, counterexamples, and brute-force suitability. The pack is cached and used as diagnosis reference, not shown as the default student answer.
 - Teaching diagnosis and self-evolution are usable enough for personal alpha testing; see `docs/internal-testing.md` for live MiMo evidence.
+- The final beta target is now defined as a local, inspectable, rollbackable `Student Skill` loop; see `docs/beta-v2-final-goals.md`.
 
 ## Source Policy
 

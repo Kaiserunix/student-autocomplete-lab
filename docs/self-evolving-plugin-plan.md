@@ -8,6 +8,8 @@
 
 **Tech Stack:** VS Code extension, local JSONL stores, MiMo v2.5 for cheap autocomplete, MiMo v2.5 Pro for teacher diagnosis, Luogu/LeetCode MCP servers for problem discovery, TypeScript tests and live MCP smoke tests.
 
+**Beta target:** The final beta target is captured in [beta-v2-final-goals.md](beta-v2-final-goals.md). The key upgrade is moving from profile counters to a local, editable, rollbackable `Student Skill`.
+
 ---
 
 ## Product Position

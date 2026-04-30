@@ -45,6 +45,7 @@ The extension UI and `secrets/models.env` support three compatibility lanes: Ope
 
 - [README.md](../README.md): quick start, development commands, and current limitations.
 - [self-evolving-plugin-plan.md](self-evolving-plugin-plan.md): long-form design for pain-point driven skill evolution.
+- [beta-v2-final-goals.md](beta-v2-final-goals.md): final beta target and Student Skill distillation gates.
 - [problem-search-mcp.md](problem-search-mcp.md): problem-search MCP direction.
 - [internal-testing.md](internal-testing.md): live MiMo internal test evidence.
 
