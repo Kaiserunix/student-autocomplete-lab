@@ -12,6 +12,13 @@ interface LuoguProblemPayload {
       outputFormat?: unknown;
       samples?: unknown;
       hint?: unknown;
+      contenu?: {
+        background?: unknown;
+        description?: unknown;
+        formatI?: unknown;
+        formatO?: unknown;
+        hint?: unknown;
+      };
     };
   };
 }
@@ -55,12 +62,21 @@ function normalizeTags(value: unknown): string[] {
   return value.map((tag) => String(tag));
 }
 
+function joinProblemSections(...sections: string[]): string {
+  return sections
+    .map((section) => section.trim())
+    .filter((section) => section.length > 0)
+    .join("\n\n");
+}
+
 export function normalizeLuoguProblemResponse(payload: LuoguProblemPayload): ProblemRecord {
   const problem = payload.data?.problem;
 
   if (!problem || typeof problem.pid !== "string" || typeof problem.title !== "string") {
     throw new Error("Luogu response did not include a usable problem payload.");
   }
+
+  const contenu = problem.contenu;
 
   return {
     platform: "luogu",
@@ -69,16 +85,32 @@ export function normalizeLuoguProblemResponse(payload: LuoguProblemPayload): Pro
     sourceUrl: `https://www.luogu.com.cn/problem/${problem.pid}`,
     difficulty: typeof problem.difficulty === "number" ? problem.difficulty : undefined,
     tags: normalizeTags(problem.tags),
-    statement: asString(problem.description),
-    inputFormat: asString(problem.inputFormat),
-    outputFormat: asString(problem.outputFormat),
+    statement: joinProblemSections(asString(contenu?.background), asString(contenu?.description)) || asString(problem.description),
+    inputFormat: asString(contenu?.formatI) || asString(problem.inputFormat),
+    outputFormat: asString(contenu?.formatO) || asString(problem.outputFormat),
     samples: normalizeSamples(problem.samples),
-    hint: asString(problem.hint)
+    hint: asString(contenu?.hint) || asString(problem.hint)
   };
 }
 
+export function normalizeLuoguPid(pid: string): string {
+  const trimmed = pid.trim();
+
+  if (/^\d+$/.test(trimmed)) {
+    return `P${trimmed}`;
+  }
+
+  const prefixed = trimmed.match(/^p(\d+)$/i);
+  if (prefixed) {
+    return `P${prefixed[1]}`;
+  }
+
+  return trimmed;
+}
+
 export async function fetchLuoguProblem(pid: string, fetchImpl: typeof fetch = fetch): Promise<ProblemRecord> {
-  const response = await fetchImpl(`https://www.luogu.com.cn/problem/${encodeURIComponent(pid)}`, {
+  const normalizedPid = normalizeLuoguPid(pid);
+  const response = await fetchImpl(`https://www.luogu.com.cn/problem/${encodeURIComponent(normalizedPid)}`, {
     headers: {
       "user-agent": "student-autocomplete-lab/0.1",
       "x-lentille-request": "content-only"
@@ -86,7 +118,13 @@ export async function fetchLuoguProblem(pid: string, fetchImpl: typeof fetch = f
   });
 
   if (!response.ok) {
-    throw new Error(`Luogu problem fetch failed for ${pid}: HTTP ${response.status}`);
+    if (response.status === 404) {
+      throw new Error(
+        `未找到洛谷题目 ${normalizedPid}。题目编号通常像 P5730 或 B2002；如果你输入的是题单 ID，请在“题单 ID”区域导入。`
+      );
+    }
+
+    throw new Error(`Luogu problem fetch failed for ${normalizedPid}: HTTP ${response.status}`);
   }
 
   const payload = (await response.json()) as LuoguProblemPayload;

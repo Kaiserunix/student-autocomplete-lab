@@ -5,3 +5,7 @@ node_modules/
 dist/
 .runtime/
 .student-autocomplete/
+.student-autocomplete-smoke/
+practice/
+test/*.py
+*.vsix

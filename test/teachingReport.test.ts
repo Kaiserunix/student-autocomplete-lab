@@ -34,4 +34,21 @@ describe("teaching diagnosis report parser", () => {
   test("rejects reports without pain points", () => {
     expect(() => parseTeachingDiagnosisReport('{"hint":"too vague"}')).toThrow(/pain_points/);
   });
+
+  test("accepts numeric confidence strings from live model responses", () => {
+    const report = parseTeachingDiagnosisReport(
+      JSON.stringify({
+        pain_points: [
+          {
+            label: "duplicate_handling",
+            confidence: "0.9",
+            evidence: "The model emitted confidence as a string."
+          }
+        ],
+        hint: "先确认重复元素是否需要保留。"
+      })
+    );
+
+    expect(report.painPoints[0].confidence).toBe(0.9);
+  });
 });

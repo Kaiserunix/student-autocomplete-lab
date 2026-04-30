@@ -23,6 +23,11 @@ export async function readJsonlRecords<T>(path: string): Promise<T[]> {
 export async function appendJsonlRecord<T>(path: string, record: T): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const existing = await readJsonlRecords<T>(path);
-  const next = [...existing, record].map((item) => JSON.stringify(item)).join("\n");
+  await writeJsonlRecords(path, [...existing, record]);
+}
+
+export async function writeJsonlRecords<T>(path: string, records: T[]): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  const next = records.map((item) => JSON.stringify(item)).join("\n");
   await writeFile(path, `${next}\n`, "utf8");
 }

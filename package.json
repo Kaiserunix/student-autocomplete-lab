@@ -4,7 +4,12 @@
   "description": "A student-friendly VS Code autocomplete and problem-note prototype.",
   "version": "0.0.1",
   "publisher": "kaiserunix",
-  "private": true,
+  "private": false,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kaiserunix/student-autocomplete-lab.git"
+  },
   "engines": {
     "vscode": "^1.95.0"
   },
@@ -13,42 +18,51 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:studentAutocomplete.problemBank",
+    "onStartupFinished",
+    "onView:studentAutocomplete.problemBankWebview",
     "onCommand:studentAutocomplete.saveProblem",
     "onCommand:studentAutocomplete.giveHint",
     "onCommand:studentAutocomplete.moreSpecificHint",
     "onCommand:studentAutocomplete.revealAnswer",
-    "onCommand:studentAutocomplete.recommendNext"
+    "onCommand:studentAutocomplete.recommendNext",
+    "onCommand:studentAutocomplete.triggerInlineCompletion"
   ],
-  "main": "./dist/extension.js",
+  "main": "./dist/src/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "studentAutocomplete.saveProblem",
-        "title": "Student Autocomplete: Save Problem"
+        "title": "AI 做题陪练：保存题目"
       },
       {
         "command": "studentAutocomplete.giveHint",
-        "title": "Student Autocomplete: Give Me a Hint"
+        "title": "AI 做题陪练：给点提示"
       },
       {
         "command": "studentAutocomplete.moreSpecificHint",
-        "title": "Student Autocomplete: More Specific Hint"
+        "title": "AI 做题陪练：再具体点"
       },
       {
         "command": "studentAutocomplete.revealAnswer",
-        "title": "Student Autocomplete: Show Answer / I Give Up"
+        "title": "AI 做题陪练：我放弃了"
       },
       {
         "command": "studentAutocomplete.recommendNext",
-        "title": "Student Autocomplete: Recommend Next Problem"
+        "title": "AI 做题陪练：推荐下一题"
+      },
+      {
+        "command": "studentAutocomplete.triggerInlineCompletion",
+        "title": "AI 做题陪练：触发自动补全"
       }
     ],
+    "configurationDefaults": {
+      "editor.inlineSuggest.enabled": true
+    },
     "viewsContainers": {
       "activitybar": [
         {
           "id": "studentAutocomplete",
-          "title": "Student Autocomplete",
+          "title": "AI 做题陪练",
           "icon": "resources/activity.svg"
         }
       ]
@@ -56,8 +70,9 @@
     "views": {
       "studentAutocomplete": [
         {
-          "id": "studentAutocomplete.problemBank",
-          "name": "Problem Bank"
+          "id": "studentAutocomplete.problemBankWebview",
+          "name": "做题陪练",
+          "type": "webview"
         }
       ]
     }
@@ -68,6 +83,9 @@
     "trial:codex-practice": "npm run compile && node dist/src/cli/codexPracticeTrial.js",
     "trial:gpt-practice": "npm run compile && node dist/src/cli/gptPracticeTrial.js",
     "trial:mimo-teacher": "npm run compile && node dist/src/cli/mimoTeachingTrial.js",
+    "trial:self-evolution": "npm run compile && node dist/src/cli/selfEvolutionTrial.js",
+    "trial:self-evolution-eval": "npm run compile && node dist/src/cli/selfEvolutionEval.js",
+    "trial:mimo-journey": "npm run compile && node dist/src/cli/mimoJourneyTrial.js",
     "trial:mimo": "npm run compile && node dist/src/cli/mimoAutocompleteTrial.js",
     "mcp:problem-search": "node dist/src/mcp/problemSearchServer.js",
     "test": "vitest run",

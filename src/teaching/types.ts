@@ -30,4 +30,5 @@ export interface TeachingDiagnosisContext {
   ojVerdict: OjVerdict;
   localEvidence: LocalEvidenceItem[];
   studentProfile: TeachingStudentProfileSummary;
+  responseLanguage?: "zh-CN" | "raw";
 }

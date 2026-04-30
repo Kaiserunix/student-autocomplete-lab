@@ -1,0 +1,108 @@
+import { describe, expect, test } from "vitest";
+import { parseSolutionScoreReport, requestMimoSolutionScore } from "../src/teaching/solutionScore";
+
+describe("solution score", () => {
+  test("parses learning score separately from OJ verdict", () => {
+    const report = parseSolutionScoreReport(
+      JSON.stringify({
+        oj_result: "AC",
+        learning_score: 64,
+        rubric: {
+          correctness: 90,
+          complexity_match: 45,
+          idea_growth: 55,
+          code_quality: 70,
+          independence: 60
+        },
+        complexity_assessment: {
+          observed: "O(n^2) 暴力枚举",
+          expected: "O(n log n) 或计数优化",
+          verdict: "complexity_gap",
+          reason: "本题核心是从暴力走向更可迁移的统计模型。"
+        },
+        pain_points: [
+          {
+            label: "bruteforce_no_growth",
+            confidence: 0.78,
+            evidence: "AC 依赖小数据，没有提炼优化思路。"
+          }
+        ],
+        summary: "OJ 通过了，但算法收获偏低。",
+        next_action: "补一题同类优化题。",
+        recommendation: {
+          problem_id: "P2141",
+          reason: "练习去重与计数。"
+        }
+      })
+    );
+
+    expect(report.ojResult).toBe("AC");
+    expect(report.learningScore).toBe(64);
+    expect(report.complexityAssessment.verdict).toBe("complexity_gap");
+    expect(report.painPoints[0].label).toBe("bruteforce_no_growth");
+  });
+
+  test("calls MiMo with AC scoring rubric and attempt stats", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fakeFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      calls.push({ url: String(url), init });
+      return new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  oj_result: "AC",
+                  learning_score: 82,
+                  rubric: {
+                    correctness: 95,
+                    complexity_match: 80,
+                    idea_growth: 80,
+                    code_quality: 82,
+                    independence: 75
+                  },
+                  complexity_assessment: {
+                    observed: "O(n)",
+                    expected: "O(n)",
+                    verdict: "matched",
+                    reason: "复杂度符合题目训练目标。"
+                  },
+                  pain_points: [],
+                  summary: "这次 AC 能证明基础模型已经掌握。",
+                  next_action: "进入下一题。",
+                  recommendation: {
+                    problem_id: "P5728",
+                    reason: "继续练组合枚举。"
+                  }
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    };
+
+    const report = await requestMimoSolutionScore(
+      {
+        baseUrl: "https://mimo.example.test/v1",
+        apiKey: "secret",
+        model: "mimo-v2.5"
+      },
+      {
+        problem: { id: "P2141", title: "珠心算测验", summary: "统计能否由两个数相加得到" },
+        language: "python",
+        studentCode: "print(ans)",
+        studentProfile: { painPointCounts: {}, activeSkills: [] },
+        ojVerdict: { status: "AC" },
+        attemptStats: { hintCount: 1, gaveUp: false, revealedAnswer: false }
+      },
+      fakeFetch as typeof fetch
+    );
+
+    const body = JSON.parse(String(calls[0].init?.body));
+    expect(body.messages[1].content).toContain("学习评分");
+    expect(body.messages[1].content).toContain("hintCount");
+    expect(report.learningScore).toBe(82);
+  });
+});

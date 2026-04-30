@@ -44,4 +44,64 @@ describe("OpenAI-compatible completions client", () => {
       stop: ["</suffix>"]
     });
   });
+
+  test("can use OpenAI chat completions for autocomplete", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fakeFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ choices: [{ message: { content: "return a + b\n" } }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    };
+
+    const text = await requestCompletion(
+      {
+        format: "openai-chat",
+        baseUrl: "https://api.openai.com/v1",
+        apiKey: "openai-key",
+        model: "gpt-4.1-mini"
+      },
+      {
+        prompt: "def add(a, b):\n    ",
+        maxTokens: 64,
+        temperature: 0.1
+      },
+      fakeFetch as typeof fetch
+    );
+
+    expect(text).toBe("return a + b\n");
+    expect(calls[0].url).toBe("https://api.openai.com/v1/chat/completions");
+  });
+
+  test("can use Anthropic Native messages for autocomplete", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fakeFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ content: [{ type: "text", text: "return a + b\n" }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    };
+
+    const text = await requestCompletion(
+      {
+        format: "anthropic-messages",
+        baseUrl: "https://api.anthropic.com/v1",
+        apiKey: "anthropic-key",
+        model: "claude-haiku-4-5"
+      },
+      {
+        prompt: "def add(a, b):\n    ",
+        maxTokens: 64,
+        temperature: 0.1
+      },
+      fakeFetch as typeof fetch
+    );
+
+    const headers = calls[0].init?.headers as Record<string, string>;
+    expect(text).toBe("return a + b\n");
+    expect(calls[0].url).toBe("https://api.anthropic.com/v1/messages");
+    expect(headers["x-api-key"]).toBe("anthropic-key");
+  });
 });

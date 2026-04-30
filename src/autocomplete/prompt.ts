@@ -41,7 +41,8 @@ export function buildMimoAutocompletePrompt(input: AutocompletePromptInput): str
 
   return [
     "Complete the code at the cursor. Output code only, no markdown, max 3 lines.",
-    "Do not solve full problems. Use only the code before the cursor.",
+    "Do not solve full problems. Use only the student's code section before the cursor.",
+    "Ignore problem titles, problem statements, source links, AI feedback, and any text outside the student code section.",
     `Language: ${input.language}`,
     `File: ${input.filePath}`,
     "",

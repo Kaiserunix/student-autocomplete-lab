@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { limitCompletionLines } from "../src/autocomplete/filter";
 import { buildAutocompletePrompt, buildMimoAutocompletePrompt } from "../src/autocomplete/prompt";
+import { shouldRequestInlineCompletion } from "../src/autocomplete/triggerPolicy";
 
 describe("autocomplete safety", () => {
   test("limits model output to at most three non-empty lines", () => {
@@ -67,5 +68,12 @@ return d
     expect(prompt).not.toContain("print(add(1, 2))");
     expect(prompt).not.toContain("hidden statement");
     expect(prompt).not.toContain("return a + b");
+  });
+
+  test("requests inline completion after indentation even before a non-space token exists", () => {
+    expect(shouldRequestInlineCompletion("  ")).toBe(true);
+    expect(shouldRequestInlineCompletion("    ")).toBe(true);
+    expect(shouldRequestInlineCompletion("    ans")).toBe(true);
+    expect(shouldRequestInlineCompletion("")).toBe(false);
   });
 });

@@ -1,4 +1,8 @@
-import { ChatCompletionProviderConfig, requestChatCompletionText } from "../models/chatCompletionsClient";
+import {
+  ChatCompletionProviderConfig,
+  type ChatCompletionUsageSink,
+  requestChatCompletionText
+} from "../models/chatCompletionsClient";
 import { parseTeachingDiagnosisReport, TeachingDiagnosisReport } from "./teachingReport";
 import { buildTeachingDiagnosisPrompt } from "./teachingPrompt";
 import { normalizeTeachingDiagnosisReport } from "./teachingTaxonomy";
@@ -7,7 +11,8 @@ import { TeachingDiagnosisContext } from "./types";
 export async function requestMimoTeachingDiagnosis(
   config: ChatCompletionProviderConfig,
   context: TeachingDiagnosisContext,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  onUsage?: ChatCompletionUsageSink
 ): Promise<TeachingDiagnosisReport> {
   const text = await requestChatCompletionText(
     config,
@@ -16,7 +21,7 @@ export async function requestMimoTeachingDiagnosis(
         {
           role: "system",
           content:
-            "You are MiMo Pro, a restrained algorithm teacher. Return one valid JSON object only. Do not include markdown."
+            "You are MiMo, a restrained algorithm teacher. Return one valid JSON object only. Do not include markdown. Follow the requested output language for all JSON string values."
         },
         {
           role: "user",
@@ -25,13 +30,16 @@ export async function requestMimoTeachingDiagnosis(
       ],
       maxTokens: 700,
       temperature: 0.2,
-      responseFormat: { type: "json_object" }
+      responseFormat: { type: "json_object" },
+      onUsage
     },
     fetchImpl
   );
 
   try {
-    return normalizeTeachingDiagnosisReport(parseTeachingDiagnosisReport(text));
+    return normalizeTeachingDiagnosisReport(parseTeachingDiagnosisReport(text), {
+      currentProblemId: context.problem.id
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const preview = text.slice(0, 240).replace(/\s+/g, " ").trim();

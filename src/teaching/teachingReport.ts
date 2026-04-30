@@ -112,6 +112,13 @@ function requireString(value: unknown, field: string): string {
 }
 
 function requireNumber(value: unknown, field: string): number {
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
   if (typeof value !== "number" || !Number.isFinite(value)) {
     throw new Error(`Teaching diagnosis field ${field} must be a finite number.`);
   }

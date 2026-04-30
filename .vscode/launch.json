@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Student Autocomplete Extension",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--user-data-dir=${workspaceFolder}/.runtime/vscode-dev-user-data-webview",
+        "--extensions-dir=${workspaceFolder}/.runtime/vscode-dev-extensions",
+        "--extensionDevelopmentPath=${workspaceFolder}",
+        "${workspaceFolder}"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/dist/**/*.js"
+      ],
+      "preLaunchTask": "npm: compile"
+    }
+  ]
+}

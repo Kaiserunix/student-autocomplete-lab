@@ -3,8 +3,20 @@ import * as vscode from "vscode";
 import { loadModelEnv, requireMimoAutocompleteConfig } from "../config/modelEnv";
 import { buildAutocompleteInputFromText } from "./context";
 import { requestMimoAutocomplete } from "./mimoAutocomplete";
+import { shouldRequestInlineCompletion } from "./triggerPolicy";
 
-export function createMimoInlineCompletionProvider(): vscode.InlineCompletionItemProvider {
+export interface InlineCompletionEvent {
+  type: "request" | "success" | "empty" | "error";
+  message: string;
+}
+
+interface InlineCompletionProviderOptions {
+  onEvent?: (event: InlineCompletionEvent) => void;
+}
+
+export function createMimoInlineCompletionProvider(
+  options: InlineCompletionProviderOptions = {}
+): vscode.InlineCompletionItemProvider {
   let cachedConfig: ReturnType<typeof requireMimoAutocompleteConfig> | undefined;
 
   async function loadConfig(): Promise<ReturnType<typeof requireMimoAutocompleteConfig>> {
@@ -25,28 +37,48 @@ export function createMimoInlineCompletionProvider(): vscode.InlineCompletionIte
   return {
     async provideInlineCompletionItems(document, position): Promise<vscode.InlineCompletionItem[]> {
       const linePrefix = document.lineAt(position.line).text.slice(0, position.character);
-      if (linePrefix.trim().length === 0 && !linePrefix.endsWith("    ")) {
+      if (!shouldRequestInlineCompletion(linePrefix)) {
         return [];
       }
 
-      const config = await loadConfig();
-      const offset = document.offsetAt(position);
-      const input = buildAutocompleteInputFromText({
-        text: document.getText(),
-        offset,
-        language: document.languageId,
-        filePath: document.uri.fsPath
-      });
-      const suggestion = await requestMimoAutocomplete(config, {
-        ...input,
-        habits: ["Prefer direct student code.", "Return only the immediate local continuation."]
-      });
+      try {
+        options.onEvent?.({
+          type: "request",
+          message: `${document.languageId} ${document.uri.fsPath}:${position.line + 1}`
+        });
+        const config = await loadConfig();
+        const offset = document.offsetAt(position);
+        const input = buildAutocompleteInputFromText({
+          text: document.getText(),
+          offset,
+          language: document.languageId,
+          filePath: document.uri.fsPath
+        });
+        const suggestion = await requestMimoAutocomplete(config, {
+          ...input,
+          habits: ["Prefer direct student code.", "Return only the immediate local continuation."]
+        });
 
-      if (!suggestion.trim()) {
+        if (!suggestion.trim()) {
+          options.onEvent?.({
+            type: "empty",
+            message: "MiMo returned an empty inline completion."
+          });
+          return [];
+        }
+
+        options.onEvent?.({
+          type: "success",
+          message: suggestion
+        });
+        return [new vscode.InlineCompletionItem(suggestion)];
+      } catch (error) {
+        options.onEvent?.({
+          type: "error",
+          message: error instanceof Error ? error.message : String(error)
+        });
         return [];
       }
-
-      return [new vscode.InlineCompletionItem(suggestion)];
     }
   };
 }

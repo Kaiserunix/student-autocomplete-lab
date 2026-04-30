@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
-import { appendJsonlRecord, readJsonlRecords } from "../src/storage/jsonlStore";
+import { appendJsonlRecord, readJsonlRecords, writeJsonlRecords } from "../src/storage/jsonlStore";
 
 interface TestRecord {
   id: string;
@@ -36,5 +36,14 @@ describe("jsonl store", () => {
       { id: "a", value: 1 },
       { id: "b", value: 2 }
     ]);
+  });
+
+  test("overwrites records", async () => {
+    const path = join(tempDir, "events", "events.jsonl");
+
+    await appendJsonlRecord<TestRecord>(path, { id: "a", value: 1 });
+    await writeJsonlRecords<TestRecord>(path, [{ id: "b", value: 2 }]);
+
+    await expect(readJsonlRecords<TestRecord>(path)).resolves.toEqual([{ id: "b", value: 2 }]);
   });
 });
