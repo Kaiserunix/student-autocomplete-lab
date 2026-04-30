@@ -25,10 +25,17 @@ import { requestMimoSolutionScore } from "../teaching/solutionScore";
 import { hasSubstantiveStudentCode, normalizeScoreOjVerdict } from "../teaching/solutionScoreGate";
 import { applyTeachingDiagnosis, profileSummary, type StudentProfile } from "../teaching/studentProfile";
 import { loadStudentProfile, saveStudentProfile } from "../teaching/studentProfileStore";
-import { studentSkillFromProfile, studentSkillSummaryForTeaching, type StudentSkill } from "../teaching/studentSkill";
+import {
+  applyStudentSkillPatch,
+  studentSkillFromProfile,
+  studentSkillSummaryForTeaching,
+  type StudentSkill
+} from "../teaching/studentSkill";
 import {
   archiveStudentSkillVersion,
+  listStudentSkillVersions,
   loadStudentSkill,
+  rollbackStudentSkill,
   saveStudentSkill
 } from "../teaching/studentSkillStore";
 import { requestMimoSubmissionJudge } from "../teaching/submissionJudge";
@@ -80,6 +87,8 @@ type WebviewMessage =
   | { command: "requestSubmissionJudge"; problemKey: string }
   | { command: "requestAutocompletePreview" }
   | { command: "archiveProblem"; problemKey: string; reason?: CompletionReason }
+  | { command: "disableStudentSkill"; skillName: string; reason?: string }
+  | { command: "rollbackStudentSkill"; versionId: string }
   | { command: "placeholder"; action: string };
 
 type AiCoachAction = "hint" | "specific" | "giveUp" | "recommend";
@@ -115,6 +124,16 @@ interface AiRuntimeStatus {
     format?: string;
     error?: string;
   };
+}
+
+interface StudentSkillVersionView {
+  versionId: string;
+  archivedAt: string;
+  reason: string;
+  revision: number;
+  activeSkillCount: number;
+  candidateSkillCount: number;
+  disabledSkillCount: number;
 }
 
 const starterPresets: StarterPreset[] = [
@@ -297,6 +316,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       return this.handleArchiveProblemRequest(message.problemKey, normalizeCompletionReason(message.reason));
     }
 
+    if (message.command === "disableStudentSkill") {
+      return this.handleDisableStudentSkillRequest(message.skillName, message.reason);
+    }
+
+    if (message.command === "rollbackStudentSkill") {
+      return this.handleRollbackStudentSkillRequest(message.versionId);
+    }
+
     vscode.window.showInformationMessage(`Student Autocomplete: ${message.action} is planned for the next slice.`);
   }
 
@@ -344,6 +371,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   ): Promise<Record<string, unknown>> {
     const problems = await this.loadSavedProblems();
     const completedProblems = await this.loadCompletedProblems();
+    const studentSkillState = await this.loadStudentSkillState();
     return {
       type: "problemBankState",
       problems,
@@ -353,10 +381,29 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       })),
       aiStatus: await this.aiRuntimeStatus(),
       aiConfig: await this.aiConfigView(),
+      studentSkill: studentSkillState.studentSkill,
+      studentSkillVersions: studentSkillState.versions,
       selectedKey: selectedKey ?? (problems[0] ? makeProblemKey(problems[0]) : ""),
       status,
       ...extra
     };
+  }
+
+  private async loadStudentSkillState(
+    profile?: StudentProfile
+  ): Promise<{ studentSkill: StudentSkill; versions: StudentSkillVersionView[] }> {
+    const studentProfile = profile ?? (await loadStudentProfile(this.profilePath()));
+    return {
+      studentSkill: await this.loadStudentSkillForProfile(studentProfile),
+      versions: await this.studentSkillVersionViews()
+    };
+  }
+
+  private async studentSkillVersionViews(): Promise<StudentSkillVersionView[]> {
+    return (await listStudentSkillVersions(this.studentSkillVersionsDir()))
+      .map(toStudentSkillVersionView)
+      .reverse()
+      .slice(0, 24);
   }
 
   private async handleSaveAiConfigRequest(config: AiProviderConfigUpdate): Promise<Record<string, unknown>> {
@@ -490,6 +537,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       report: result.report,
       localizedReport: localizeTeachingDiagnosisReport(result.report),
       profileSummary: profileSummary(result.updatedProfile),
+      studentSkill: result.updatedStudentSkill,
+      studentSkillVersions: await this.studentSkillVersionViews(),
       studentSkillSummary: studentSkillSummaryForTeaching(result.updatedStudentSkill),
       studentSkillMerge: result.studentSkillMerge,
       teacherPack: teacherPack
@@ -511,6 +560,57 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     return studentSkillFromProfile(profile);
+  }
+
+  private async handleDisableStudentSkillRequest(
+    skillName: string,
+    reason?: string
+  ): Promise<Record<string, unknown>> {
+    const name = skillName.trim();
+    if (!name) {
+      throw new Error("请选择要禁用的 Student Skill。");
+    }
+
+    const profile = await loadStudentProfile(this.profilePath());
+    const studentSkill = await this.loadStudentSkillForProfile(profile);
+    const occurredAt = new Date().toISOString();
+    const disabledReason = reason?.trim() || "用户在 Student Skill 页面禁用：认为该规则暂不适合当前学习。";
+    const merge = applyStudentSkillPatch(studentSkill, {
+      source: "sidebar-user",
+      occurredAt,
+      disableSkills: [{ name, reason: disabledReason }]
+    });
+    await saveStudentSkill(this.studentSkillPath(), merge.skill);
+    await archiveStudentSkillVersion(this.studentSkillVersionsDir(), merge.skill, `disable ${name}`, occurredAt);
+
+    return this.problemBankState(undefined, `已禁用 Skill：${name}。后续 AI 会把它当作人工纠偏处理。`);
+  }
+
+  private async handleRollbackStudentSkillRequest(versionId: string): Promise<Record<string, unknown>> {
+    const id = versionId.trim();
+    if (!id) {
+      throw new Error("请选择要回滚的 Student Skill 版本。");
+    }
+
+    const versions = await listStudentSkillVersions(this.studentSkillVersionsDir());
+    const target = versions.find((version) => version.versionId === id);
+    if (!target) {
+      throw new Error(`找不到 Student Skill 版本：${id}`);
+    }
+
+    const occurredAt = new Date().toISOString();
+    const rolledBackSkill = await rollbackStudentSkill(this.studentSkillPath(), target.path);
+    await archiveStudentSkillVersion(
+      this.studentSkillVersionsDir(),
+      rolledBackSkill,
+      `rollback to ${target.versionId}`,
+      occurredAt
+    );
+
+    return this.problemBankState(
+      undefined,
+      `已回滚 Student Skill 到 rev ${target.revision}（${formatDateTimeForStatus(target.archivedAt)}）。`
+    );
   }
 
   private async handleLessonReportRequest(problemKey: string, studentRequest?: string): Promise<Record<string, unknown>> {
@@ -1192,7 +1292,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       border-radius: 8px;
       display: grid;
       gap: 4px;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       padding: 4px;
     }
 
@@ -1422,6 +1522,72 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       padding: 8px;
     }
 
+    .skillPanelBody {
+      display: grid;
+      gap: 9px;
+      padding: 9px;
+    }
+
+    .skillSummary {
+      display: grid;
+      gap: 7px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .skillMetric {
+      background: color-mix(in srgb, var(--vscode-editor-background) 78%, transparent);
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      display: grid;
+      gap: 2px;
+      padding: 7px;
+    }
+
+    .skillMetric strong {
+      color: var(--accent);
+      font-size: 15px;
+    }
+
+    .skillGroup {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .skillList,
+    .versionList {
+      display: grid;
+      gap: 7px;
+      padding: 8px;
+    }
+
+    .skillCard,
+    .versionItem {
+      background: color-mix(in srgb, var(--vscode-list-hoverBackground) 46%, transparent);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      display: grid;
+      gap: 6px;
+      padding: 8px;
+    }
+
+    .skillCard.disabled {
+      opacity: 0.72;
+    }
+
+    .skillTop {
+      align-items: start;
+      display: grid;
+      gap: 5px;
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .skillRules {
+      display: grid;
+      gap: 3px;
+      padding-left: 10px;
+    }
+
     .problemList {
       display: grid;
       gap: 6px;
@@ -1616,6 +1782,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       <button id="tabProblem" class="tabButton active" type="button">题目张贴</button>
       <button id="tabAi" class="tabButton" type="button">AI 交互</button>
       <button id="tabSearch" class="tabButton" type="button">题目寻找</button>
+      <button id="tabSkill" class="tabButton" type="button">技能画像</button>
     </nav>
 
     <section id="problemPage" class="page">
@@ -1800,6 +1967,24 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         </div>
       </details>
     </section>
+
+    <section id="skillPage" class="page" hidden>
+      <section class="panel">
+        <div class="panelHeader">
+          <h2>Student Skill 可控画像</h2>
+          <span id="studentSkillRevision" class="mini">未加载</span>
+        </div>
+        <div id="studentSkillPanel" class="skillPanelBody"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panelHeader">
+          <h2>版本回滚</h2>
+          <span class="mini">最近快照</span>
+        </div>
+        <div id="studentSkillVersions" class="versionList"></div>
+      </section>
+    </section>
   </main>
 
   <script nonce="${nonce}">
@@ -1813,6 +1998,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       filter: "",
       aiStatus: undefined,
       aiConfig: undefined,
+      studentSkill: undefined,
+      studentSkillVersions: [],
       activePage: "problem",
       practiceLanguage: "python",
       responseLanguage: "zh",
@@ -1824,15 +2011,20 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const tabProblem = document.getElementById("tabProblem");
     const tabAi = document.getElementById("tabAi");
     const tabSearch = document.getElementById("tabSearch");
+    const tabSkill = document.getElementById("tabSkill");
     const problemPage = document.getElementById("problemPage");
     const aiPage = document.getElementById("aiPage");
     const searchPage = document.getElementById("searchPage");
+    const skillPage = document.getElementById("skillPage");
     const problemCount = document.getElementById("problemCount");
     const problemList = document.getElementById("problemList");
     const completedCount = document.getElementById("completedCount");
     const completedList = document.getElementById("completedList");
     const problemDetail = document.getElementById("problemDetail");
     const searchResults = document.getElementById("searchResults");
+    const studentSkillPanel = document.getElementById("studentSkillPanel");
+    const studentSkillRevision = document.getElementById("studentSkillRevision");
+    const studentSkillVersions = document.getElementById("studentSkillVersions");
     const aiProvider = document.getElementById("aiProvider");
     const coachSelection = document.getElementById("coachSelection");
     const aiStatusGrid = document.getElementById("aiStatusGrid");
@@ -1852,6 +2044,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     tabProblem.addEventListener("click", () => switchPage("problem"));
     tabAi.addEventListener("click", () => switchPage("ai"));
     tabSearch.addEventListener("click", () => switchPage("search"));
+    tabSkill.addEventListener("click", () => switchPage("skill"));
 
     practiceLanguageOptions.forEach((option) => {
       const item = document.createElement("option");
@@ -1948,6 +2141,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         state.selectedKey = data.selectedKey || state.selectedKey;
         state.aiStatus = data.aiStatus;
         state.aiConfig = data.aiConfig;
+        state.studentSkill = data.studentSkill;
+        state.studentSkillVersions = data.studentSkillVersions ?? [];
         renderAll();
         if (data.status) {
           setStatus(data.status);
@@ -1975,6 +2170,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       }
       if (data.type === "teachingDiagnosis") {
         setStatus(data.status || "AI 已返回分析。");
+        state.studentSkill = data.studentSkill || state.studentSkill;
+        state.studentSkillVersions = data.studentSkillVersions ?? state.studentSkillVersions;
+        renderStudentSkill();
         switchPage("ai");
         renderAiDiagnosis(data);
       }
@@ -2013,12 +2211,15 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       const isProblem = page === "problem";
       const isAi = page === "ai";
       const isSearch = page === "search";
+      const isSkill = page === "skill";
       problemPage.hidden = !isProblem;
       aiPage.hidden = !isAi;
       searchPage.hidden = !isSearch;
+      skillPage.hidden = !isSkill;
       tabProblem.className = "tabButton" + (isProblem ? " active" : "");
       tabAi.className = "tabButton" + (isAi ? " active" : "");
       tabSearch.className = "tabButton" + (isSearch ? " active" : "");
+      tabSkill.className = "tabButton" + (isSkill ? " active" : "");
     }
 
     function importLuogu(pid, createFile) {
@@ -2039,6 +2240,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       renderProblemList();
       renderCompletedList();
       renderDetail();
+      renderStudentSkill();
     }
 
     function renderAiConfig() {
@@ -2267,6 +2469,255 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         problemKey: keyOf(problem),
         reason
       });
+    }
+
+    function requestDisableStudentSkill(skillName) {
+      const name = String(skillName || "").trim();
+      if (!name) {
+        setStatus("请选择要禁用的 Skill。", "error");
+        return;
+      }
+      if (!confirm("禁用 Skill：" + name + "?\\n禁用后 AI 会把它当成人工纠偏，不再主动应用这条教学规则。")) {
+        return;
+      }
+
+      setStatus("正在禁用 Skill：" + name + "...");
+      vscode.postMessage({
+        command: "disableStudentSkill",
+        skillName: name,
+        reason: "用户在 Student Skill 页面禁用：认为该规则暂不适合当前学习。"
+      });
+    }
+
+    function requestRollbackStudentSkill(versionId) {
+      const id = String(versionId || "").trim();
+      if (!id) {
+        setStatus("请选择要回滚的版本。", "error");
+        return;
+      }
+      if (!confirm("回滚 Student Skill 到版本 " + id + "?\\n当前画像会被该快照覆盖，并额外记录一次回滚快照。")) {
+        return;
+      }
+
+      setStatus("正在回滚 Student Skill...");
+      vscode.postMessage({
+        command: "rollbackStudentSkill",
+        versionId: id
+      });
+    }
+
+    function renderStudentSkill() {
+      const skill = state.studentSkill;
+      studentSkillPanel.innerHTML = "";
+      studentSkillVersions.innerHTML = "";
+
+      if (!skill) {
+        studentSkillRevision.textContent = "未加载";
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "还没有 Student Skill 数据。先进行一次 AI 提示或学习评分，系统会开始形成画像。";
+        studentSkillPanel.appendChild(empty);
+        renderStudentSkillVersions();
+        return;
+      }
+
+      const entries = Object.values(skill.skills || {}).sort(
+        (left, right) => skillStatusOrder(left.status) - skillStatusOrder(right.status) || left.name.localeCompare(right.name)
+      );
+      const counts = countSkillEntries(entries);
+      studentSkillRevision.textContent = "rev " + (skill.revision ?? 0) + " · " + formatDateTime(skill.updatedAt);
+
+      const summary = document.createElement("div");
+      summary.className = "skillSummary";
+      [
+        ["已启用", counts.active],
+        ["候选", counts.candidate],
+        ["已禁用", counts.disabled]
+      ].forEach(([label, value]) => {
+        const metric = document.createElement("div");
+        metric.className = "skillMetric";
+        const number = document.createElement("strong");
+        number.textContent = String(value);
+        metric.appendChild(number);
+        metric.appendChild(textSpan(label, "mini"));
+        summary.appendChild(metric);
+      });
+      studentSkillPanel.appendChild(summary);
+
+      studentSkillPanel.appendChild(
+        responseBlock(
+          "硬规则",
+          [
+            "补全不读题面：" + booleanLabel(!skill.hardRules?.autocompleteMayReadProblemStatement),
+            "补全不直接给完整答案：" + booleanLabel(!skill.hardRules?.allowFullSolutionAutocomplete),
+            "已禁用：" + ((skill.hardRules?.disabledSkills || []).join(" · ") || "暂无")
+          ].join("\\n")
+        )
+      );
+
+      appendSkillGroup("已启用 Skill", entries.filter((entry) => entry.status === "active"), "active");
+      appendSkillGroup("候选 Skill", entries.filter((entry) => entry.status === "candidate"), "candidate");
+      appendSkillGroup("已禁用 Skill", entries.filter((entry) => entry.status === "disabled"), "disabled");
+      renderStudentSkillVersions();
+    }
+
+    function appendSkillGroup(title, entries, status) {
+      const group = document.createElement("details");
+      group.className = "skillGroup";
+      group.open = status !== "disabled";
+
+      const summary = document.createElement("summary");
+      summary.textContent = title + " · " + entries.length;
+      group.appendChild(summary);
+
+      const list = document.createElement("div");
+      list.className = "skillList";
+      if (entries.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "暂无记录。";
+        list.appendChild(empty);
+      } else {
+        entries.forEach((entry) => list.appendChild(renderSkillEntry(entry)));
+      }
+      group.appendChild(list);
+      studentSkillPanel.appendChild(group);
+    }
+
+    function renderSkillEntry(entry) {
+      const card = document.createElement("div");
+      card.className = "skillCard " + (entry.status || "candidate");
+
+      const top = document.createElement("div");
+      top.className = "skillTop";
+      top.appendChild(textSpan(entry.name || "unnamed-skill", "problemTitle"));
+      top.appendChild(textSpan(skillStatusLabel(entry.status), "tag"));
+      card.appendChild(top);
+
+      card.appendChild(textSpan(entry.reason || "暂无形成理由。", "hint"));
+      card.appendChild(
+        textSpan(
+          "证据 " + (entry.evidenceCount || 0) + " · 分数 " + (entry.score ?? 0) + " · 最近 " + formatDateTime(entry.lastSeen),
+          "mini"
+        )
+      );
+
+      if (entry.disabledReason) {
+        card.appendChild(responseBlock("禁用原因", entry.disabledReason));
+      }
+
+      if (entry.sourcePainPoints?.length) {
+        const painRow = document.createElement("div");
+        painRow.className = "tagRow";
+        entry.sourcePainPoints.slice(0, 6).forEach((painPoint) => painRow.appendChild(textSpan(painPoint, "tag")));
+        card.appendChild(painRow);
+      }
+
+      if (entry.rules?.length) {
+        const rules = document.createElement("div");
+        rules.className = "skillRules";
+        entry.rules.slice(0, 4).forEach((rule) => rules.appendChild(textSpan("· " + rule, "mini")));
+        card.appendChild(rules);
+      }
+
+      const latestExample = latestSkillExample(entry);
+      if (latestExample) {
+        card.appendChild(responseBlock("最近证据", latestExample.evidence || ""));
+      }
+
+      if (entry.status !== "disabled") {
+        const actions = document.createElement("div");
+        actions.className = "row";
+        const disableButton = document.createElement("button");
+        disableButton.className = "secondary";
+        disableButton.type = "button";
+        disableButton.textContent = "禁用";
+        disableButton.addEventListener("click", () => requestDisableStudentSkill(entry.name));
+        actions.appendChild(disableButton);
+        card.appendChild(actions);
+      }
+
+      return card;
+    }
+
+    function renderStudentSkillVersions() {
+      const versions = state.studentSkillVersions || [];
+      studentSkillVersions.innerHTML = "";
+      if (versions.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = "还没有版本快照。AI 产生画像、禁用或回滚后会自动生成快照。";
+        studentSkillVersions.appendChild(empty);
+        return;
+      }
+
+      versions.forEach((version) => {
+        const item = document.createElement("div");
+        item.className = "versionItem";
+        item.appendChild(textSpan("rev " + version.revision + " · " + formatDateTime(version.archivedAt), "problemTitle"));
+        item.appendChild(textSpan(version.reason || "未记录原因", "hint"));
+        item.appendChild(
+          textSpan(
+            "启用 " + version.activeSkillCount + " · 候选 " + version.candidateSkillCount + " · 禁用 " + version.disabledSkillCount,
+            "mini"
+          )
+        );
+        const actions = document.createElement("div");
+        actions.className = "row";
+        const rollbackButton = document.createElement("button");
+        rollbackButton.className = "secondary";
+        rollbackButton.type = "button";
+        rollbackButton.textContent = "回滚到此版本";
+        rollbackButton.addEventListener("click", () => requestRollbackStudentSkill(version.versionId));
+        actions.appendChild(rollbackButton);
+        item.appendChild(actions);
+        studentSkillVersions.appendChild(item);
+      });
+    }
+
+    function countSkillEntries(entries) {
+      return entries.reduce(
+        (counts, entry) => {
+          if (entry.status === "active") {
+            counts.active += 1;
+          } else if (entry.status === "disabled") {
+            counts.disabled += 1;
+          } else {
+            counts.candidate += 1;
+          }
+          return counts;
+        },
+        { active: 0, candidate: 0, disabled: 0 }
+      );
+    }
+
+    function skillStatusOrder(status) {
+      if (status === "active") {
+        return 0;
+      }
+      if (status === "candidate") {
+        return 1;
+      }
+      return 2;
+    }
+
+    function skillStatusLabel(status) {
+      if (status === "active") {
+        return "已启用";
+      }
+      if (status === "disabled") {
+        return "已禁用";
+      }
+      return "候选";
+    }
+
+    function latestSkillExample(entry) {
+      const examples = entry.examples || [];
+      return examples.length > 0 ? examples[examples.length - 1] : undefined;
+    }
+
+    function booleanLabel(value) {
+      return value ? "是" : "否";
     }
 
     function renderAiDiagnosis(data) {
@@ -2993,6 +3444,53 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 </body>
 </html>`;
   }
+}
+
+function toStudentSkillVersionView(record: {
+  versionId: string;
+  archivedAt: string;
+  reason: string;
+  revision: number;
+  skill: StudentSkill;
+}): StudentSkillVersionView {
+  const counts = studentSkillStatusCounts(record.skill);
+  return {
+    versionId: record.versionId,
+    archivedAt: record.archivedAt,
+    reason: record.reason,
+    revision: record.revision,
+    activeSkillCount: counts.active,
+    candidateSkillCount: counts.candidate,
+    disabledSkillCount: counts.disabled
+  };
+}
+
+function studentSkillStatusCounts(skill: StudentSkill): {
+  active: number;
+  candidate: number;
+  disabled: number;
+} {
+  return Object.values(skill.skills).reduce(
+    (counts, entry) => {
+      counts[entry.status] += 1;
+      return counts;
+    },
+    { active: 0, candidate: 0, disabled: 0 }
+  );
+}
+
+function formatDateTimeForStatus(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
 }
 
 function makeProblemKey(problem: Pick<ProblemRecord, "platform" | "id">): string {

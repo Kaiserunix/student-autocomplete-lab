@@ -50,4 +50,19 @@ describe("problem bank webview script", () => {
     expect(source).toContain("this.studentSkillVersionsDir()");
     expect(source).toContain("studentSkillMerge");
   });
+
+  test("exposes Student Skill review controls for disable and rollback", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain('id="tabSkill"');
+    expect(source).toContain('id="skillPage"');
+    expect(source).toContain('id="studentSkillPanel"');
+    expect(source).toContain('id="studentSkillVersions"');
+    expect(source).toContain("renderStudentSkill()");
+    expect(source).toContain('command: "disableStudentSkill"');
+    expect(source).toContain('command: "rollbackStudentSkill"');
+    expect(source).toContain("handleDisableStudentSkillRequest");
+    expect(source).toContain("handleRollbackStudentSkillRequest");
+    expect(source).toContain("listStudentSkillVersions");
+  });
 });
