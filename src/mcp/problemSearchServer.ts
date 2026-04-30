@@ -82,6 +82,17 @@ export function createProblemSearchMcpServer(): McpServer {
       description: "Recommend practice problems and search hints from a normalized student pain point.",
       inputSchema: {
         painPoint: z.string().min(1),
+        painPointCounts: z.record(z.string(), z.number()).optional(),
+        transferEvidence: z
+          .record(
+            z.string(),
+            z.object({
+              probes: z.number().int().min(0),
+              passed: z.number().int().min(0),
+              estimatedHintReduction: z.number().optional()
+            })
+          )
+          .optional(),
         limit: z.number().int().min(1).max(10).optional(),
         currentProblemId: z.string().optional()
       },

@@ -65,4 +65,15 @@ describe("problem bank webview script", () => {
     expect(source).toContain("handleRollbackStudentSkillRequest");
     expect(source).toContain("listStudentSkillVersions");
   });
+
+  test("routes next-problem recommendation through the rule engine", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain("handleRuleBasedRecommendationRequest");
+    expect(source).toContain("recommendNextProblems");
+    expect(source).toContain("mergeRecommendationCandidates");
+    expect(source).toContain('type: "problemRecommendation"');
+    expect(source).toContain("renderProblemRecommendation(data)");
+    expect(source).toContain("规则推荐");
+  });
 });

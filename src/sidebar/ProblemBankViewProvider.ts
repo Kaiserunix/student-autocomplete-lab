@@ -21,6 +21,11 @@ import { buildAttemptEvent, summarizeAttemptEvents, type AttemptEvent } from "..
 import { requestMimoLessonReport } from "../teaching/lessonReport";
 import { requestMimoTeachingDiagnosis } from "../teaching/mimoTeacher";
 import { requestMimoOptimizationReport, type OptimizationReport } from "../teaching/optimizationReport";
+import {
+  mergeRecommendationCandidates,
+  recommendationCandidatesFromProblems
+} from "../teaching/recommendationCatalog";
+import { recommendNextProblems } from "../teaching/recommendationEngine";
 import { requestMimoSolutionScore } from "../teaching/solutionScore";
 import { hasSubstantiveStudentCode, normalizeScoreOjVerdict } from "../teaching/solutionScoreGate";
 import { applyTeachingDiagnosis, profileSummary, type StudentProfile } from "../teaching/studentProfile";
@@ -283,6 +288,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     if (message.command === "requestAiCoach") {
+      if (message.action === "recommend") {
+        return this.handleRuleBasedRecommendationRequest(message.problemKey);
+      }
+
       if (message.action === "giveUp") {
         return this.handleLessonReportRequest(message.problemKey, message.studentRequest);
       }
@@ -611,6 +620,50 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       undefined,
       `已回滚 Student Skill 到 rev ${target.revision}（${formatDateTimeForStatus(target.archivedAt)}）。`
     );
+  }
+
+  private async handleRuleBasedRecommendationRequest(problemKey: string): Promise<Record<string, unknown>> {
+    const problems = await this.loadSavedProblems();
+    const currentProblem = problems.find((item) => makeProblemKey(item) === problemKey);
+    if (!currentProblem) {
+      throw new Error("先选择一道题，推荐引擎需要知道当前题和当前阶段。");
+    }
+
+    const profile = await loadStudentProfile(this.profilePath());
+    const studentSkill = await this.loadStudentSkillForProfile(profile);
+    const attemptEvents = await this.loadAttemptEvents();
+    const recommendation = recommendNextProblems({
+      profile,
+      studentSkill,
+      attemptEvents,
+      candidates: mergeRecommendationCandidates(recommendationCandidatesFromProblems(problems)),
+      currentProblemId: currentProblem.id,
+      limit: 5
+    });
+    const occurredAt = new Date().toISOString();
+    await appendJsonlRecord(
+      this.attemptEventsPath(),
+      buildAttemptEvent({
+        problemKey,
+        problemId: currentProblem.id,
+        platform: currentProblem.platform,
+        kind: "recommendation_requested",
+        occurredAt,
+        painPoints: recommendation.strategy.topPainPoints.map((painPoint) => painPoint.label),
+        note: `rule-engine targetDifficulty=${recommendation.strategy.targetDifficulty}`
+      })
+    );
+
+    return {
+      type: "problemRecommendation",
+      problemKey,
+      currentProblem: { id: currentProblem.id, title: currentProblem.title },
+      recommendation,
+      profileSummary: profileSummary(profile),
+      studentSkill,
+      studentSkillVersions: await this.studentSkillVersionViews(),
+      status: `规则推荐已根据痛点、难度和迁移证据生成 ${recommendation.recommendations.length} 个候选。`
+    };
   }
 
   private async handleLessonReportRequest(problemKey: string, studentRequest?: string): Promise<Record<string, unknown>> {
@@ -2176,6 +2229,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         switchPage("ai");
         renderAiDiagnosis(data);
       }
+      if (data.type === "problemRecommendation") {
+        setStatus(data.status || "规则推荐已生成。");
+        state.studentSkill = data.studentSkill || state.studentSkill;
+        state.studentSkillVersions = data.studentSkillVersions ?? state.studentSkillVersions;
+        renderStudentSkill();
+        switchPage("ai");
+        renderProblemRecommendation(data);
+      }
       if (data.type === "autocompletePreview") {
         setStatus(data.status || "AI 已返回补全预览。", data.suggestion ? undefined : "error");
         switchPage("ai");
@@ -2367,10 +2428,18 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         return;
       }
 
-      setStatus("正在调用 AI 分析当前代码...");
+      const isRecommendation = action === "recommend";
+      setStatus(isRecommendation ? "正在用规则引擎推荐下一题..." : "正在调用 AI 分析当前代码...");
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("AI 正在分析", "aiResponseTitle"));
-      aiResponse.appendChild(textSpan("会读取当前 VS Code 活动编辑器的代码、当前题面和本地痛点记录。", "hint"));
+      aiResponse.appendChild(textSpan(isRecommendation ? "规则推荐中" : "AI 正在分析", "aiResponseTitle"));
+      aiResponse.appendChild(
+        textSpan(
+          isRecommendation
+            ? "会读取本地痛点、Student Skill、迁移证据和当前题库，不需要调用大模型。"
+            : "会读取当前 VS Code 活动编辑器的代码、当前题面和本地痛点记录。",
+          "hint"
+        )
+      );
       vscode.postMessage({
         command: "requestAiCoach",
         action,
@@ -2718,6 +2787,80 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     function booleanLabel(value) {
       return value ? "是" : "否";
+    }
+
+    function renderProblemRecommendation(data) {
+      const recommendation = data.recommendation || {};
+      const strategy = recommendation.strategy || {};
+      const items = recommendation.recommendations || [];
+      aiResponse.innerHTML = "";
+      aiResponse.appendChild(textSpan("规则推荐", "aiResponseTitle"));
+      aiResponse.appendChild(
+        textSpan(
+          "当前题：" + (data.currentProblem?.id || "?") + " · 目标难度 " + (strategy.targetDifficulty ?? "?"),
+          "mini"
+        )
+      );
+
+      if (strategy.topPainPoints?.length) {
+        const row = document.createElement("div");
+        row.className = "tagRow";
+        strategy.topPainPoints.slice(0, 5).forEach((painPoint) => {
+          row.appendChild(textSpan(painPoint.label + "×" + painPoint.count, "tag"));
+        });
+        aiResponse.appendChild(row);
+      }
+
+      if (items.length === 0) {
+        aiResponse.appendChild(responseBlock("暂无候选", "当前题库和内置池里没有找到合适题目。可以先搜索/导入更多同类题。"));
+        return;
+      }
+
+      items.forEach((item, index) => {
+        const problem = item.problem || {};
+        const block = responseBlock(
+          (index + 1) + ". " + (problem.id || "?") + " · " + (problem.title || "未命名题目"),
+          "规则分 " + (item.score ?? "?") + " · " + (problem.difficulty !== undefined ? "难度 " + problem.difficulty : "难度未知")
+        );
+
+        if (item.matchedPainPoints?.length) {
+          const painRow = document.createElement("div");
+          painRow.className = "tagRow";
+          item.matchedPainPoints.forEach((painPoint) => painRow.appendChild(textSpan(painPoint, "tag")));
+          block.appendChild(painRow);
+        }
+
+        (item.reasons || []).slice(0, 4).forEach((reason) => {
+          block.appendChild(textSpan(reason, "mini"));
+        });
+
+        const actions = document.createElement("div");
+        actions.className = "row";
+        const actionButton = document.createElement("button");
+        actionButton.className = "secondary";
+        actionButton.type = "button";
+        const existing = state.problems.find((candidate) => candidate.platform === problem.platform && candidate.id === problem.id);
+        actionButton.textContent = existing ? "切到这题" : problem.platform === "luogu" ? "导入并建文件" : "打开来源";
+        actionButton.addEventListener("click", () => {
+          if (existing) {
+            state.selectedKey = keyOf(existing);
+            renderAll();
+            switchPage("problem");
+            setStatus("已切换到推荐题：" + existing.id);
+            return;
+          }
+          if (problem.platform === "luogu" && problem.id) {
+            importLuogu(problem.id, true);
+            return;
+          }
+          if (problem.sourceUrl) {
+            location.href = problem.sourceUrl;
+          }
+        });
+        actions.appendChild(actionButton);
+        block.appendChild(actions);
+        aiResponse.appendChild(block);
+      });
     }
 
     function renderAiDiagnosis(data) {

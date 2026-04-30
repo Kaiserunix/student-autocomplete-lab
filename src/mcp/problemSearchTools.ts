@@ -1,6 +1,8 @@
 import { fetchLuoguProblem } from "../problemBank/luoguClient";
 import { searchLuoguProblemSets, searchLuoguProblems } from "../problemBank/luoguSearchClient";
 import type { ProblemRecord, ProblemSearchResult, ProblemSetSearchResult } from "../problemBank/types";
+import { builtInRecommendationCandidates } from "../teaching/recommendationCatalog";
+import { recommendNextProblems } from "../teaching/recommendationEngine";
 import { normalizePainPointLabel } from "../teaching/teachingTaxonomy";
 
 export interface ProblemToolSummary {
@@ -11,10 +13,16 @@ export interface ProblemToolSummary {
   difficulty?: number;
   tags: string[];
   reason?: string;
+  score?: number;
+  matchedPainPoints?: string[];
+  difficultySignal?: string;
+  transferSignal?: string;
 }
 
 export interface RecommendProblemsInput {
   painPoint: string;
+  painPointCounts?: Record<string, number>;
+  transferEvidence?: Record<string, { probes: number; passed: number; estimatedHintReduction?: number }>;
   limit?: number;
   currentProblemId?: string;
 }
@@ -22,6 +30,7 @@ export interface RecommendProblemsInput {
 export interface ProblemRecommendationResult {
   painPoint: string;
   searchHints: string[];
+  strategy: ReturnType<typeof recommendNextProblems>["strategy"];
   items: ProblemToolSummary[];
 }
 
@@ -63,99 +72,99 @@ export interface FetchProblemResult extends ProblemRecord {
   truncated: boolean;
 }
 
-interface RecommendationBucket {
-  hints: string[];
-  problems: ProblemToolSummary[];
-}
-
-const PROBLEM_POOL: Record<string, ProblemToolSummary> = {
-  P1305: luoguProblem("P1305", "新二叉树", "Practice reading child triples and emitting preorder directly.", ["binary-tree", "traversal"]),
-  P1030: luoguProblem(
-    "P1030",
-    "[NOIP 2001 普及组] 求先序排列",
-    "Practice reconstructing preorder from inorder and postorder boundaries.",
-    ["binary-tree", "traversal", "reconstruction"]
-  ),
-  P1827: luoguProblem(
-    "P1827",
-    "[USACO3.4] 美国血统 American Heritage",
-    "Practice traversal reconstruction with named nodes after the simpler preorder exercises.",
-    ["binary-tree", "traversal", "reconstruction"]
-  ),
-  P1229: luoguProblem("P1229", "遍历问题", "Practice reasoning about ambiguous traversals.", [
-    "binary-tree",
-    "traversal",
-    "counting"
-  ]),
-  P4913: luoguProblem("P4913", "【深基16.例3】二叉树深度", "Practice child indexing and recursive depth definitions.", [
-    "binary-tree",
-    "recursion"
-  ]),
-  P1364: luoguProblem("P1364", "医院设置", "Practice weighted tree distance and trying each root candidate.", [
-    "tree",
-    "distance",
-    "weighted-cost"
-  ]),
-  P3884: luoguProblem("P3884", "[JLOI2009] 二叉树问题", "Practice depth, width, and distance queries on a binary tree.", [
-    "binary-tree",
-    "distance"
-  ]),
-  P1185: luoguProblem("P1185", "绘制二叉树", "Practice recursive layout and strict output formatting.", [
-    "binary-tree",
-    "output-format"
-  ]),
-  P1427: luoguProblem("P1427", "小鱼的数字游戏", "Practice sentinel input and reversed output order.", [
-    "array",
-    "sentinel-input",
-    "output-order"
-  ]),
-  P5731: luoguProblem("P5731", "【深基5.习6】蛇形方阵", "Practice matrix traversal and strict row formatting.", [
-    "matrix",
-    "simulation",
-    "output-format"
-  ]),
-  P5730: luoguProblem("P5730", "【深基5.例10】显示屏", "Practice fixed-width rendering and multi-line output formatting.", [
-    "simulation",
-    "output-format"
-  ]),
-  P5727: luoguProblem("P5727", "【深基5.例3】冰雹猜想", "Practice sentinel-like sequence generation and reversed reporting.", [
-    "sequence",
-    "output-order"
-  ])
-};
-
-const RECOMMENDATION_BUCKETS: Record<string, RecommendationBucket> = {
-  traversal_order_confusion: bucket(["二叉树 遍历", "先序 中序 后序", "traversal reconstruction"], [
-    "P1305",
-    "P1030",
-    "P1827",
-    "P1229"
-  ]),
-  root_identification: bucket(["二叉树 根节点", "中序 后序 求先序"], ["P1030", "P1827", "P1305"]),
-  subtree_boundary: bucket(["二叉树 子树边界", "遍历重建"], ["P1030", "P1827", "P1229"]),
-  depth_definition: bucket(["二叉树 深度", "递归 深度"], ["P4913", "P3884", "P1305"]),
-  child_indexing: bucket(["二叉树 编号 子节点", "数组存树"], ["P4913", "P1305", "P3884"]),
-  recursion_base_case: bucket(["递归 终止条件 二叉树", "空子树"], ["P4913", "P1305", "P1030"]),
-  tree_distance: bucket(["树 距离", "二叉树 距离"], ["P1364", "P3884", "P4913"]),
-  weighted_cost: bucket(["树 加权距离", "换根 枚举"], ["P1364", "P3884"]),
-  undirected_tree_edges: bucket(["树 无向边", "孩子转边"], ["P1364", "P3884"]),
-  output_order: bucket(["输出顺序", "倒序输出"], ["P1427", "P5731", "P1185"]),
-  output_format: bucket(["输出格式", "矩阵 输出"], ["P5731", "P1185", "P5730"]),
-  sentinel_input: bucket(["哨兵输入", "0 结束 输入"], ["P1427", "P5727"]),
-  needs_teacher_review: bucket(["二叉树 入门", "递归 基础", "输出格式"], ["P4913", "P1305", "P1427"])
+const SEARCH_HINTS_BY_PAIN_POINT: Record<string, string[]> = {
+  traversal_order_confusion: ["二叉树 遍历", "先序 中序 后序", "traversal reconstruction"],
+  root_identification: ["二叉树 根节点", "中序 后序 求先序"],
+  subtree_boundary: ["二叉树 子树边界", "遍历重建"],
+  depth_definition: ["二叉树 深度", "递归 深度"],
+  child_indexing: ["二叉树 编号 子节点", "数组存树"],
+  recursion_base_case: ["递归 终止条件 二叉树", "空子树"],
+  tree_distance: ["树 距离", "二叉树 距离"],
+  weighted_cost: ["树 加权距离", "换根 枚举"],
+  undirected_tree_edges: ["树 无向边", "孩子转边"],
+  output_order: ["输出顺序", "倒序输出"],
+  output_format: ["输出格式", "矩阵 输出"],
+  sentinel_input: ["哨兵输入", "0 结束 输入"],
+  array_indexing: ["数组 下标", "数组 模拟"],
+  loop_boundary: ["循环边界", "数组 计数"],
+  duplicate_handling: ["去重 重复元素", "计数"],
+  bruteforce_no_growth: ["复杂度 优化", "计数模型"],
+  needs_teacher_review: ["二叉树 入门", "递归 基础", "输出格式"]
 };
 
 export function recommendProblemsByPainPoint(input: RecommendProblemsInput): ProblemRecommendationResult {
   const painPoint = normalizePainPointLabel(input.painPoint);
   const limit = normalizeLimit(input.limit, 5, 10);
-  const currentProblemId = input.currentProblemId?.trim().toUpperCase();
-  const bucket = RECOMMENDATION_BUCKETS[painPoint] ?? RECOMMENDATION_BUCKETS.needs_teacher_review;
-  const items = bucket.problems.filter((problem) => problem.id !== currentProblemId).slice(0, limit);
+  const profile = {
+    studentId: "mcp-student",
+    painPoints: Object.fromEntries(
+      Object.entries({ [painPoint]: 1, ...(input.painPointCounts ?? {}) }).map(([label, count]) => [
+        normalizePainPointLabel(label),
+        {
+          count,
+          score: count,
+          lastSeen: new Date(0).toISOString()
+        }
+      ])
+    ),
+    skillCandidates: {}
+  };
+  const studentSkill = input.transferEvidence
+    ? {
+        schemaVersion: "student-skill/v1" as const,
+        studentId: "mcp-student",
+        revision: 0,
+        createdAt: new Date(0).toISOString(),
+        updatedAt: new Date(0).toISOString(),
+        hardRules: {
+          autocompleteMayReadProblemStatement: false as const,
+          allowFullSolutionAutocomplete: false as const,
+          disabledSkills: []
+        },
+        capabilityMap: { topics: {} },
+        errorModel: {},
+        codeHabits: { globalRules: [], languageRules: {} },
+        teachingPreferences: { responseLanguage: "zh-CN" as const, maxDefaultHintDepth: 1, notes: [] },
+        skills: {},
+        transferEvidence: Object.fromEntries(
+          Object.entries(input.transferEvidence).map(([skillName, transfer]) => [
+            skillName,
+            {
+              probes: transfer.probes,
+              passed: transfer.passed,
+              estimatedHintReduction: transfer.estimatedHintReduction ?? 0,
+              lastSeen: new Date(0).toISOString()
+            }
+          ])
+        ),
+        correctionLog: []
+      }
+    : undefined;
+  const ranked = recommendNextProblems({
+    profile,
+    studentSkill,
+    candidates: builtInRecommendationCandidates,
+    currentProblemId: input.currentProblemId,
+    limit
+  });
 
   return {
     painPoint,
-    searchHints: bucket.hints,
-    items
+    searchHints: SEARCH_HINTS_BY_PAIN_POINT[painPoint] ?? SEARCH_HINTS_BY_PAIN_POINT.needs_teacher_review,
+    strategy: ranked.strategy,
+    items: ranked.recommendations.map((recommendation) => ({
+      platform: recommendation.problem.platform as "luogu" | "leetcode",
+      id: recommendation.problem.id,
+      title: recommendation.problem.title,
+      sourceUrl: recommendation.problem.sourceUrl ?? "",
+      difficulty: recommendation.problem.difficulty,
+      tags: recommendation.problem.tags,
+      reason: recommendation.reasons.join("；"),
+      score: recommendation.score,
+      matchedPainPoints: recommendation.matchedPainPoints,
+      difficultySignal: recommendation.difficultySignal,
+      transferSignal: recommendation.transferSignal
+    }))
   };
 }
 
@@ -204,24 +213,6 @@ export async function fetchLuoguProblemForMcp(
     ...problem,
     statement,
     truncated: statement.length < problem.statement.length
-  };
-}
-
-function bucket(hints: string[], ids: string[]): RecommendationBucket {
-  return {
-    hints,
-    problems: ids.map((id) => PROBLEM_POOL[id]).filter((problem): problem is ProblemToolSummary => Boolean(problem))
-  };
-}
-
-function luoguProblem(id: string, title: string, reason: string, tags: string[]): ProblemToolSummary {
-  return {
-    platform: "luogu",
-    id,
-    title,
-    sourceUrl: `https://www.luogu.com.cn/problem/${id}`,
-    tags,
-    reason
   };
 }
 
