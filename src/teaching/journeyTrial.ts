@@ -92,7 +92,8 @@ const DIAGNOSIS_TEMPLATES: Record<string, JourneyCaseTemplate> = {
   "102": {
     expectedPainPoints: ["loop_boundary"],
     expectedSkillCandidate: "python-loop-boundary-check",
-    wrongCode: "n = int(input())\nans = 0\nfor i in range(1, n):\n    ans += i\nprint(ans)\n",
+    wrongCode:
+      "n = int(input())\na = list(map(int, input().split()))\nmn = a[0]\nfor i in range(1, n - 1):\n    if a[i] < mn:\n        mn = a[i]\nprint(mn)\n",
     studentRequest: "循环结构题，样例过了但边界不稳。"
   },
   "103": {
@@ -128,10 +129,10 @@ const DIAGNOSIS_TEMPLATES: Record<string, JourneyCaseTemplate> = {
     studentRequest: "排序题我用了 set 去重，但不确定是否合理。"
   },
   "108": {
-    expectedPainPoints: ["loop_boundary", "duplicate_handling", "bruteforce_no_growth", "time_complexity_mismatch"],
+    expectedPainPoints: ["bruteforce_no_growth", "time_complexity_mismatch", "complexity_gap"],
     expectedSkillCandidate: "complexity-upgrade-from-bruteforce",
     wrongCode:
-      "n = int(input())\na = list(map(int, input().split()))\nans = 0\nfor i in range(n):\n    for j in range(n):\n        for k in range(n):\n            if a[i] + a[j] == a[k]:\n                ans += 1\nprint(ans)\n",
+      "n, m = map(int, input().split())\nsquare = 0\nrectangle = 0\nfor x1 in range(n):\n    for y1 in range(m):\n        for x2 in range(x1 + 1, n + 1):\n            for y2 in range(y1 + 1, m + 1):\n                if x2 - x1 == y2 - y1:\n                    square += 1\n                else:\n                    rectangle += 1\nprint(square, rectangle)\n",
     studentRequest: "暴力枚举能写出来，但不知道有没有算法提升。"
   },
   "109": {
@@ -159,10 +160,12 @@ const DIAGNOSIS_TEMPLATES: Record<string, JourneyCaseTemplate> = {
     studentRequest: "二分题我写成线性扫描了，想知道这算不算没学到算法。"
   },
   "112": {
-    expectedPainPoints: ["recursion_base_case", "loop_boundary"],
-    expectedSkillCandidate: "recursion-base-case-pattern",
-    wrongCode: "def dfs(x, y):\n    for dx, dy in dirs:\n        dfs(x + dx, y + dy)\n\nn = int(input())\ndirs = [(1, 0), (-1, 0), (0, 1), (0, -1)]\ndfs(0, 0)\n",
-    studentRequest: "搜索题总是爆栈或停不下来。"
+    expectedPainPoints: ["search_state_pruning", "recursion_base_case"],
+    expectedSkillCandidate: "search-state-boundary-check",
+    acceptedSkillCandidates: ["recursion-base-case-pattern"],
+    wrongCode:
+      "n = int(input())\nans = 0\n\ndef dfs(row):\n    global ans\n    if row == n:\n        ans += 1\n        return\n    for col in range(n):\n        dfs(row + 1)\n\ndfs(0)\nprint(ans)\n",
+    studentRequest: "搜索题有递归出口，但我不知道怎么记录状态和剪掉非法分支。"
   },
   "113": {
     expectedPainPoints: ["array_indexing"],

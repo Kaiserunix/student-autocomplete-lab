@@ -28,6 +28,13 @@ import { loadStudentProfile, saveStudentProfile } from "../teaching/studentProfi
 import { profileSummary } from "../teaching/studentProfile";
 import { requestMimoSubmissionJudge } from "../teaching/submissionJudge";
 import type { TeachingPainPoint } from "../teaching/teachingReport";
+import {
+  findTeacherPack,
+  requestMimoTeacherPack,
+  toTeacherPackReference,
+  upsertTeacherPack,
+  type TeacherPackRecord
+} from "../teaching/teacherPack";
 import { runTeachingCycle } from "../teaching/teachingCycle";
 import type { OjVerdict } from "../teaching/types";
 import { localizeTeachingDiagnosisReport } from "./localizeTeachingReport";
@@ -161,12 +168,15 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     if (message.command === "importLuogu") {
       const problem = await fetchLuoguProblem(message.pid.trim());
       await this.saveProblem(problem);
+      const teacherPack = await this.tryPrepareTeacherPack(problem);
       const practiceFile = message.createFile
         ? await this.createPracticeFile(problem, normalizePracticeLanguage(message.language))
         : undefined;
       const fileSuffix = practiceFile ? ` 已创建练习文件：${practiceFile.relativePath}` : "";
-      return this.problemBankState(makeProblemKey(problem), `已导入 ${problem.id}。${fileSuffix}`, {
-        createdFile: practiceFile
+      const packSuffix = teacherPack ? " 已生成隐藏 Teacher Pack。" : " Teacher Pack 将在首次 AI 分析时尝试生成。";
+      return this.problemBankState(makeProblemKey(problem), `已导入 ${problem.id}。${fileSuffix}${packSuffix}`, {
+        createdFile: practiceFile,
+        teacherPackReady: Boolean(teacherPack)
       });
     }
 
@@ -241,7 +251,11 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         samples: []
       };
       await this.saveProblem(problem);
-      return this.problemBankState(makeProblemKey(problem), "已保存粘贴题目。");
+      const teacherPack = await this.tryPrepareTeacherPack(problem);
+      const packSuffix = teacherPack ? " 已生成隐藏 Teacher Pack。" : " Teacher Pack 将在首次 AI 分析时尝试生成。";
+      return this.problemBankState(makeProblemKey(problem), `已保存粘贴题目。${packSuffix}`, {
+        teacherPackReady: Boolean(teacherPack)
+      });
     }
 
     if (message.command === "requestAiCoach") {
@@ -295,6 +309,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
   private attemptEventsPath(): string {
     return path.join(this.context.globalStorageUri.fsPath, "attemptEvents.jsonl");
+  }
+
+  private teacherPacksPath(): string {
+    return path.join(this.context.globalStorageUri.fsPath, "teacherPacks.jsonl");
   }
 
   private modelEnvPath(): string {
@@ -406,8 +424,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     const config = requireMimoTeachingConfig(await loadModelEnv(this.modelEnvPath()));
     const profile = await loadStudentProfile(this.profilePath());
+    const teacherPack = await this.ensureTeacherPack(problem, config);
     const context = buildSidebarTeachingContext({
       problem,
+      teacherPack: teacherPack ? toTeacherPackReference(teacherPack) : undefined,
       language: editor.document.languageId,
       studentCode: extractStudentCodeFromText(editor.document.getText()),
       profileSummary: profileSummary(profile),
@@ -441,6 +461,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       report: result.report,
       localizedReport: localizeTeachingDiagnosisReport(result.report),
       profileSummary: profileSummary(result.updatedProfile),
+      teacherPack: teacherPack
+        ? {
+            generatedAt: teacherPack.generatedAt,
+            model: teacherPack.model,
+            expectedAlgorithm: teacherPack.expectedAlgorithm,
+            bruteForce: teacherPack.bruteForce
+          }
+        : undefined,
       status: `AI 已根据当前代码分析 ${problem.id}。`
     };
   }
@@ -908,6 +936,37 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
   private async loadAttemptEvents(): Promise<AttemptEvent[]> {
     return readJsonlRecords<AttemptEvent>(this.attemptEventsPath());
+  }
+
+  private async tryPrepareTeacherPack(problem: ProblemRecord): Promise<TeacherPackRecord | undefined> {
+    try {
+      const config = requireMimoTeachingConfig(await loadModelEnv(this.modelEnvPath()));
+      return this.ensureTeacherPack(problem, config);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async ensureTeacherPack(
+    problem: ProblemRecord,
+    config: ReturnType<typeof requireMimoTeachingConfig>
+  ): Promise<TeacherPackRecord | undefined> {
+    const cached = await findTeacherPack(this.teacherPacksPath(), problem.platform, problem.id);
+    if (cached) {
+      return cached;
+    }
+
+    if (!hasProblemDetailsForTeacherPack(problem)) {
+      return undefined;
+    }
+
+    try {
+      const pack = await requestMimoTeacherPack(config, problem);
+      await upsertTeacherPack(this.teacherPacksPath(), pack);
+      return pack;
+    } catch {
+      return undefined;
+    }
   }
 
   private async saveProblem(problem: ProblemRecord): Promise<void> {
@@ -2898,6 +2957,15 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
 function makeProblemKey(problem: Pick<ProblemRecord, "platform" | "id">): string {
   return `${problem.platform}:${problem.id}`;
+}
+
+function hasProblemDetailsForTeacherPack(problem: ProblemRecord): boolean {
+  return Boolean(
+    problem.statement.trim() ||
+      problem.inputFormat.trim() ||
+      problem.outputFormat.trim() ||
+      problem.samples.some((sample) => sample.input.trim() || sample.output.trim())
+  );
 }
 
 function describeAiCoachAction(action: AiCoachAction, responseLanguage: CoachResponseLanguage): string {

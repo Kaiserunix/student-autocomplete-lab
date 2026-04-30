@@ -16,6 +16,7 @@ export interface TeachingRecommendation {
 }
 
 export interface TeachingDiagnosisReport {
+  studentErrorModel?: string;
   painPoints: TeachingPainPoint[];
   hint: string;
   skillUpdate?: TeachingSkillUpdate;
@@ -23,6 +24,8 @@ export interface TeachingDiagnosisReport {
 }
 
 interface RawTeachingReport {
+  student_error_model?: unknown;
+  studentErrorModel?: unknown;
   pain_points?: unknown;
   hint?: unknown;
   skill_update?: unknown;
@@ -38,6 +41,7 @@ export function parseTeachingDiagnosisReport(text: string): TeachingDiagnosisRep
   }
 
   return {
+    studentErrorModel: optionalString(raw.student_error_model ?? raw.studentErrorModel),
     painPoints,
     hint: requireString(raw.hint, "hint"),
     skillUpdate: parseSkillUpdate(raw.skill_update),
@@ -109,6 +113,10 @@ function requireString(value: unknown, field: string): string {
   }
 
   return value;
+}
+
+function optionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined;
 }
 
 function requireNumber(value: unknown, field: string): number {

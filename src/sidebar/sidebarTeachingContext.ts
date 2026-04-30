@@ -1,11 +1,17 @@
 import type { ProblemRecord } from "../problemBank/types";
-import type { OjVerdict, TeachingDiagnosisContext, TeachingStudentProfileSummary } from "../teaching/types";
+import type {
+  OjVerdict,
+  TeacherPackReference,
+  TeachingDiagnosisContext,
+  TeachingStudentProfileSummary
+} from "../teaching/types";
 
 interface SidebarTeachingContextInput {
   problem: ProblemRecord;
   language: string;
   studentCode: string;
   profileSummary: TeachingStudentProfileSummary;
+  teacherPack?: TeacherPackReference;
   ojVerdict?: OjVerdict;
   requestPurpose?: string;
   responseLanguage?: "zh-CN" | "raw";
@@ -37,6 +43,7 @@ export function buildSidebarTeachingContext(input: SidebarTeachingContextInput):
       title: input.problem.title,
       summary: summarizeProblemForTeaching(input.problem, input.requestPurpose)
     },
+    teacherPack: input.teacherPack,
     language: input.language,
     studentCode: clip(input.studentCode, CODE_LIMIT),
     ojVerdict: input.ojVerdict ?? {

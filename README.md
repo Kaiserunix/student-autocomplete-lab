@@ -99,6 +99,14 @@ npm run trial:mimo-journey -- --runs 3 --profile-mode carry
 
 This calls the configured teaching model, imports Luogu training sets `100` through `116`, simulates staged wrong submissions, runs AC-after optimization review, and checks whether repeated pain points become ready skills.
 
+Add transfer validation after skills become ready:
+
+```powershell
+npm run trial:mimo-journey -- --runs 3 --profile-mode carry --transfer-check
+```
+
+Transfer validation picks unseen same-skill cases from the expanded long set after a skill is marked ready. It records per-step token `usage`, transfer pass rate, and estimated hint reduction without pretending this is a real human-learning proof.
+
 Run a GPT practice-generation dry run:
 
 ```powershell
@@ -166,6 +174,7 @@ Current inner-test boundary:
 - Inline autocomplete is usable for local code-continuation smoke tests.
 - Problem statements saved in the sidebar are not included in autocomplete prompts.
 - The Chinese sidebar separates problem import/search, AI interaction, archived attempts, lesson reports, solution scoring, and optimization review.
+- Imported/pasted full problems can generate a hidden Teacher Pack with standard approach, expected algorithm, complexity, invariants, pitfalls, counterexamples, and brute-force suitability. The pack is cached and used as diagnosis reference, not shown as the default student answer.
 - Teaching diagnosis and self-evolution are usable enough for personal alpha testing; see `docs/internal-testing.md` for live MiMo evidence.
 
 ## Source Policy

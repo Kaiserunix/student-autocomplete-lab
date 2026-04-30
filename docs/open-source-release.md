@@ -13,6 +13,8 @@ This project is a VS Code extension prototype for algorithm-study coaching:
 - Luogu problem/training import and search adapters;
 - OpenAI, OpenAI-compatible, and Anthropic Messages style model configuration;
 - MiMo-powered diagnosis, lesson, solution-score, optimization, and self-evolution trials.
+- hidden Teacher Pack generation/cache for full problem imports;
+- transfer-validation trials that test ready skills against unseen same-family cases.
 
 ## 2. Open Source Degree
 
@@ -53,6 +55,8 @@ The release evidence is summarized in [internal-testing.md](internal-testing.md)
 Raw JSON traces stay local under `.runtime/` and are intentionally ignored by git. The docs record commands, model, scores, and interpretation so the public repository gets reproducible evidence without leaking local data.
 
 Long-run MiMo experiments are published as sanitized aggregate evidence. They are useful alpha signals for the diagnosis and skill-evolution loop, but they are not a broad benchmark or a guarantee of student learning outcomes.
+
+Teacher Packs are internal references. They may contain standard-solution reasoning, expected complexity, invariants, pitfalls, counterexamples, and brute-force suitability, but they are cached for diagnosis and not displayed to students as the default answer.
 
 ## 6. Packaging
 

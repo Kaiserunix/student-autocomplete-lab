@@ -74,4 +74,36 @@ describe("teaching diagnosis prompt", () => {
     expect(prompt).toContain("Output language: Simplified Chinese");
     expect(prompt).toContain("write hint, evidence");
   });
+
+  test("includes a hidden teacher pack and asks for a student error model", () => {
+    const prompt = buildTeachingDiagnosisPrompt({
+      problem: {
+        id: "P5730",
+        title: "显示屏",
+        summary: "用 5x3 字模显示数字。"
+      },
+      teacherPack: {
+        summary: "固定字模模拟输出。",
+        constraints: "数字个数较小。",
+        standardApproach: "建立 0-9 的五行字模，逐行拼接。",
+        expectedAlgorithm: "simulation_with_digit_font_table",
+        expectedComplexity: { time: "O(n)", space: "O(1)" },
+        keyInvariants: ["每个数字输出五行"],
+        commonPitfalls: [{ label: "format_output", description: "数字间隔处理错误。" }],
+        minimalCounterexamples: [{ input: "1\n1\n", expectedOutput: "..X\n", reason: "检查单数字间隔。" }],
+        bruteForce: { suitable: true, reason: "模拟就是预期解法。" }
+      },
+      language: "python",
+      studentCode: "print(ans + ' ')",
+      ojVerdict: { status: "WA" },
+      localEvidence: [],
+      studentProfile: { painPointCounts: {}, activeSkills: [] },
+      responseLanguage: "zh-CN"
+    });
+
+    expect(prompt).toContain("student_error_model");
+    expect(prompt).toContain("teacher_pack_hidden_reference:");
+    expect(prompt).toContain("固定字模模拟输出");
+    expect(prompt).toContain("Do not reveal teacher_pack.standardApproach");
+  });
 });

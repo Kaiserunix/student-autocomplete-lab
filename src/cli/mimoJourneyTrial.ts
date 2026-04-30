@@ -17,11 +17,19 @@ import { requestMimoTeachingDiagnosis } from "../teaching/mimoTeacher";
 import { requestMimoOptimizationReport } from "../teaching/optimizationReport";
 import { createEmptyStudentProfile, profileSummary, type StudentProfile } from "../teaching/studentProfile";
 import { runTeachingCycle } from "../teaching/teachingCycle";
+import {
+  buildTransferValidationProbes,
+  scoreTransferValidationProbe,
+  summarizeTransferValidation,
+  type TransferValidationSummary
+} from "../teaching/transferValidation";
 
 interface JourneyRunOutput {
   runIndex: number;
   diagnosisSteps: Array<Record<string, unknown>>;
   optimizationSteps: Array<Record<string, unknown>>;
+  transferSteps: Array<Record<string, unknown>>;
+  transferSummary: TransferValidationSummary;
   finalProfile: StudentProfile;
   readySkills: string[];
   usage: TokenUsageSummary;
@@ -30,6 +38,7 @@ interface JourneyRunOutput {
     diagnosisPrimaryPainPointAccuracy: number;
     diagnosisSkillCandidateAccuracy: number;
     optimizationVerdictAccuracy: number;
+    transferPassRate: number;
   };
 }
 
@@ -48,9 +57,11 @@ async function main(): Promise<void> {
   const outPath = readStringArg(args, "--out") ?? path.join(".runtime", "mimo-journey-trial.json");
   const profileMode = readProfileMode(args);
   const variant = readVariant(args);
+  const transferCheck = args.includes("--transfer-check");
   const config = requireMimoTeachingConfig(await loadModelEnv(path.join(process.cwd(), "secrets", "models.env")));
   const problemSets = await fetchJourneyProblemSets();
   const diagnosisCases = buildJourneyDiagnosisCases(problemSets, { variant });
+  const transferCases = transferCheck ? buildTransferCases(problemSets, diagnosisCases) : [];
   const optimizationCases = buildJourneyOptimizationCases(problemSets);
   const outputs: JourneyRunOutput[] = [];
   let carriedProfile = createEmptyStudentProfile("mimo-journey-carry");
@@ -58,7 +69,14 @@ async function main(): Promise<void> {
   for (let runIndex = 0; runIndex < runs; runIndex += 1) {
     const initialProfile =
       profileMode === "carry" ? carriedProfile : createEmptyStudentProfile(`mimo-journey-run-${runIndex + 1}`);
-    const output = await runOneJourney(runIndex, config, diagnosisCases, optimizationCases, initialProfile);
+    const output = await runOneJourney(
+      runIndex,
+      config,
+      diagnosisCases,
+      optimizationCases,
+      transferCases,
+      initialProfile
+    );
     outputs.push(output);
 
     if (profileMode === "carry") {
@@ -73,9 +91,11 @@ async function main(): Promise<void> {
     runs,
     profileMode,
     variant,
+    transferCheck,
     trainingRange: `${JOURNEY_TRAINING_IDS[0]}-${JOURNEY_TRAINING_IDS[JOURNEY_TRAINING_IDS.length - 1]}`,
     diagnosisCaseCount: diagnosisCases.length,
     optimizationCaseCount: optimizationCases.length,
+    transferCaseCount: transferCases.length,
     problemSets: problemSets.map((item) => ({
       id: item.id,
       title: item.title,
@@ -99,11 +119,14 @@ async function main(): Promise<void> {
         runs,
         profileMode,
         variant,
+        transferCheck,
         trainingRange: output.trainingRange,
         diagnosisCaseCount: output.diagnosisCaseCount,
         optimizationCaseCount: output.optimizationCaseCount,
+        transferCaseCount: output.transferCaseCount,
         aggregateScores: output.aggregateScores,
         aggregateUsage: output.aggregateUsage,
+        transferSummaryByRun: outputs.map((item) => item.transferSummary),
         readySkillsByRun: outputs.map((item) => item.readySkills),
         outPath
       },
@@ -122,16 +145,26 @@ async function fetchJourneyProblemSets(): Promise<ProblemSetRecord[]> {
   return problemSets;
 }
 
+function buildTransferCases(
+  problemSets: ProblemSetRecord[],
+  trainedCases: ReturnType<typeof buildJourneyDiagnosisCases>
+): ReturnType<typeof buildJourneyDiagnosisCases> {
+  const trainedCaseIds = new Set(trainedCases.map((item) => item.caseId));
+  return buildJourneyDiagnosisCases(problemSets, { variant: "long" }).filter((item) => !trainedCaseIds.has(item.caseId));
+}
+
 async function runOneJourney(
   runIndex: number,
   config: ReturnType<typeof requireMimoTeachingConfig>,
   diagnosisCases: ReturnType<typeof buildJourneyDiagnosisCases>,
   optimizationCases: ReturnType<typeof buildJourneyOptimizationCases>,
+  transferCases: ReturnType<typeof buildJourneyDiagnosisCases>,
   initialProfile: StudentProfile
 ): Promise<JourneyRunOutput> {
   let profile = initialProfile;
   const diagnosisSteps: JourneyRunOutput["diagnosisSteps"] = [];
   const optimizationSteps: JourneyRunOutput["optimizationSteps"] = [];
+  const transferSteps: JourneyRunOutput["transferSteps"] = [];
   const usage = emptyUsageSummary();
 
   for (const [index, item] of diagnosisCases.entries()) {
@@ -164,6 +197,36 @@ async function runOneJourney(
       report: cycle.report,
       usage: stepUsage,
       profileAfter: profileSummary(profile)
+    });
+  }
+
+  const transferProbes = buildTransferValidationProbes(
+    diagnosisCases,
+    transferCases,
+    profileSummary(profile).activeSkills,
+    2
+  );
+  for (const [index, probe] of transferProbes.entries()) {
+    console.log(
+      `[journey] run ${runIndex + 1} transfer ${index + 1}/${transferProbes.length} ${probe.transferCase.caseId} ${probe.transferCase.problemId}`
+    );
+    const context = buildJourneyTeachingContext(probe.transferCase, profileSummary(profile));
+    let stepUsage: ChatCompletionUsage | undefined;
+    const report = await requestMimoTeachingDiagnosis(config, context, fetch, (event) => {
+      stepUsage = event;
+      addUsage(usage, event);
+    });
+    transferSteps.push({
+      index,
+      skillCandidate: probe.skillCandidate,
+      trainedCaseIds: probe.trainedCaseIds,
+      caseId: probe.transferCase.caseId,
+      trainingId: probe.transferCase.trainingId,
+      problemId: probe.transferCase.problemId,
+      problemTitle: probe.transferCase.problemTitle,
+      score: scoreTransferValidationProbe(probe, report),
+      report,
+      usage: stepUsage
     });
   }
 
@@ -213,6 +276,10 @@ async function runOneJourney(
     runIndex,
     diagnosisSteps,
     optimizationSteps,
+    transferSteps,
+    transferSummary: summarizeTransferValidation(
+      transferSteps.map((step) => step.score as ReturnType<typeof scoreTransferValidationProbe>)
+    ),
     finalProfile: profile,
     readySkills: profileSummary(profile).activeSkills,
     usage,
@@ -232,7 +299,10 @@ async function runOneJourney(
       optimizationVerdictAccuracy: ratio(
         optimizationSteps.filter((step) => (step.score as { verdictHit: boolean }).verdictHit).length,
         optimizationSteps.length
-      )
+      ),
+      transferPassRate: summarizeTransferValidation(
+        transferSteps.map((step) => step.score as ReturnType<typeof scoreTransferValidationProbe>)
+      ).transferPassRate
     }
   };
 }
@@ -273,7 +343,11 @@ function aggregateScores(outputs: JourneyRunOutput[]): JourneyRunOutput["scores"
     diagnosisPainPointAccuracy: average(outputs.map((item) => item.scores.diagnosisPainPointAccuracy)),
     diagnosisPrimaryPainPointAccuracy: average(outputs.map((item) => item.scores.diagnosisPrimaryPainPointAccuracy)),
     diagnosisSkillCandidateAccuracy: average(outputs.map((item) => item.scores.diagnosisSkillCandidateAccuracy)),
-    optimizationVerdictAccuracy: average(outputs.map((item) => item.scores.optimizationVerdictAccuracy))
+    optimizationVerdictAccuracy: average(outputs.map((item) => item.scores.optimizationVerdictAccuracy)),
+    transferPassRate: ratio(
+      outputs.reduce((sum, item) => sum + item.transferSummary.passedCount, 0),
+      outputs.reduce((sum, item) => sum + item.transferSummary.probeCount, 0)
+    )
   };
 }
 

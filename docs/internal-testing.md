@@ -93,6 +93,44 @@ Result:
 
 This replaces earlier local token estimates for future runs. If a provider omits usage, the field remains absent or zero instead of inventing a number.
 
+## Transfer Validation Smoke
+
+Goal: stop treating `skill ready` as proof of learning. After a skill becomes ready, run unseen same-family cases from the expanded journey set and measure whether diagnosis still hits the transferable pain point with fewer estimated hints.
+
+Command:
+
+```powershell
+npm run trial:mimo-journey -- --runs 3 --profile-mode carry --variant standard --transfer-check --out .runtime\mimo-transfer-check-20260501-0033\journey-runs.json
+```
+
+Result:
+
+| Metric | Score |
+| --- | ---: |
+| Diagnosis pain-point accuracy | 0.961 |
+| Diagnosis primary pain-point accuracy | 0.941 |
+| Diagnosis skill-candidate accuracy | 0.882 |
+| AC-after optimization verdict accuracy | 1.000 |
+| Non-empty transfer probes | 26 |
+| Transfer probes passed | 26 |
+| Transfer pass rate on probed cases | 1.000 |
+| Average estimated hint reduction | 2 |
+| Calls with usage | 92 |
+| Prompt tokens | 134,995 |
+| Completion tokens | 27,649 |
+| Total tokens | 162,644 |
+
+Observed issue and fix:
+
+- The first transfer-check run exposed polluted synthetic cases: some wrong-code samples did not match the actual Luogu problem selected from the training set.
+- T102 and T108 were corrected to match the bound Luogu problems, and the prompt now distinguishes loop boundaries from branch coverage, high-precision carry order from generic loop issues, and binary-tree depth modeling from generic recursion.
+- The CLI now aggregates transfer pass rate by actual probe count, so a run with zero ready skills does not drag the aggregate down.
+
+Interpretation:
+
+- This is stronger than profile-memory testing because it asks ready skills to generalize to unseen same-family cases.
+- It is still a model-simulation metric, not a guarantee that a real student learned the skill. Real learning needs human attempts, OJ outcomes, and hint-count change over time.
+
 ## Journey Test
 
 Goal: simulate one learner moving from Luogu training `100` to `116`, then repeat the journey three times with the same accumulated student profile to check whether pain points become reusable skills.
