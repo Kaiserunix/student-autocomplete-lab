@@ -1,0 +1,510 @@
+import type { ChatCompletionUsage, ChatCompletionUsageSink } from "../models/chatCompletionsClient";
+import { createEmptyStudentProfile, profileSummary, type StudentProfile } from "./studentProfile";
+import { createEmptyStudentSkill, type StudentSkill } from "./studentSkill";
+import {
+  buildSelfEvolutionTeachingContext,
+  diagnoseFromSelfEvolutionSample,
+  type SelfEvolutionWrongSample
+} from "./selfEvolutionTrial";
+import type { TeachingDiagnosisReport } from "./teachingReport";
+import { normalizeTeachingDiagnosisReport } from "./teachingTaxonomy";
+import { runTeachingCycleWithStudentSkill } from "./teachingCycle";
+import type { TeachingDiagnosisContext } from "./types";
+
+export interface LongitudinalSelfEvolutionSample extends SelfEvolutionWrongSample {
+  sampleId: string;
+  stage: number;
+  stageLabel: string;
+  difficulty: number;
+}
+
+export interface LongitudinalBatchOptions {
+  offset?: number;
+  limit?: number;
+}
+
+export interface LongitudinalUsageSummary {
+  callsWithUsage: number;
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
+}
+
+export interface LongitudinalSelfEvolutionStep {
+  index: number;
+  sampleId: string;
+  problemId: string;
+  stage: number;
+  difficulty: number;
+  expectedPainPoints: string[];
+  actualPainPoints: string[];
+  painPointHit: boolean;
+  primaryPainPointHit: boolean;
+  expectedSkillCandidate?: string;
+  actualSkillCandidate?: string;
+  skillCandidateHit: boolean;
+  recommendation?: string;
+  studentSkillRevision: number;
+  activeSkills: string[];
+  changeSummary: string[];
+  usage?: ChatCompletionUsage;
+}
+
+export interface LongitudinalSelfEvolutionResult {
+  provider: "longitudinal-self-evolution";
+  sampleCount: number;
+  steps: LongitudinalSelfEvolutionStep[];
+  scores: {
+    painPointAccuracy: number;
+    primaryPainPointAccuracy: number;
+    skillCandidateAccuracy: number;
+  };
+  usage: LongitudinalUsageSummary;
+  finalProfile: StudentProfile;
+  finalStudentSkill: StudentSkill;
+}
+
+export type LongitudinalDiagnose = (
+  sample: LongitudinalSelfEvolutionSample,
+  context: TeachingDiagnosisContext,
+  onUsage?: ChatCompletionUsageSink
+) => Promise<TeachingDiagnosisReport> | TeachingDiagnosisReport;
+
+export interface RunLongitudinalSelfEvolutionOptions {
+  studentId?: string;
+  profile?: StudentProfile;
+  studentSkill?: StudentSkill;
+  occurredAt?: string;
+  patchSource?: string;
+  diagnose?: LongitudinalDiagnose;
+}
+
+interface LongitudinalTemplate {
+  painPoint: string;
+  problemIds: string[];
+  topic: string;
+  baseDifficulty: number;
+  expectedDiagnosisHint: string;
+  recommendationExpectation: string;
+  code: (stage: number, variant: number) => string;
+}
+
+const STAGE_LABELS = [
+  "输入和输出仍不稳",
+  "能跑样例但边界不稳",
+  "开始分函数但模型混乱",
+  "递归或状态定义不稳",
+  "能写主体但概念迁移差",
+  "出现复杂度和数据结构选择",
+  "多痛点混合但主因可辨认",
+  "同类题迁移验证",
+  "接近比赛写法",
+  "近似正确但关键细节错"
+];
+
+const TEMPLATES: LongitudinalTemplate[] = [
+  {
+    painPoint: "binary_tree_traversal_order_confusion",
+    problemIds: ["P1030", "P1305", "P1827", "P1229"],
+    topic: "Binary tree traversal and reconstruction",
+    baseDifficulty: 1,
+    expectedDiagnosisHint:
+      "The subtree split may look plausible, but the output order is still not preorder. At each subtree, emit the root before the recursive children.",
+    recommendationExpectation: "Recommend a smaller traversal task before harder reconstruction.",
+    code: traversalCode
+  },
+  {
+    painPoint: "recursion_base_case_and_depth_definition",
+    problemIds: ["P4913", "P3884", "P1305"],
+    topic: "Recursive base cases and tree depth definitions",
+    baseDifficulty: 1,
+    expectedDiagnosisHint:
+      "The empty child/base case is counted incorrectly. Check the one-node tree first and make the empty subtree contribute 0.",
+    recommendationExpectation: "Recommend a small depth/base-case exercise.",
+    code: depthCode
+  },
+  {
+    painPoint: "output_order_and_sentinel_handling",
+    problemIds: ["P1427", "P5727"],
+    topic: "Sentinel input and reverse output order",
+    baseDifficulty: 1,
+    expectedDiagnosisHint:
+      "The sentinel or generated terminal value is included in the reversed output. Collect valid values first, then reverse that collection only.",
+    recommendationExpectation: "Recommend separating collection from output.",
+    code: sentinelCode
+  },
+  {
+    painPoint: "matrix_like_input_and_decimal_format",
+    problemIds: ["P5735", "P5730", "P5731"],
+    topic: "Numeric input, formula choice, and exact formatting",
+    baseDifficulty: 1,
+    expectedDiagnosisHint:
+      "The code mixes the input type, formula, and output precision. Keep decimal input, compute the required formula, then format at the end.",
+    recommendationExpectation: "Recommend a numeric-formatting micro exercise.",
+    code: numericCode
+  },
+  {
+    painPoint: "balanced_tree_concept_misused_as_sorted_set",
+    problemIds: ["P3369", "P5076"],
+    topic: "Ordered multiset and rank query semantics",
+    baseDifficulty: 4,
+    expectedDiagnosisHint:
+      "The data structure is treated like a unique sorted set, but the operations require multiset semantics and duplicate-aware rank/kth behavior.",
+    recommendationExpectation: "Recommend clarifying multiset semantics before optimizing.",
+    code: multisetCode
+  }
+];
+
+export function generateLongitudinalSelfEvolutionSamples(count = 1000): LongitudinalSelfEvolutionSample[] {
+  return Array.from({ length: count }, (_, index) => buildSample(index, count));
+}
+
+export function selectLongitudinalBatch<T>(samples: T[], options: LongitudinalBatchOptions = {}): T[] {
+  const offset = Math.max(0, options.offset ?? 0);
+  const limit = options.limit === undefined ? samples.length - offset : Math.max(0, options.limit);
+  return samples.slice(offset, offset + limit);
+}
+
+export async function runLongitudinalSelfEvolutionBatch(
+  samples: LongitudinalSelfEvolutionSample[],
+  options: RunLongitudinalSelfEvolutionOptions = {}
+): Promise<LongitudinalSelfEvolutionResult> {
+  let profile = options.profile ?? createEmptyStudentProfile(options.studentId ?? "longitudinal-student");
+  let studentSkill =
+    options.studentSkill ?? createEmptyStudentSkill(options.studentId ?? profile.studentId ?? "longitudinal-student");
+  const diagnose = options.diagnose ?? diagnoseFromLongitudinalSample;
+  const baseOccurredAt = options.occurredAt ?? new Date().toISOString();
+  const steps: LongitudinalSelfEvolutionStep[] = [];
+  const usage = emptyUsageSummary();
+
+  for (const [index, sample] of samples.entries()) {
+    const context = buildSelfEvolutionTeachingContext(sample, profileSummary(profile));
+    let stepUsage: ChatCompletionUsage | undefined;
+    const rawReport = await Promise.resolve(
+      diagnose(sample, context, (event) => {
+        stepUsage = event;
+        addUsage(usage, event);
+      })
+    );
+    const report = normalizeTeachingDiagnosisReport(rawReport, { currentProblemId: sample.problemId });
+    const cycle = await runTeachingCycleWithStudentSkill(context, profile, studentSkill, async () => report, {
+      occurredAt: occurredAtForStep(baseOccurredAt, index),
+      patchSource: options.patchSource ?? "longitudinal-self-evolution"
+    });
+    profile = cycle.updatedProfile;
+    studentSkill = cycle.updatedStudentSkill;
+
+    const expected = normalizeTeachingDiagnosisReport(diagnoseFromSelfEvolutionSample(sample), {
+      currentProblemId: sample.problemId
+    });
+    const expectedPainPoints = expected.painPoints.map((painPoint) => painPoint.label);
+    const actualPainPoints = cycle.report.painPoints.map((painPoint) => painPoint.label);
+    const expectedSkillCandidate = expected.skillUpdate?.candidate;
+    const actualSkillCandidate = cycle.report.skillUpdate?.candidate;
+
+    steps.push({
+      index,
+      sampleId: sample.sampleId,
+      problemId: sample.problemId,
+      stage: sample.stage,
+      difficulty: sample.difficulty,
+      expectedPainPoints,
+      actualPainPoints,
+      painPointHit: actualPainPoints.some((painPoint) => expectedPainPoints.includes(painPoint)),
+      primaryPainPointHit: actualPainPoints.includes(expectedPainPoints[0]),
+      expectedSkillCandidate,
+      actualSkillCandidate,
+      skillCandidateHit: expectedSkillCandidate === actualSkillCandidate,
+      recommendation: cycle.report.recommendation?.problemId,
+      studentSkillRevision: studentSkill.revision,
+      activeSkills: Object.values(studentSkill.skills)
+        .filter((entry) => entry.status === "active")
+        .map((entry) => entry.name)
+        .sort(),
+      changeSummary: cycle.studentSkillMerge.changeSummary,
+      usage: stepUsage
+    });
+  }
+
+  return {
+    provider: "longitudinal-self-evolution",
+    sampleCount: samples.length,
+    steps,
+    scores: {
+      painPointAccuracy: ratio(steps.filter((step) => step.painPointHit).length, steps.length),
+      primaryPainPointAccuracy: ratio(steps.filter((step) => step.primaryPainPointHit).length, steps.length),
+      skillCandidateAccuracy: ratio(steps.filter((step) => step.skillCandidateHit).length, steps.length)
+    },
+    usage,
+    finalProfile: profile,
+    finalStudentSkill: studentSkill
+  };
+}
+
+function diagnoseFromLongitudinalSample(sample: LongitudinalSelfEvolutionSample): TeachingDiagnosisReport {
+  return diagnoseFromSelfEvolutionSample(sample);
+}
+
+function buildSample(index: number, totalCount: number): LongitudinalSelfEvolutionSample {
+  const template = TEMPLATES[index % TEMPLATES.length];
+  const stage = Math.min(10, Math.floor((index / Math.max(1, totalCount)) * 10) + 1);
+  const variant = Math.floor(index / TEMPLATES.length);
+  const problemId = template.problemIds[variant % template.problemIds.length];
+  const difficulty = Math.min(5, template.baseDifficulty + Math.floor((stage - 1) / 3));
+
+  return {
+    sampleId: `long-${String(index + 1).padStart(4, "0")}`,
+    stage,
+    stageLabel: STAGE_LABELS[stage - 1],
+    difficulty,
+    problemId,
+    topic: `${template.topic}; stage ${stage}: ${STAGE_LABELS[stage - 1]}`,
+    painPoint: template.painPoint,
+    wrongCode: template.code(stage, variant),
+    expectedDiagnosisHint: template.expectedDiagnosisHint,
+    recommendationExpectation: template.recommendationExpectation
+  };
+}
+
+function traversalCode(stage: number, variant: number): string {
+  const name = variant % 2 === 0 ? "solve" : "build";
+  if (stage <= 3) {
+    return [
+      "import sys",
+      "inorder = sys.stdin.readline().strip()",
+      "postorder = sys.stdin.readline().strip()",
+      `def ${name}(ino, post):`,
+      "    if not ino:",
+      "        return ''",
+      "    root = post[-1]",
+      "    k = ino.index(root)",
+      `    left = ${name}(ino[:k], post[:k])`,
+      `    right = ${name}(ino[k + 1:], post[k:-1])`,
+      "    return left + right + root",
+      `print(${name}(inorder, postorder))`
+    ].join("\n");
+  }
+
+  if (stage <= 7) {
+    return [
+      "inorder = input().strip()",
+      "postorder = input().strip()",
+      "def dfs(l1, r1, l2, r2):",
+      "    if l1 > r1:",
+      "        return ''",
+      "    root = postorder[r2]",
+      "    mid = inorder.index(root)",
+      "    left_len = mid - l1",
+      "    left = dfs(l1, mid - 1, l2, l2 + left_len - 1)",
+      "    right = dfs(mid + 1, r1, l2 + left_len, r2 - 1)",
+      "    return left + root + right",
+      "print(dfs(0, len(inorder) - 1, 0, len(postorder) - 1))"
+    ].join("\n");
+  }
+
+  return [
+    "inorder = input().strip()",
+    "postorder = input().strip()",
+    "def dfs(ino, post):",
+    "    if len(ino) == 1:",
+    "        return ino",
+    "    root = post[-1]",
+    "    mid = ino.index(root)",
+    "    return dfs(ino[:mid], post[:mid]) + root + dfs(ino[mid + 1:], post[mid:-1])",
+    "print(dfs(inorder, postorder))"
+  ].join("\n");
+}
+
+function depthCode(stage: number): string {
+  if (stage <= 4) {
+    return [
+      "import sys",
+      "sys.setrecursionlimit(1000000)",
+      "n = int(input())",
+      "ch = [[0, 0] for _ in range(n + 1)]",
+      "for i in range(1, n + 1):",
+      "    ch[i] = list(map(int, input().split()))",
+      "def depth(u):",
+      "    if u == 0:",
+      "        return 1",
+      "    return max(depth(ch[u][0]), depth(ch[u][1])) + 1",
+      "print(depth(1))"
+    ].join("\n");
+  }
+
+  if (stage <= 8) {
+    return [
+      "n = int(input())",
+      "left = [0] * (n + 1)",
+      "right = [0] * (n + 1)",
+      "for i in range(1, n + 1):",
+      "    left[i], right[i] = map(int, input().split())",
+      "def depth(u):",
+      "    if left[u] == 0 and right[u] == 0:",
+      "        return 0",
+      "    return max(depth(left[u]), depth(right[u])) + 1",
+      "print(depth(1))"
+    ].join("\n");
+  }
+
+  return [
+    "n = int(input())",
+    "children = [None] + [tuple(map(int, input().split())) for _ in range(n)]",
+    "def depth(u):",
+    "    if u == 0:",
+    "        return 0",
+    "    l, r = children[u]",
+    "    return max(depth(l), depth(r))",
+    "print(depth(1))"
+  ].join("\n");
+}
+
+function sentinelCode(stage: number): string {
+  if (stage <= 3) {
+    return [
+      "nums = list(map(int, input().split()))",
+      "print(' '.join(map(str, nums[::-1])))"
+    ].join("\n");
+  }
+
+  if (stage <= 7) {
+    return [
+      "nums = []",
+      "for x in map(int, input().split()):",
+      "    nums.append(x)",
+      "    if x == 0:",
+      "        break",
+      "print(' '.join(map(str, nums[::-1])))"
+    ].join("\n");
+  }
+
+  return [
+    "nums = []",
+    "for x in map(int, input().split()):",
+    "    if x == 0:",
+    "        break",
+    "    nums.append(x)",
+    "nums = nums.reverse()",
+    "print(' '.join(map(str, nums)))"
+  ].join("\n");
+}
+
+function numericCode(stage: number): string {
+  if (stage <= 4) {
+    return [
+      "points = [list(map(int, input().split())) for _ in range(3)]",
+      "ans = 0",
+      "for i in range(3):",
+      "    x1, y1 = points[i]",
+      "    x2, y2 = points[(i + 1) % 3]",
+      "    ans += abs(x1 - x2) + abs(y1 - y2)",
+      "print(ans)"
+    ].join("\n");
+  }
+
+  if (stage <= 8) {
+    return [
+      "import math",
+      "points = [list(map(float, input().split())) for _ in range(3)]",
+      "ans = 0",
+      "for i in range(3):",
+      "    x1, y1 = points[i]",
+      "    x2, y2 = points[(i + 1) % 3]",
+      "    ans += math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)",
+      "print(ans)"
+    ].join("\n");
+  }
+
+  return [
+    "import math",
+    "a, b, c = [tuple(map(float, input().split())) for _ in range(3)]",
+    "def dist(p, q):",
+    "    return (p[0] - q[0]) ** 2 + (p[1] - q[1]) ** 2",
+    "ans = math.sqrt(dist(a, b) + dist(b, c) + dist(c, a))",
+    "print(f'{ans:.2f}')"
+  ].join("\n");
+}
+
+function multisetCode(stage: number): string {
+  if (stage <= 5) {
+    return [
+      "import bisect",
+      "n = int(input())",
+      "a = []",
+      "for _ in range(n):",
+      "    op, x = map(int, input().split())",
+      "    if op == 1:",
+      "        if x not in a:",
+      "            bisect.insort(a, x)",
+      "    elif op == 2:",
+      "        if x in a:",
+      "            a.remove(x)",
+      "    elif op == 3:",
+      "        print(bisect.bisect_left(a, x) + 1)",
+      "    elif op == 4:",
+      "        print(a[x - 1])",
+      "    elif op == 5:",
+      "        print(a[bisect.bisect_left(a, x) - 1])",
+      "    else:",
+      "        print(a[bisect.bisect_right(a, x)])"
+    ].join("\n");
+  }
+
+  return [
+    "import bisect",
+    "n = int(input())",
+    "a = []",
+    "for _ in range(n):",
+    "    op, x = map(int, input().split())",
+    "    if op == 1:",
+    "        bisect.insort(a, x)",
+    "    elif op == 2:",
+    "        i = bisect.bisect_left(a, x)",
+    "        if i < len(a):",
+    "            a.pop(i)",
+    "    elif op == 3:",
+    "        print(bisect.bisect_right(a, x) + 1)",
+    "    elif op == 4:",
+    "        print(a[x])",
+    "    elif op == 5:",
+    "        print(a[bisect.bisect_left(a, x) - 1])",
+    "    else:",
+    "        print(a[bisect.bisect_right(a, x)])"
+  ].join("\n");
+}
+
+function occurredAtForStep(baseOccurredAt: string, index: number): string {
+  const date = new Date(baseOccurredAt);
+  if (Number.isNaN(date.getTime())) {
+    return baseOccurredAt;
+  }
+
+  date.setSeconds(date.getSeconds() + index);
+  return date.toISOString();
+}
+
+function emptyUsageSummary(): LongitudinalUsageSummary {
+  return {
+    callsWithUsage: 0,
+    promptTokens: 0,
+    completionTokens: 0,
+    totalTokens: 0
+  };
+}
+
+function addUsage(summary: LongitudinalUsageSummary, usage: ChatCompletionUsage): void {
+  summary.callsWithUsage += 1;
+  summary.promptTokens += usage.promptTokens ?? usage.inputTokens ?? 0;
+  summary.completionTokens += usage.completionTokens ?? usage.outputTokens ?? 0;
+  summary.totalTokens +=
+    usage.totalTokens ??
+    (usage.promptTokens ?? usage.inputTokens ?? 0) + (usage.completionTokens ?? usage.outputTokens ?? 0);
+}
+
+function ratio(hitCount: number, total: number): number {
+  if (total === 0) {
+    return 0;
+  }
+
+  return Math.round((hitCount / total) * 1000) / 1000;
+}

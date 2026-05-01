@@ -85,6 +85,7 @@
     "trial:mimo-teacher": "npm run compile && node dist/src/cli/mimoTeachingTrial.js",
     "trial:self-evolution": "npm run compile && node dist/src/cli/selfEvolutionTrial.js",
     "trial:self-evolution-eval": "npm run compile && node dist/src/cli/selfEvolutionEval.js",
+    "trial:longitudinal-self-evolution": "npm run compile && node dist/src/cli/longitudinalSelfEvolution.js",
     "trial:mimo-journey": "npm run compile && node dist/src/cli/mimoJourneyTrial.js",
     "trial:mimo": "npm run compile && node dist/src/cli/mimoAutocompleteTrial.js",
     "mcp:problem-search": "node dist/src/mcp/problemSearchServer.js",
