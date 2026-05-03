@@ -72,6 +72,14 @@ npm run package:beta
 
 The VSIX artifact is intentionally written to `.runtime/` and ignored by git.
 
+Clean beta release package command:
+
+```powershell
+npm run package:beta-release
+```
+
+The clean package is staged separately, uses `student-autocomplete-lab-beta-release`, and excludes engineering docs, internal-test code, trial CLIs, source maps, secrets, runtime traces, and local records.
+
 There is also a private local friend-testing build:
 
 ```powershell

@@ -39,6 +39,27 @@ export interface AiProviderConfigUpdate {
   autocompleteFormat?: AutocompleteFormat;
 }
 
+export interface AiProviderSettings {
+  baseUrl?: string;
+  apiKey?: string;
+  chatModel?: string;
+  autocompleteModel?: string;
+  autocompleteFormat?: AutocompleteFormat;
+}
+
+export interface AiSettingsSnapshot {
+  providerMode?: AiProviderMode;
+  openai?: AiProviderSettings;
+  openaiCompatible?: AiProviderSettings;
+  anthropic?: AiProviderSettings;
+}
+
+export interface AiSecretSnapshot {
+  openaiApiKey?: string;
+  openaiCompatibleApiKey?: string;
+  anthropicApiKey?: string;
+}
+
 export interface AiConfigView {
   mode: AiProviderMode;
   baseUrl: string;
@@ -71,6 +92,23 @@ export function loadModelEnvFromText(text: string): ModelEnv {
     env[key] = value;
   }
 
+  return env;
+}
+
+export function modelEnvFromSettings(
+  fallbackEnv: ModelEnv,
+  settings: AiSettingsSnapshot,
+  secrets: AiSecretSnapshot
+): ModelEnv {
+  const env: ModelEnv = { ...fallbackEnv };
+
+  if (settings.providerMode) {
+    env.AI_PROVIDER_MODE = settings.providerMode;
+  }
+
+  applyOpenAiSettings(env, settings.openai, secrets.openaiApiKey);
+  applyOpenAiCompatibleSettings(env, settings.openaiCompatible, secrets.openaiCompatibleApiKey);
+  applyAnthropicSettings(env, settings.anthropic, secrets.anthropicApiKey);
   return env;
 }
 
@@ -297,6 +335,77 @@ function normalizeProviderMode(value: string | undefined): AiProviderMode {
   }
 
   return "openai-compatible";
+}
+
+function applyOpenAiSettings(env: ModelEnv, settings: AiProviderSettings | undefined, secretApiKey: string | undefined): void {
+  if (!settings && !secretApiKey) {
+    return;
+  }
+
+  if (settings?.baseUrl?.trim()) {
+    env.AI_OPENAI_BASE_URL = settings.baseUrl.trim();
+  }
+  if (secretApiKey?.trim() || settings?.apiKey?.trim()) {
+    env.AI_OPENAI_API_KEY = (secretApiKey || settings?.apiKey || "").trim();
+  }
+  if (settings?.chatModel?.trim()) {
+    env.AI_OPENAI_CHAT_MODEL = settings.chatModel.trim();
+  }
+  if (settings?.autocompleteModel?.trim()) {
+    env.AI_OPENAI_AUTOCOMPLETE_MODEL = settings.autocompleteModel.trim();
+  }
+}
+
+function applyOpenAiCompatibleSettings(
+  env: ModelEnv,
+  settings: AiProviderSettings | undefined,
+  secretApiKey: string | undefined
+): void {
+  if (!settings && !secretApiKey) {
+    return;
+  }
+
+  if (settings?.baseUrl?.trim()) {
+    env.AI_OPENAI_COMPAT_BASE_URL = settings.baseUrl.trim();
+  }
+  if (secretApiKey?.trim() || settings?.apiKey?.trim()) {
+    env.AI_OPENAI_COMPAT_API_KEY = (secretApiKey || settings?.apiKey || "").trim();
+  }
+  if (settings?.chatModel?.trim()) {
+    env.AI_OPENAI_COMPAT_CHAT_MODEL = settings.chatModel.trim();
+  }
+  if (settings?.autocompleteModel?.trim()) {
+    env.AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL = settings.autocompleteModel.trim();
+  }
+  if (settings?.autocompleteFormat) {
+    env.AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT = normalizeAutocompleteFormat(
+      settings.autocompleteFormat,
+      "openai-completions"
+    );
+  }
+}
+
+function applyAnthropicSettings(
+  env: ModelEnv,
+  settings: AiProviderSettings | undefined,
+  secretApiKey: string | undefined
+): void {
+  if (!settings && !secretApiKey) {
+    return;
+  }
+
+  if (settings?.baseUrl?.trim()) {
+    env.AI_ANTHROPIC_BASE_URL = settings.baseUrl.trim();
+  }
+  if (secretApiKey?.trim() || settings?.apiKey?.trim()) {
+    env.AI_ANTHROPIC_API_KEY = (secretApiKey || settings?.apiKey || "").trim();
+  }
+  if (settings?.chatModel?.trim()) {
+    env.AI_ANTHROPIC_CHAT_MODEL = settings.chatModel.trim();
+  }
+  if (settings?.autocompleteModel?.trim()) {
+    env.AI_ANTHROPIC_AUTOCOMPLETE_MODEL = settings.autocompleteModel.trim();
+  }
 }
 
 function normalizeAutocompleteFormat(value: string | undefined, fallback: AutocompleteFormat): AutocompleteFormat {

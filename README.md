@@ -30,6 +30,7 @@ This repository is prepared as an MIT-licensed open-source beta candidate. Publi
 - `docs/beta-v2-final-goals.md`: final beta target, including Student Skill distillation requirements.
 - `docs/large-scale-growth-simulation.md`: costed plan for the 200-problem / 1000-code growth simulation.
 - `docs/open-source-release.md`: release notes, open-source scope, model rationale, and package command.
+- `docs/release-lanes.md`: three VSIX lanes: beta, clean beta release, and private internal test.
 - `docs/internal-testing.md`: summarized live MiMo journey-test evidence.
 - `docs/friend-internal-test-build.md`: local-only friend-testing build with extra recording, not for GitHub or public release.
 - `secrets/models.env`: local API credentials and model routing. This is ignored by git.
@@ -77,13 +78,19 @@ Package the public beta candidate locally:
 npm run package:beta
 ```
 
+Package the clean beta release candidate:
+
+```powershell
+npm run package:beta-release
+```
+
 Package the separate friend-testing build with local records enabled:
 
 ```powershell
 npm run package:internal
 ```
 
-The internal build uses a different extension id and view prefix (`student-autocomplete-lab-internal` / `studentAutocompleteInternal`). It is for local friend testing only, writes extra records to VS Code global storage, and must not be published or pushed as a release artifact.
+The release lanes use different extension ids and view prefixes. `beta release` is the clean public candidate; `beta 内测版` is for local friend testing only, writes extra records to VS Code global storage, and must not be published or pushed as a release artifact.
 
 Run a live MiMo autocomplete trial:
 

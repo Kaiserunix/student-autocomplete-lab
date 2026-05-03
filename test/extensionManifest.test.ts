@@ -11,6 +11,9 @@ interface ExtensionManifest {
     commands?: Array<{ command?: string; title?: string }>;
     views?: Record<string, Array<{ id?: string; type?: string }>>;
     configurationDefaults?: Record<string, unknown>;
+    configuration?: {
+      properties?: Record<string, unknown>;
+    };
   };
 }
 
@@ -59,5 +62,16 @@ describe("VS Code extension manifest", () => {
       manifest.contributes?.commands?.find((item) => item.command === "studentAutocomplete.triggerInlineCompletion")
         ?.title
     ).toBe("AI 做题陪练：触发自动补全");
+  });
+
+  test("exposes real AI provider settings instead of a webview-only config", async () => {
+    const manifest = JSON.parse(await readFile("package.json", "utf8")) as ExtensionManifest;
+    const properties = manifest.contributes?.configuration?.properties ?? {};
+
+    expect(properties).toHaveProperty("studentAutocomplete.ai.providerMode");
+    expect(properties).toHaveProperty("studentAutocomplete.ai.openai.baseUrl");
+    expect(properties).toHaveProperty("studentAutocomplete.ai.openai.chatModel");
+    expect(properties).toHaveProperty("studentAutocomplete.ai.openaiCompatible.autocompleteFormat");
+    expect(properties).toHaveProperty("studentAutocomplete.ai.anthropic.chatModel");
   });
 });

@@ -4,14 +4,17 @@ import * as vscode from "vscode";
 import { buildAutocompleteInputFromText, extractStudentCodeFromText } from "../autocomplete/context";
 import { requestMimoAutocomplete } from "../autocomplete/mimoAutocomplete";
 import {
-  applyAiConfigUpdateToEnvText,
-  buildAiConfigView,
-  loadModelEnv,
   requireMimoAutocompleteConfig,
   requireMimoTeachingConfig,
   type AiConfigView,
-  type AiProviderConfigUpdate
+  type AiProviderConfigUpdate,
+  type ModelEnv
 } from "../config/modelEnv";
+import {
+  buildAiConfigViewFromVsCode,
+  loadModelEnvFromVsCode,
+  saveAiConfigToVsCode
+} from "../config/vscodeModelEnv";
 import {
   createInternalTestRecorder,
   type InternalTestEventInput,
@@ -399,13 +402,17 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     return path.join(this.context.globalStorageUri.fsPath, "teacherPacks.jsonl");
   }
 
-  private modelEnvPath(): string {
+  private modelEnvPath(): string | undefined {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
-      throw new Error("先在 VS Code 打开一个工作区，再使用 AI API。");
+      return undefined;
     }
 
     return path.join(workspaceFolder.uri.fsPath, "secrets", "models.env");
+  }
+
+  private async loadRuntimeModelEnv(): Promise<ModelEnv> {
+    return loadModelEnvFromVsCode(this.context, this.modelEnvPath());
   }
 
   private async problemBankState(
@@ -452,9 +459,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async handleSaveAiConfigRequest(config: AiProviderConfigUpdate): Promise<Record<string, unknown>> {
-    const envPath = this.modelEnvPath();
-    const existingText = await readTextIfExists(envPath);
-    const nextText = applyAiConfigUpdateToEnvText(existingText, {
+    await saveAiConfigToVsCode(this.context, {
       mode: normalizeAiProviderMode(config.mode),
       baseUrl: config.baseUrl?.trim() ?? "",
       apiKey: config.apiKey,
@@ -462,10 +467,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       autocompleteModel: config.autocompleteModel?.trim() ?? "",
       autocompleteFormat: normalizeAutocompleteFormat(config.autocompleteFormat)
     });
-    await mkdir(path.dirname(envPath), { recursive: true });
-    await writeFile(envPath, nextText, "utf8");
 
-    return this.problemBankState(undefined, "AI 配置已保存。API key 留空时已保留旧值。");
+    return this.problemBankState(undefined, "AI 配置已保存到 VS Code Settings；API key 留空时已保留 SecretStorage 里的旧值。");
   }
 
   private async handleArchiveProblemRequest(
@@ -534,7 +537,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       throw new Error("先打开你的代码文件，AI 才能分析当前卡点。");
     }
 
-    const config = requireMimoTeachingConfig(await loadModelEnv(this.modelEnvPath()));
+    const config = requireMimoTeachingConfig(await this.loadRuntimeModelEnv());
     const profile = await loadStudentProfile(this.profilePath());
     const studentSkill = await this.loadStudentSkillForProfile(profile);
     const teacherPack = await this.ensureTeacherPack(problem, config);
@@ -796,7 +799,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     const occurredAt = new Date().toISOString();
-    const config = requireMimoTeachingConfig(await loadModelEnv(this.modelEnvPath()));
+    const config = requireMimoTeachingConfig(await this.loadRuntimeModelEnv());
     const profile = await loadStudentProfile(this.profilePath());
     const attemptStats = summarizeAttemptEvents(await this.loadAttemptEvents(), problemKey);
     const teachingContext = buildSidebarTeachingContext({
@@ -899,7 +902,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     const occurredAt = new Date().toISOString();
-    const config = requireMimoTeachingConfig(await loadModelEnv(this.modelEnvPath()));
+    const config = requireMimoTeachingConfig(await this.loadRuntimeModelEnv());
     const profile = await loadStudentProfile(this.profilePath());
     const attemptStats = summarizeAttemptEvents(await this.loadAttemptEvents(), problemKey);
     const studentCode = extractStudentCodeFromText(editor.document.getText());
@@ -1026,7 +1029,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     const occurredAt = new Date().toISOString();
-    const config = requireMimoTeachingConfig(await loadModelEnv(this.modelEnvPath()));
+    const config = requireMimoTeachingConfig(await this.loadRuntimeModelEnv());
     const profile = await loadStudentProfile(this.profilePath());
     const profileBefore = profileSummary(profile);
     const teachingContext = buildSidebarTeachingContext({
@@ -1159,7 +1162,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       throw new Error("先打开你的代码文件，再测试补全。");
     }
 
-    const config = requireMimoAutocompleteConfig(await loadModelEnv(this.modelEnvPath()));
+    const config = requireMimoAutocompleteConfig(await this.loadRuntimeModelEnv());
     const position = editor.selection.active;
     const input = buildAutocompleteInputFromText({
       text: editor.document.getText(),
@@ -1206,7 +1209,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       throw new Error("先打开你的代码文件，再做交题自检。");
     }
 
-    const config = requireMimoTeachingConfig(await loadModelEnv(this.modelEnvPath()));
+    const config = requireMimoTeachingConfig(await this.loadRuntimeModelEnv());
     const profile = await loadStudentProfile(this.profilePath());
     const teachingContext = buildSidebarTeachingContext({
       problem,
@@ -1249,30 +1252,20 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async aiRuntimeStatus(): Promise<AiRuntimeStatus> {
-    let envPath: string;
+    const envPath = this.modelEnvPath();
     try {
-      envPath = this.modelEnvPath();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const env = await this.loadRuntimeModelEnv();
+      const configView = await buildAiConfigViewFromVsCode(this.context, envPath);
       return {
-        envPath: "",
-        autocomplete: { configured: false, error: message },
-        teaching: { configured: false, error: message }
-      };
-    }
-
-    try {
-      const env = await loadModelEnv(envPath);
-      return {
-        envPath,
-        providerMode: buildAiConfigView(env).mode,
+        envPath: envPath ?? "VS Code Settings",
+        providerMode: configView.mode,
         autocomplete: readAutocompleteStatus(env),
         teaching: readTeachingStatus(env)
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       return {
-        envPath,
+        envPath: envPath ?? "VS Code Settings",
         providerMode: "openai-compatible",
         autocomplete: { configured: false, error: message },
         teaching: { configured: false, error: message }
@@ -1281,11 +1274,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async aiConfigView(): Promise<AiConfigView> {
-    try {
-      return buildAiConfigView(await loadModelEnv(this.modelEnvPath()));
-    } catch {
-      return buildAiConfigView({});
-    }
+    return buildAiConfigViewFromVsCode(this.context, this.modelEnvPath());
   }
 
   private async loadSavedProblems(): Promise<SavedProblemRecord[]> {
@@ -1316,7 +1305,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
   private async tryPrepareTeacherPack(problem: ProblemRecord): Promise<TeacherPackRecord | undefined> {
     try {
-      const config = requireMimoTeachingConfig(await loadModelEnv(this.modelEnvPath()));
+      const config = requireMimoTeachingConfig(await this.loadRuntimeModelEnv());
       return this.ensureTeacherPack(problem, config);
     } catch {
       return undefined;
@@ -2664,8 +2653,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       }
 
       const teaching = statusData.teaching || {};
-      aiProvider.textContent = teaching.configured
-        ? providerModeLabel(statusData.providerMode) + " " + teaching.model
+      const autocomplete = statusData.autocomplete || {};
+      aiProvider.textContent = teaching.configured || autocomplete.configured
+        ? [
+            providerModeLabel(statusData.providerMode),
+            "补全 " + (autocomplete.model || "未配置"),
+            "分析 " + (teaching.model || "未配置"),
+            "协议 " + [autocomplete.format, teaching.format].filter(Boolean).join(" / ")
+          ].join(" · ")
         : "AI 未配置";
       [
         {
@@ -4158,7 +4153,7 @@ function completionReasonLabel(reason: CompletionReason): string {
   return "已完成";
 }
 
-function readAutocompleteStatus(env: Awaited<ReturnType<typeof loadModelEnv>>): AiRuntimeStatus["autocomplete"] {
+function readAutocompleteStatus(env: ModelEnv): AiRuntimeStatus["autocomplete"] {
   try {
     const config = requireMimoAutocompleteConfig(env);
     return {
@@ -4175,7 +4170,7 @@ function readAutocompleteStatus(env: Awaited<ReturnType<typeof loadModelEnv>>): 
   }
 }
 
-function readTeachingStatus(env: Awaited<ReturnType<typeof loadModelEnv>>): AiRuntimeStatus["teaching"] {
+function readTeachingStatus(env: ModelEnv): AiRuntimeStatus["teaching"] {
   try {
     const config = requireMimoTeachingConfig(env);
     return {

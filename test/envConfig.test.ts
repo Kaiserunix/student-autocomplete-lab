@@ -3,6 +3,7 @@ import {
   applyAiConfigUpdateToEnvText,
   buildAiConfigView,
   loadModelEnvFromText,
+  modelEnvFromSettings,
   requireAutocompleteConfig,
   requireMimoAutocompleteConfig,
   requireMimoTeachingConfig,
@@ -199,5 +200,64 @@ UNRELATED=value
     expect(env.AI_OPENAI_COMPAT_BASE_URL).toBe("https://new.example/v1");
     expect(env.AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT).toBe("openai-chat");
     expect(env.UNRELATED).toBe("value");
+  });
+
+  test("lets VS Code settings and SecretStorage override legacy env without exposing secrets", () => {
+    const legacy = loadModelEnvFromText(`
+MIMO_OPENAI_BASE_URL=https://legacy-mimo.test/v1
+MIMO_API_KEY=legacy-secret
+MIMO_CHAT_MODEL=mimo-v2.5
+MIMO_AUTOCOMPLETE_MODEL=mimo-v2.5
+`);
+    const env = modelEnvFromSettings(
+      legacy,
+      {
+        providerMode: "openai",
+        openai: {
+          baseUrl: "https://api.openai.test/v1",
+          chatModel: "gpt-test-chat",
+          autocompleteModel: "gpt-test-autocomplete"
+        }
+      },
+      {
+        openaiApiKey: "secret-storage-openai"
+      }
+    );
+
+    expect(requireTeachingConfig(env)).toMatchObject({
+      mode: "openai",
+      baseUrl: "https://api.openai.test/v1",
+      apiKey: "secret-storage-openai",
+      model: "gpt-test-chat"
+    });
+    expect(requireAutocompleteConfig(env)).toMatchObject({
+      mode: "openai",
+      format: "openai-chat",
+      model: "gpt-test-autocomplete"
+    });
+    expect(JSON.stringify(buildAiConfigView(env))).not.toContain("secret-storage-openai");
+  });
+
+  test("keeps legacy env as fallback when settings are empty", () => {
+    const legacy = loadModelEnvFromText(`
+AI_PROVIDER_MODE=openai-compatible
+AI_OPENAI_COMPAT_BASE_URL=https://legacy-compatible.test/v1
+AI_OPENAI_COMPAT_API_KEY=legacy-compatible-secret
+AI_OPENAI_COMPAT_CHAT_MODEL=legacy-chat
+AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL=legacy-complete
+AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT=openai-completions
+`);
+    const env = modelEnvFromSettings(legacy, {}, {});
+
+    expect(requireTeachingConfig(env)).toMatchObject({
+      mode: "openai-compatible",
+      baseUrl: "https://legacy-compatible.test/v1",
+      apiKey: "legacy-compatible-secret",
+      model: "legacy-chat"
+    });
+    expect(requireAutocompleteConfig(env)).toMatchObject({
+      format: "openai-completions",
+      model: "legacy-complete"
+    });
   });
 });
