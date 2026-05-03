@@ -1,14 +1,21 @@
 # Student Autocomplete Lab
 
-This folder is a small Codex-ready brief for building a student-friendly code completion tool.
+Student Autocomplete Lab is a Chinese-first VS Code algorithm coach for students practicing Luogu, LeetCode, and similar contest-style problems.
 
-The goal is not to build another full agent IDE. The goal is a narrow autocomplete layer that helps with typing and local style recall while preserving the student's own thinking.
+It is not an automatic problem solver or OJ submitter. The beta goal is a restrained loop: safe short autocomplete for the student's own code, explicit AI coaching only after the student asks, and a local `学习画像` that records repeated pain points, useful skills, user corrections, and rollbackable versions.
 
-This is now prepared as an MIT-licensed open-source alpha. The public repo should contain code, docs, tests, and summarized experiment evidence; local model keys, raw runtime traces, and personal learning ledgers stay ignored.
+This repository is prepared as an MIT-licensed open-source beta candidate. Public code, docs, tests, and summarized experiment evidence belong in git; API keys, raw runtime traces, full problem-statement caches, and personal learning ledgers stay ignored.
+
+## Beta Shape
+
+- `AI 教练`: the first screen, used for hints, deeper hints, giving up into a lesson report, AI-estimated submission checks, AC-after learning scores, optimization review, archiving, and next-problem recommendations.
+- `题目`: paste/import/search problems, import Luogu training sets, and create starter files for Python, C, C++, Rust, or other configured templates.
+- `学习画像`: an inspectable Student Skill model showing active skills, candidate pain points, disabled judgments, user corrections, and recent rollback snapshots.
+- `安全补全`: inline completion reads only local student-code context and safe code habits; it must not read the pasted problem statement, Teacher Pack, or standard answer.
 
 ## Core Direction
 
-- Build code completion only, not a full vibe-coding agent.
+- Build an algorithm-learning coach, not a full vibe-coding agent.
 - Keep Xiaomi MiMo supported because the first real experiments used MiMo quota.
 - Recommended public routing: `dsv4f` for high-frequency autocomplete, `dsv4pro` for teaching analysis and optimization review.
 - Support OpenAI, OpenAI-compatible, and Anthropic-native provider modes.
@@ -24,6 +31,7 @@ This is now prepared as an MIT-licensed open-source alpha. The public repo shoul
 - `docs/large-scale-growth-simulation.md`: costed plan for the 200-problem / 1000-code growth simulation.
 - `docs/open-source-release.md`: release notes, open-source scope, model rationale, and package command.
 - `docs/internal-testing.md`: summarized live MiMo journey-test evidence.
+- `docs/friend-internal-test-build.md`: local-only friend-testing build with extra recording, not for GitHub or public release.
 - `secrets/models.env`: local API credentials and model routing. This is ignored by git.
 
 ## Current Build Target
@@ -62,6 +70,20 @@ Compile the extension:
 ```powershell
 npm run compile
 ```
+
+Package the public beta candidate locally:
+
+```powershell
+npm run package:beta
+```
+
+Package the separate friend-testing build with local records enabled:
+
+```powershell
+npm run package:internal
+```
+
+The internal build uses a different extension id and view prefix (`student-autocomplete-lab-internal` / `studentAutocompleteInternal`). It is for local friend testing only, writes extra records to VS Code global storage, and must not be published or pushed as a release artifact.
 
 Run a live MiMo autocomplete trial:
 
@@ -108,6 +130,8 @@ npm run trial:mimo-journey -- --runs 3 --profile-mode carry --transfer-check
 ```
 
 Transfer validation picks unseen same-skill cases from the expanded long set after a skill is marked ready. It records per-step token `usage`, transfer pass rate, and estimated hint reduction without pretending this is a real human-learning proof.
+
+Live chat-model calls also append provider-reported token usage to `.runtime/chat-completions-usage.jsonl`. The log records model name, provider format, sanitized base URL, and prompt/completion/total tokens; it does not record API keys.
 
 Run a GPT practice-generation dry run:
 
@@ -214,5 +238,5 @@ Package a local VSIX:
 
 ```powershell
 npm run compile
-npx --yes @vscode/vsce package --no-dependencies --out .runtime\student-autocomplete-lab-0.0.1.vsix
+npx --yes @vscode/vsce package --out .runtime\student-autocomplete-lab-0.1.0-beta.1.vsix
 ```

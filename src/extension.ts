@@ -1,8 +1,16 @@
 import * as vscode from "vscode";
 import { createMimoInlineCompletionProvider } from "./autocomplete/inlineProvider";
+import { createInternalTestRecorder } from "./internalTesting/internalTestRecorder";
 import { ProblemBankViewProvider } from "./sidebar/ProblemBankViewProvider";
 
 export function activate(context: vscode.ExtensionContext): void {
+  const internalRecorder = createInternalTestRecorder({
+    globalStoragePath: context.globalStorageUri.fsPath,
+    packageName: String(context.extension.packageJSON.name ?? "student-autocomplete-lab"),
+    displayName: String(context.extension.packageJSON.displayName ?? ""),
+    version: String(context.extension.packageJSON.version ?? ""),
+    workspaceFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+  });
   const provider = new ProblemBankViewProvider(context);
   const output = vscode.window.createOutputChannel("AI 做题陪练");
   const autocompleteStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
@@ -11,6 +19,12 @@ export function activate(context: vscode.ExtensionContext): void {
   autocompleteStatus.text = "$(sparkle) MiMo 补全待触发";
   autocompleteStatus.tooltip = "自动补全会显示为编辑器里的灰色 Ghost Text；点击这里手动触发一次。";
   autocompleteStatus.show();
+  void internalRecorder.record({
+    kind: "extension_activated",
+    payload: {
+      extensionMode: String(context.extensionMode)
+    }
+  }).catch((error) => console.warn("Student Autocomplete internal-test record failed", error));
 
   context.subscriptions.push(
     output,
@@ -20,6 +34,11 @@ export function activate(context: vscode.ExtensionContext): void {
       createMimoInlineCompletionProvider({
         onEvent: (event) => {
           output.appendLine(`[autocomplete:${event.type}] ${event.message}`);
+          void internalRecorder.record({
+            kind: "autocomplete_event",
+            action: event.type,
+            note: event.message
+          }).catch((error) => console.warn("Student Autocomplete internal-test record failed", error));
           if (event.type === "request") {
             autocompleteStatus.text = "$(sync~spin) MiMo 补全中";
           } else if (event.type === "success") {

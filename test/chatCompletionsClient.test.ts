@@ -1,3 +1,6 @@
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import * as path from "node:path";
 import { describe, expect, test } from "vitest";
 import { requestChatCompletionText } from "../src/models/chatCompletionsClient";
 
@@ -31,7 +34,8 @@ describe("OpenAI-compatible chat completions client", () => {
         maxTokens: 512,
         temperature: 0.2,
         responseFormat: { type: "json_object" },
-        onUsage: (usage) => usageEvents.push(usage)
+        onUsage: (usage) => usageEvents.push(usage),
+        usageLogPath: false
       },
       fakeFetch as typeof fetch
     );
@@ -87,7 +91,8 @@ describe("OpenAI-compatible chat completions client", () => {
         maxTokens: 512,
         temperature: 0.2,
         responseFormat: { type: "json_object" },
-        onUsage: (usage) => usageEvents.push(usage)
+        onUsage: (usage) => usageEvents.push(usage),
+        usageLogPath: false
       },
       fakeFetch as typeof fetch
     );
@@ -116,5 +121,52 @@ describe("OpenAI-compatible chat completions client", () => {
         totalTokens: 13
       }
     ]);
+  });
+
+  test("writes provider token usage to a runtime JSONL log", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "student-autocomplete-usage-"));
+    const usageLogPath = path.join(tempDir, "usage.jsonl");
+    const fakeFetch = async (): Promise<Response> =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "{\"ok\":true}" } }],
+          usage: {
+            prompt_tokens: "21",
+            completion_tokens: "8",
+            total_tokens: "29"
+          }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+
+    await requestChatCompletionText(
+      {
+        baseUrl: "https://token-plan-cn.xiaomi.com/v1",
+        apiKey: "secret",
+        model: "mimo-v2.5"
+      },
+      {
+        messages: [{ role: "user", content: "Return JSON." }],
+        maxTokens: 128,
+        temperature: 0.1,
+        responseFormat: { type: "json_object" },
+        usageLogPath
+      },
+      fakeFetch as typeof fetch
+    );
+
+    const [line] = (await readFile(usageLogPath, "utf8")).trim().split(/\r?\n/);
+    expect(JSON.parse(line)).toMatchObject({
+      schemaVersion: 1,
+      providerFormat: "openai-chat",
+      model: "mimo-v2.5",
+      baseUrl: "https://token-plan-cn.xiaomi.com/v1",
+      usage: {
+        source: "openai-chat",
+        promptTokens: 21,
+        completionTokens: 8,
+        totalTokens: 29
+      }
+    });
   });
 });

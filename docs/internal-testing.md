@@ -4,6 +4,98 @@ Date: 2026-04-30
 
 Model: `mimo-v2.5`
 
+## Local Friend-Test Recorder
+
+Date: 2026-05-03
+
+The project now has a separate internal VSIX route for private friend testing. This is not the public beta artifact.
+
+- Public package: `student-autocomplete-lab`
+- Internal package: `student-autocomplete-lab-internal`
+- Internal contribution prefix: `studentAutocompleteInternal`
+- Internal VSIX: `.runtime\student-autocomplete-lab-0.1.0-beta.1-internal.1.vsix`
+
+The internal build enables a local JSONL recorder by package name. It records AI coach actions, lesson reports, solution scores, optimization reviews, recommendations, autocomplete request status, and user corrections from `学习画像`. The sidebar exposes a clearly labeled `内测记录版` panel with a `复制摘要` button and the local record path.
+
+Raw internal records stay local and must not be published. For feedback, prefer the copied summary or `npm run internal:test-report -- --events "<path>" --format markdown`.
+
+## Beta 100-Call Longitudinal Calibration
+
+Date: 2026-05-03
+
+Goal: after the beta UI and Student Skill correction pass, run a live 100-sample slice of the 1000-code / 200-problem longitudinal harness. This checks whether the new fixture structure survives real model output and whether the skill-evolution scores still expose useful product gaps.
+
+Command:
+
+```powershell
+npm run trial:longitudinal-self-evolution -- --provider mimo --limit 100 --retries 1 --out .runtime\longitudinal-self-evolution\mimo-beta-calibration-100.json --samples-out .runtime\longitudinal-self-evolution\samples-1000-beta.json
+```
+
+Result:
+
+| Metric | Score |
+| --- | ---: |
+| Diagnosis pain-point accuracy | 0.960 |
+| Diagnosis primary pain-point accuracy | 0.960 |
+| Diagnosis skill-candidate accuracy | 0.800 |
+| Calls with usage | 101 |
+| Prompt tokens | 159,641 |
+| Completion tokens | 33,798 |
+| Total tokens | 193,439 |
+
+Active skills after 100 steps:
+
+`binary-tree-traversal-reconstruction`, `numeric-geometry-formatting`, `ordered-multiset-semantics`, `recursion-base-case-pattern`, `sentinel-input-output-order`.
+
+Observed issue:
+
+- One response returned truncated JSON and passed after a single retry. This confirms retries are still needed for live calibration runs.
+- Skill-candidate accuracy is below the beta target of 0.85. Pain-point diagnosis is strong, but skill naming/merging still needs a normalization layer before claiming the skill engine is fully beta-stable.
+
+Interpretation:
+
+- This is good enough for personal beta inner testing and open-source feedback.
+- It is not yet enough to claim the 1000-sample live gate. The next run should either add secondary-skill normalization or compare candidate skills by taxonomy alias instead of exact string equality.
+
+## Beta 100-Call Skill Normalization Follow-Up
+
+Date: 2026-05-03
+
+Goal: fix the observed Student Skill granularity gap without accepting broad skills as correct. The before-run misses were all `binary-tree-depth-numbered-children -> recursion-base-case-pattern`, so the taxonomy now uses problem context to prefer the concrete binary-tree-depth skill when a tree-depth/numbered-children problem is diagnosed as a broad recursion-base-case issue.
+
+Command:
+
+```powershell
+npm run trial:longitudinal-self-evolution -- --provider mimo --limit 100 --retries 1 --out .runtime\longitudinal-self-evolution\mimo-beta-calibration-100-after-skill-normalization.json --samples-out .runtime\longitudinal-self-evolution\samples-1000-beta.json
+```
+
+Result:
+
+| Metric | Score |
+| --- | ---: |
+| Diagnosis pain-point accuracy | 0.960 |
+| Diagnosis primary pain-point accuracy | 0.950 |
+| Diagnosis skill-candidate accuracy | 1.000 |
+| Calls with usage | 101 |
+| Prompt tokens | 160,457 |
+| Completion tokens | 33,652 |
+| Total tokens | 194,109 |
+
+Active skills after 100 steps:
+
+`binary-tree-depth-numbered-children`, `binary-tree-traversal-reconstruction`, `numeric-geometry-formatting`, `ordered-multiset-semantics`, `sentinel-input-output-order`.
+
+Observed issue:
+
+- One response again returned truncated JSON and passed after a single retry. Live MiMo calibration still needs retry handling.
+- Skill mismatch pairs dropped to zero in the 100-call slice.
+- Five primary pain-point misses remain. Most were traversal cases where MiMo labeled the immediate slice/indexing symptom as `child_indexing`; the normalized skill still landed on `binary-tree-traversal-reconstruction`.
+
+Interpretation:
+
+- The beta skill-candidate gate is now satisfied for this 100-call calibration slice.
+- The next useful improvement is not another broad skill alias; it is better primary pain-point ordering for traversal reconstruction cases.
+
 ## Long-Run MiMo Stability
 
 Goal: run a longer carried-profile simulation across Luogu training `100` to `116`, with extra repeated and advanced error samples for each stage. This checks whether the diagnosis loop survives more calls, whether ready skills keep accumulating, and whether formatter drift breaks the run.

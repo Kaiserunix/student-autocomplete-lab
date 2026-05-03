@@ -12,6 +12,11 @@ import {
   type AiConfigView,
   type AiProviderConfigUpdate
 } from "../config/modelEnv";
+import {
+  createInternalTestRecorder,
+  type InternalTestEventInput,
+  type InternalTestRecorder
+} from "../internalTesting/internalTestRecorder";
 import { fetchLuoguProblem } from "../problemBank/luoguClient";
 import { fetchLuoguProblemSet } from "../problemBank/luoguProblemSetClient";
 import { searchLuoguProblems, searchLuoguProblemSets } from "../problemBank/luoguSearchClient";
@@ -34,7 +39,8 @@ import {
   applyStudentSkillPatch,
   studentSkillFromProfile,
   studentSkillSummaryForTeaching,
-  type StudentSkill
+  type StudentSkill,
+  type StudentSkillCorrectionType
 } from "../teaching/studentSkill";
 import {
   archiveStudentSkillVersion,
@@ -91,8 +97,15 @@ type WebviewMessage =
   | { command: "requestOptimizationReview"; problemKey: string; studentRequest?: string }
   | { command: "requestSubmissionJudge"; problemKey: string }
   | { command: "requestAutocompletePreview" }
+  | { command: "copyInternalTestSummary" }
   | { command: "archiveProblem"; problemKey: string; reason?: CompletionReason }
   | { command: "disableStudentSkill"; skillName: string; reason?: string }
+  | {
+      command: "recordStudentSkillFeedback";
+      skillName: string;
+      feedbackType: StudentSkillCorrectionType;
+      note?: string;
+    }
   | { command: "rollbackStudentSkill"; versionId: string }
   | { command: "placeholder"; action: string };
 
@@ -161,7 +174,17 @@ const starterPresets: StarterPreset[] = [
 export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "studentAutocomplete.problemBankWebview";
 
-  public constructor(private readonly context: vscode.ExtensionContext) {}
+  private readonly internalRecorder: InternalTestRecorder;
+
+  public constructor(private readonly context: vscode.ExtensionContext) {
+    this.internalRecorder = createInternalTestRecorder({
+      globalStoragePath: context.globalStorageUri.fsPath,
+      packageName: String(context.extension.packageJSON.name ?? "student-autocomplete-lab"),
+      displayName: String(context.extension.packageJSON.displayName ?? ""),
+      version: String(context.extension.packageJSON.version ?? ""),
+      workspaceFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
+    });
+  }
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
     webviewView.webview.options = {
@@ -317,6 +340,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       return this.handleAutocompletePreview();
     }
 
+    if (message.command === "copyInternalTestSummary") {
+      return {
+        type: "internalTestSummary",
+        summary: await this.internalRecorder.summary(),
+        status: "已生成内测记录摘要。"
+      };
+    }
+
     if (message.command === "requestSubmissionJudge") {
       return this.handleSubmissionJudgeRequest(message.problemKey);
     }
@@ -327,6 +358,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     if (message.command === "disableStudentSkill") {
       return this.handleDisableStudentSkillRequest(message.skillName, message.reason);
+    }
+
+    if (message.command === "recordStudentSkillFeedback") {
+      return this.handleStudentSkillFeedbackRequest(message.skillName, message.feedbackType, message.note);
     }
 
     if (message.command === "rollbackStudentSkill") {
@@ -392,6 +427,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       aiConfig: await this.aiConfigView(),
       studentSkill: studentSkillState.studentSkill,
       studentSkillVersions: studentSkillState.versions,
+      internalTesting: await this.internalRecorder.summary(),
       selectedKey: selectedKey ?? (problems[0] ? makeProblemKey(problems[0]) : ""),
       status,
       ...extra
@@ -412,7 +448,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     return (await listStudentSkillVersions(this.studentSkillVersionsDir()))
       .map(toStudentSkillVersionView)
       .reverse()
-      .slice(0, 24);
+      .slice(0, 3);
   }
 
   private async handleSaveAiConfigRequest(config: AiProviderConfigUpdate): Promise<Record<string, unknown>> {
@@ -462,6 +498,13 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         occurredAt: archivedProblem.completedAt
       })
     );
+    await this.recordInternalTestEvent({
+      kind: "archive",
+      problemKey,
+      problemId: problem.id,
+      platform: problem.platform,
+      outcome: reason
+    });
 
     const remainingProblems = await this.loadSavedProblems();
     const selectedKey = remainingProblems[0] ? makeProblemKey(remainingProblems[0]) : "";
@@ -501,7 +544,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       teacherPack: teacherPack ? toTeacherPackReference(teacherPack) : undefined,
       language: editor.document.languageId,
       studentCode: extractStudentCodeFromText(editor.document.getText()),
-      profileSummary: profileSummary(profile),
+      profileSummary: studentSkillSummaryForTeaching(studentSkill),
       ojVerdict,
       requestPurpose: mergeRequestPurpose(describeAiCoachAction(action, responseLanguage), studentRequest),
       responseLanguage: responseLanguage === "zh" ? "zh-CN" : "raw"
@@ -537,6 +580,19 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         model: config.model
       })
     );
+    await this.recordInternalTestEvent({
+      kind: "ai_coach",
+      problemKey,
+      problemId: problem.id,
+      platform: problem.platform,
+      action,
+      painPoints: result.report.painPoints.map((painPoint) => painPoint.label),
+      model: config.model,
+      payload: {
+        candidateSkill: result.report.skillUpdate?.candidate,
+        skillMergeChangeCount: result.studentSkillMerge.changeSummary.length
+      }
+    });
 
     return {
       type: "teachingDiagnosis",
@@ -591,8 +647,59 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     });
     await saveStudentSkill(this.studentSkillPath(), merge.skill);
     await archiveStudentSkillVersion(this.studentSkillVersionsDir(), merge.skill, `disable ${name}`, occurredAt);
+    await this.recordInternalTestEvent({
+      kind: "skill_feedback",
+      action: "disabled",
+      note: disabledReason,
+      payload: {
+        skillName: name,
+        skillMergeChangeCount: merge.changeSummary.length
+      }
+    });
 
     return this.problemBankState(undefined, `已禁用 Skill：${name}。后续 AI 会把它当作人工纠偏处理。`);
+  }
+
+  private async handleStudentSkillFeedbackRequest(
+    skillName: string,
+    feedbackType: StudentSkillCorrectionType,
+    note?: string
+  ): Promise<Record<string, unknown>> {
+    const name = skillName.trim();
+    if (!name) {
+      throw new Error("请选择要纠偏的学习画像条目。");
+    }
+
+    const occurredAt = new Date().toISOString();
+    const feedbackNote = note?.trim() || defaultSkillFeedbackNote(feedbackType);
+    const profile = await loadStudentProfile(this.profilePath());
+    const studentSkill = await this.loadStudentSkillForProfile(profile);
+    const merge = applyStudentSkillPatch(studentSkill, {
+      source: "sidebar-user",
+      occurredAt,
+      corrections: [
+        {
+          type: feedbackType,
+          target: name,
+          note: feedbackNote,
+          source: "sidebar-user",
+          occurredAt
+        }
+      ]
+    });
+    await saveStudentSkill(this.studentSkillPath(), merge.skill);
+    await archiveStudentSkillVersion(this.studentSkillVersionsDir(), merge.skill, `${feedbackType} ${name}`, occurredAt);
+    await this.recordInternalTestEvent({
+      kind: "skill_feedback",
+      action: feedbackType,
+      note: feedbackNote,
+      payload: {
+        skillName: name,
+        skillMergeChangeCount: merge.changeSummary.length
+      }
+    });
+
+    return this.problemBankState(undefined, studentSkillFeedbackStatus(feedbackType, name));
   }
 
   private async handleRollbackStudentSkillRequest(versionId: string): Promise<Record<string, unknown>> {
@@ -653,6 +760,17 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         note: `rule-engine targetDifficulty=${recommendation.strategy.targetDifficulty}`
       })
     );
+    await this.recordInternalTestEvent({
+      kind: "recommendation",
+      problemKey,
+      problemId: currentProblem.id,
+      platform: currentProblem.platform,
+      painPoints: recommendation.strategy.topPainPoints.map((painPoint) => painPoint.label),
+      payload: {
+        targetDifficulty: recommendation.strategy.targetDifficulty,
+        recommendationCount: recommendation.recommendations.length
+      }
+    });
 
     return {
       type: "problemRecommendation",
@@ -735,6 +853,19 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         model: config.model
       })
     );
+    await this.recordInternalTestEvent({
+      kind: "lesson_report",
+      problemKey,
+      problemId: problem.id,
+      platform: problem.platform,
+      outcome: report.archiveReason,
+      painPoints: report.painPoints.map((painPoint) => painPoint.label),
+      model: config.model,
+      payload: {
+        hintCount: attemptStats.hintCount,
+        remedialExercise: report.remedialExercise.problemId
+      }
+    });
 
     const remainingProblems = await this.loadSavedProblems();
     const selectedKey = remainingProblems[0] ? makeProblemKey(remainingProblems[0]) : "";
@@ -842,6 +973,20 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         model: config.model
       })
     );
+    await this.recordInternalTestEvent({
+      kind: "solution_score",
+      problemKey,
+      problemId: problem.id,
+      platform: problem.platform,
+      outcome: shouldArchive ? "archived" : "active",
+      ojStatus: report.ojResult,
+      learningScore: report.learningScore,
+      painPoints: report.painPoints.map((painPoint) => painPoint.label),
+      model: config.model,
+      payload: {
+        complexityVerdict: report.complexityAssessment.verdict
+      }
+    });
 
     const remainingProblems = await this.loadSavedProblems();
     const selectedKey = shouldArchive && remainingProblems[0] ? makeProblemKey(remainingProblems[0]) : problemKey;
@@ -942,6 +1087,18 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         note: report.verdict
       })
     );
+    await this.recordInternalTestEvent({
+      kind: "optimization_review",
+      problemKey,
+      problemId: archivedProblem.id,
+      platform: archivedProblem.platform,
+      outcome: report.verdict,
+      painPoints: painPoints.map((painPoint) => painPoint.label),
+      model: config.model,
+      payload: {
+        optimizationNeeded: report.optimizationNeeded
+      }
+    });
 
     return {
       type: "optimizationReport",
@@ -1014,6 +1171,16 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       ...input,
       habits: ["Prefer direct student code.", "Return only the immediate local continuation."]
     });
+    await this.recordInternalTestEvent({
+      kind: "autocomplete_event",
+      action: "preview",
+      model: config.model,
+      payload: {
+        language: editor.document.languageId,
+        line: position.line + 1,
+        empty: !suggestion.trim()
+      }
+    });
 
     return {
       type: "autocompletePreview",
@@ -1055,6 +1222,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       studentCode: teachingContext.studentCode,
       studentProfile: teachingContext.studentProfile
     });
+    await this.recordInternalTestEvent({
+      kind: "submission_judge",
+      problemKey,
+      problemId: problem.id,
+      platform: problem.platform,
+      model: config.model,
+      payload: report as unknown as Record<string, unknown>
+    });
 
     return {
       type: "submissionJudge",
@@ -1063,6 +1238,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       report,
       status: `AI 已完成 ${problem.id} 的交题前自检。`
     };
+  }
+
+  private async recordInternalTestEvent(event: InternalTestEventInput): Promise<void> {
+    try {
+      await this.internalRecorder.record(event);
+    } catch (error) {
+      console.warn("Student Autocomplete internal-test record failed", error);
+    }
   }
 
   private async aiRuntimeStatus(): Promise<AiRuntimeStatus> {
@@ -1832,13 +2015,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     </header>
 
     <nav class="pageTabs" aria-label="主界面">
-      <button id="tabProblem" class="tabButton active" type="button">题目张贴</button>
-      <button id="tabAi" class="tabButton" type="button">AI 交互</button>
-      <button id="tabSearch" class="tabButton" type="button">题目寻找</button>
-      <button id="tabSkill" class="tabButton" type="button">技能画像</button>
+      <button id="tabAi" class="tabButton active" type="button">AI 教练</button>
+      <button id="tabProblem" class="tabButton" type="button">题目</button>
+      <button id="tabSkill" class="tabButton" type="button">学习画像</button>
     </nav>
 
-    <section id="problemPage" class="page">
+    <section id="problemPage" class="page" hidden>
       <section id="problemDetail" class="panel detail">
         <p class="empty">导入或粘贴一道题后，这里显示题面、样例和题目来源。</p>
       </section>
@@ -1876,9 +2058,52 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           <button id="saveManual">保存粘贴题目</button>
         </div>
       </details>
+
+      <details class="panel" open>
+        <summary>题号导入 / 搜索</summary>
+        <div class="panelBody">
+          <div class="field">
+            <label for="luoguPid">洛谷题号</label>
+            <div class="row">
+              <input id="luoguPid" placeholder="例如 P5730 / 5730 / B2002，不是题单 ID">
+              <button id="importPid">下载并建文件</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="luoguSearchKeyword">搜索洛谷</label>
+            <input id="luoguSearchKeyword" placeholder="压缩技术 / 二叉树 / 动态规划">
+          </div>
+          <div class="actions">
+            <button id="searchProblems" class="secondary">搜题目</button>
+            <button id="searchProblemSets" class="secondary">搜题单</button>
+          </div>
+          <div id="searchResults" class="searchResults"></div>
+        </div>
+      </details>
+
+      <details class="panel">
+        <summary>辅助：初始路线</summary>
+        <div class="panelBody">
+          <p class="hint">新学生建议先导入诊断题；已经确定要从基础题单开始，可以直接跳过诊断。</p>
+          <div id="starterPresets" class="presetGrid"></div>
+        </div>
+      </details>
+
+      <details class="panel">
+        <summary>导入题单</summary>
+        <div class="panelBody">
+          <div class="field">
+            <label for="luoguProblemSetId">洛谷题单 ID</label>
+            <div class="row">
+              <input id="luoguProblemSetId" placeholder="例如 100">
+              <button id="importProblemSet">导入题单</button>
+            </div>
+          </div>
+        </div>
+      </details>
     </section>
 
-    <section id="aiPage" class="page" hidden>
+    <section id="aiPage" class="page">
       <section class="panel coachPanel">
         <div class="panelHeader">
           <h2>核心交互</h2>
@@ -1974,57 +2199,29 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           </div>
         </div>
       </section>
-    </section>
-
-    <section id="searchPage" class="page" hidden>
-      <details class="panel" open>
-        <summary>题号导入 / 搜索</summary>
-        <div class="panelBody">
-          <div class="field">
-            <label for="luoguPid">洛谷题号</label>
-            <div class="row">
-              <input id="luoguPid" placeholder="例如 P5730 / 5730 / B2002，不是题单 ID">
-              <button id="importPid">下载并建文件</button>
-            </div>
+      <section id="internalTestPanel" class="panel" hidden>
+        <div class="panelHeader">
+          <div>
+            <h2>内测记录版</h2>
+            <span class="mini">本地记录已开启，不会自动上传</span>
           </div>
-          <div class="field">
-            <label for="luoguSearchKeyword">搜索洛谷</label>
-            <input id="luoguSearchKeyword" placeholder="压缩技术 / 二叉树 / 动态规划">
-          </div>
-          <div class="actions">
-            <button id="searchProblems" class="secondary">搜题目</button>
-            <button id="searchProblemSets" class="secondary">搜题单</button>
-          </div>
-          <div id="searchResults" class="searchResults"></div>
+          <button id="copyInternalTestSummary" class="secondary" type="button">复制摘要</button>
         </div>
-      </details>
-
-      <details class="panel">
-        <summary>辅助：初始路线</summary>
         <div class="panelBody">
-          <p class="hint">新学生建议先导入诊断题；已经确定要从基础题单开始，可以直接跳过诊断。</p>
-          <div id="starterPresets" class="presetGrid"></div>
+          <p class="hint">这个面板只会出现在内测包或显式开启环境变量时。记录可能包含题号、模型、痛点、纠偏备注和工作区路径。</p>
+          <div id="internalTestMetrics" class="aiStatusGrid"></div>
+          <p id="internalTestEventsPath" class="mini"></p>
         </div>
-      </details>
-
-      <details class="panel">
-        <summary>导入题单</summary>
-        <div class="panelBody">
-          <div class="field">
-            <label for="luoguProblemSetId">洛谷题单 ID</label>
-            <div class="row">
-              <input id="luoguProblemSetId" placeholder="例如 100">
-              <button id="importProblemSet">导入题单</button>
-            </div>
-          </div>
-        </div>
-      </details>
+      </section>
     </section>
 
     <section id="skillPage" class="page" hidden>
       <section class="panel">
         <div class="panelHeader">
-          <h2>Student Skill 可控画像</h2>
+          <div>
+            <h2>学习画像</h2>
+            <span class="mini">AI 根据你的做题记录形成的可纠偏教学记忆</span>
+          </div>
           <span id="studentSkillRevision" class="mini">未加载</span>
         </div>
         <div id="studentSkillPanel" class="skillPanelBody"></div>
@@ -2051,9 +2248,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       filter: "",
       aiStatus: undefined,
       aiConfig: undefined,
+      internalTesting: undefined,
       studentSkill: undefined,
       studentSkillVersions: [],
-      activePage: "problem",
+      activePage: "ai",
       practiceLanguage: "python",
       responseLanguage: "zh",
       ojVerdict: "UNKNOWN"
@@ -2063,11 +2261,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const stats = document.getElementById("stats");
     const tabProblem = document.getElementById("tabProblem");
     const tabAi = document.getElementById("tabAi");
-    const tabSearch = document.getElementById("tabSearch");
     const tabSkill = document.getElementById("tabSkill");
     const problemPage = document.getElementById("problemPage");
     const aiPage = document.getElementById("aiPage");
-    const searchPage = document.getElementById("searchPage");
     const skillPage = document.getElementById("skillPage");
     const problemCount = document.getElementById("problemCount");
     const problemList = document.getElementById("problemList");
@@ -2093,10 +2289,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const aiChatModel = document.getElementById("aiChatModel");
     const aiAutocompleteModel = document.getElementById("aiAutocompleteModel");
     const aiConfigSavedKey = document.getElementById("aiConfigSavedKey");
+    const internalTestPanel = document.getElementById("internalTestPanel");
+    const internalTestMetrics = document.getElementById("internalTestMetrics");
+    const internalTestEventsPath = document.getElementById("internalTestEventsPath");
 
     tabProblem.addEventListener("click", () => switchPage("problem"));
     tabAi.addEventListener("click", () => switchPage("ai"));
-    tabSearch.addEventListener("click", () => switchPage("search"));
     tabSkill.addEventListener("click", () => switchPage("skill"));
 
     practiceLanguageOptions.forEach((option) => {
@@ -2179,6 +2377,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     document.getElementById("coachCompleted").addEventListener("click", () => requestArchiveProblem("completed"));
     document.getElementById("coachSubmitCheck").addEventListener("click", () => requestSubmissionJudge());
     document.getElementById("coachAutocomplete").addEventListener("click", () => requestAutocompletePreview());
+    document.getElementById("copyInternalTestSummary").addEventListener("click", () => {
+      vscode.postMessage({ command: "copyInternalTestSummary" });
+    });
 
     window.addEventListener("message", (event) => {
       const data = event.data;
@@ -2194,6 +2395,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         state.selectedKey = data.selectedKey || state.selectedKey;
         state.aiStatus = data.aiStatus;
         state.aiConfig = data.aiConfig;
+        state.internalTesting = data.internalTesting;
         state.studentSkill = data.studentSkill;
         state.studentSkillVersions = data.studentSkillVersions ?? [];
         renderAll();
@@ -2257,10 +2459,15 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         switchPage("ai");
         renderOptimizationReport(data.optimizationReport);
       }
+      if (data.type === "internalTestSummary") {
+        state.internalTesting = data.summary;
+        renderInternalTesting();
+        copyInternalTestSummary(data.summary);
+      }
     });
 
     renderStarterPresets();
-    switchPage("problem");
+    switchPage("ai");
     vscode.postMessage({ command: "loadProblems" });
 
     function getKeyword() {
@@ -2271,15 +2478,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       state.activePage = page;
       const isProblem = page === "problem";
       const isAi = page === "ai";
-      const isSearch = page === "search";
       const isSkill = page === "skill";
       problemPage.hidden = !isProblem;
       aiPage.hidden = !isAi;
-      searchPage.hidden = !isSearch;
       skillPage.hidden = !isSkill;
       tabProblem.className = "tabButton" + (isProblem ? " active" : "");
       tabAi.className = "tabButton" + (isAi ? " active" : "");
-      tabSearch.className = "tabButton" + (isSearch ? " active" : "");
       tabSkill.className = "tabButton" + (isSkill ? " active" : "");
     }
 
@@ -2302,6 +2506,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       renderCompletedList();
       renderDetail();
       renderStudentSkill();
+      renderInternalTesting();
     }
 
     function renderAiConfig() {
@@ -2341,6 +2546,72 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         aiAutocompleteFormat.disabled = false;
         aiBaseUrl.placeholder = "https://token-plan-cn.xiaomimimo.com/v1";
       }
+    }
+
+    function renderInternalTesting() {
+      const summary = state.internalTesting;
+      const enabled = Boolean(summary?.enabled);
+      internalTestPanel.hidden = !enabled;
+      internalTestMetrics.innerHTML = "";
+      internalTestEventsPath.textContent = "";
+      if (!enabled) {
+        return;
+      }
+
+      [
+        { label: "本地记录", value: summary.totalEvents + " 条事件" },
+        { label: "覆盖题目", value: summary.problemCount + " 题" },
+        { label: "提示/放弃", value: summary.hintCount + " / " + summary.giveUpCount },
+        { label: "评分/纠偏", value: summary.solutionScoreCount + " / " + summary.skillFeedbackCount },
+        { label: "推荐/补全", value: summary.recommendationCount + " / " + summary.autocompleteRequestCount },
+        { label: "模型", value: (summary.models || []).join(", ") || "未记录" }
+      ].forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "aiStatusItem ready";
+        row.appendChild(textSpan(item.label, "mini"));
+        row.appendChild(textSpan(item.value, "hint"));
+        internalTestMetrics.appendChild(row);
+      });
+      internalTestEventsPath.textContent = "记录文件：" + (summary.eventsPath || "VS Code 全局存储") + "；" + summary.privacyNotice;
+    }
+
+    function copyInternalTestSummary(summary) {
+      const text = formatInternalTestSummary(summary);
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text)
+          .then(() => setStatus("已复制内测记录摘要。"))
+          .catch(() => renderInternalTestSummaryText(text));
+      } else {
+        renderInternalTestSummaryText(text);
+      }
+    }
+
+    function renderInternalTestSummaryText(text) {
+      setStatus("内测摘要已生成，当前环境不能直接写剪贴板。");
+      aiResponse.innerHTML = "";
+      aiResponse.appendChild(textSpan("内测记录摘要", "aiResponseTitle"));
+      aiResponse.appendChild(codeBlock(text));
+    }
+
+    function formatInternalTestSummary(summary) {
+      if (!summary?.enabled) {
+        return "Student Autocomplete Lab 正式版：内测记录未开启。";
+      }
+
+      return [
+        "Student Autocomplete Lab 内测记录版",
+        "事件数：" + summary.totalEvents,
+        "题目数：" + summary.problemCount,
+        "提示次数：" + summary.hintCount,
+        "放弃/讲解次数：" + summary.giveUpCount,
+        "学习评分次数：" + summary.solutionScoreCount,
+        "用户纠偏次数：" + summary.skillFeedbackCount,
+        "推荐次数：" + summary.recommendationCount,
+        "补全请求次数：" + summary.autocompleteRequestCount,
+        "模型：" + ((summary.models || []).join(", ") || "未记录"),
+        "记录文件：" + (summary.eventsPath || "VS Code 全局存储"),
+        summary.privacyNotice
+      ].join("\\n");
     }
 
     function saveAiConfig() {
@@ -2558,6 +2829,31 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       });
     }
 
+    function requestStudentSkillFeedback(skillName, feedbackType) {
+      const name = String(skillName || "").trim();
+      if (!name) {
+        setStatus("请选择要纠偏的学习画像条目。", "error");
+        return;
+      }
+
+      const isWrong = feedbackType === "diagnosis_wrong";
+      const promptText = isWrong
+        ? "为什么这条判断不准？这会禁用该判断，并作为后续 AI 的人工纠偏。"
+        : "这条判断哪里有帮助？这会作为正向证据进入学习画像。";
+      const note = prompt(promptText, isWrong ? "这条判断不符合本题真实卡点。" : "这条判断对我有帮助。");
+      if (note === null) {
+        return;
+      }
+
+      setStatus(isWrong ? "正在记录误判纠偏..." : "正在记录有帮助反馈...");
+      vscode.postMessage({
+        command: "recordStudentSkillFeedback",
+        skillName: name,
+        feedbackType,
+        note
+      });
+    }
+
     function requestRollbackStudentSkill(versionId) {
       const id = String(versionId || "").trim();
       if (!id) {
@@ -2697,6 +2993,43 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       if (entry.status !== "disabled") {
         const actions = document.createElement("div");
         actions.className = "row";
+        const wrongButton = document.createElement("button");
+        wrongButton.className = "secondary";
+        wrongButton.type = "button";
+        wrongButton.textContent = "这条不准";
+        wrongButton.addEventListener("click", () => requestStudentSkillFeedback(entry.name, "diagnosis_wrong"));
+        actions.appendChild(wrongButton);
+
+        const helpfulButton = document.createElement("button");
+        helpfulButton.className = "secondary";
+        helpfulButton.type = "button";
+        helpfulButton.textContent = "有帮助";
+        helpfulButton.addEventListener("click", () => requestStudentSkillFeedback(entry.name, "diagnosis_helpful"));
+        actions.appendChild(helpfulButton);
+
+        if (latestExample) {
+          const evidenceButton = document.createElement("button");
+          evidenceButton.className = "secondary";
+          evidenceButton.type = "button";
+          evidenceButton.textContent = "查看证据";
+          evidenceButton.addEventListener("click", () =>
+            alert(
+              [
+                "最近证据",
+                latestExample.problemId ? "题目：" + latestExample.problemId : "",
+                latestExample.topic ? "主题：" + latestExample.topic : "",
+                "来源：" + latestExample.source,
+                "时间：" + formatDateTime(latestExample.occurredAt),
+                "",
+                latestExample.evidence || "暂无证据文本。"
+              ]
+                .filter(Boolean)
+                .join("\\n")
+            )
+          );
+          actions.appendChild(evidenceButton);
+        }
+
         const disableButton = document.createElement("button");
         disableButton.className = "secondary";
         disableButton.type = "button";
@@ -2921,9 +3254,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     function renderSubmissionJudge(data) {
       const report = data.report || {};
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("交题前自检 · " + (data.model || "unknown model"), "aiResponseTitle"));
+      aiResponse.appendChild(textSpan("交题前自检 · AI 估计 · " + (data.model || "unknown model"), "aiResponseTitle"));
       aiResponse.appendChild(responseBlock(verdictLabel(report.verdict), report.summary || "没有摘要。"));
-      aiResponse.appendChild(textSpan("置信度：" + Math.round((report.confidence || 0) * 100) + "%", "mini"));
+      aiResponse.appendChild(textSpan("AI 估计，不代表官方 OJ；置信度：" + Math.round((report.confidence || 0) * 100) + "%", "mini"));
 
       if (report.issues?.length) {
         aiResponse.appendChild(textSpan("主要风险", "responseSectionTitle"));
@@ -3718,6 +4051,30 @@ function mergeRequestPurpose(basePurpose: string, studentRequest: string | undef
   }
 
   return `${basePurpose}\n学生额外输入：${trimmedRequest}`;
+}
+
+function defaultSkillFeedbackNote(feedbackType: StudentSkillCorrectionType): string {
+  if (feedbackType === "diagnosis_wrong") {
+    return "用户认为这条学习画像判断不符合当前真实卡点。";
+  }
+
+  if (feedbackType === "diagnosis_helpful") {
+    return "用户认为这条学习画像判断对当前学习有帮助。";
+  }
+
+  return "用户手动记录了一条学习画像备注。";
+}
+
+function studentSkillFeedbackStatus(feedbackType: StudentSkillCorrectionType, name: string): string {
+  if (feedbackType === "diagnosis_wrong") {
+    return `已记录「${name}」为误判，并把它作为后续 AI 的人工纠偏。`;
+  }
+
+  if (feedbackType === "diagnosis_helpful") {
+    return `已记录「${name}」有帮助，后续 AI 会更信任这条画像证据。`;
+  }
+
+  return `已记录「${name}」的学习画像备注。`;
 }
 
 function summarizePreviousLearning(problem: CompletedProblemRecord): string {

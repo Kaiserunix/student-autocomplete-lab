@@ -52,6 +52,7 @@ export function buildTeachingDiagnosisPrompt(context: TeachingDiagnosisContext):
     `- Prefer these skill_update.candidate values when they fit: ${PREFERRED_SKILL_CANDIDATES.join(", ")}.`,
     "- The hint should point to the current stuck spot, not solve the whole problem.",
     "- Skill updates are candidates, not active rules.",
+    "- If student_profile.recentCorrections contains diagnosis_wrong for a target skill, treat it as high-priority human correction and do not repeat that same diagnosis unless current code evidence is overwhelming.",
     "- If Output language is Simplified Chinese, write hint, evidence, skill_update.reason, skill_update.rules, and recommendation.reason in Simplified Chinese.",
     "",
     "problem:",

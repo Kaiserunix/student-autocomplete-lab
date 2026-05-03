@@ -274,7 +274,7 @@ export function applyStudentSkillPatch(skill: StudentSkill, patch: StudentSkillP
   }
 
   for (const correction of patch.corrections ?? []) {
-    next.correctionLog.push(withCorrectionId(correction, next.correctionLog.length));
+    applyCorrection(next, patch, correction);
     changeSummary.push(`correction:${correction.type}`);
   }
 
@@ -301,8 +301,15 @@ export function studentSkillSummaryForTeaching(skill: StudentSkill): TeachingStu
     .filter((entry) => entry.status === "active")
     .map((entry) => entry.name)
     .sort();
+  const recentCorrections = [...skill.correctionLog]
+    .slice(-5)
+    .map((entry) => ({
+      type: entry.type,
+      target: entry.target,
+      note: entry.note
+    }));
 
-  return { painPointCounts, activeSkills };
+  return { painPointCounts, activeSkills, recentCorrections };
 }
 
 export function buildAutocompleteSkillContext(skill: StudentSkill, language: string): AutocompleteSkillContext {
@@ -442,6 +449,79 @@ function applyTransferPatch(
     estimatedHintReduction: Math.max(previous.estimatedHintReduction, transferPatch.estimatedHintReduction ?? 0),
     lastSeen: patch.occurredAt
   };
+}
+
+function applyCorrection(skill: StudentSkill, patch: StudentSkillPatch, correction: StudentSkillCorrection): void {
+  const recorded = withCorrectionId(correction, skill.correctionLog.length);
+  skill.correctionLog.push(recorded);
+
+  if (recorded.type === "diagnosis_wrong" && recorded.target) {
+    markSkillDiagnosisWrong(skill, patch, recorded.target, recorded.note, recorded.source);
+    return;
+  }
+
+  if (recorded.type === "diagnosis_helpful" && recorded.target) {
+    const previous = skill.skills[recorded.target];
+    if (!previous || previous.status === "disabled") {
+      return;
+    }
+
+    skill.skills[recorded.target] = {
+      ...previous,
+      score: roundScore(previous.score + 0.25),
+      examples: appendEvidence(previous.examples, {
+        problemId: patch.problemId,
+        topic: patch.topic,
+        evidence: recorded.note,
+        source: recorded.source,
+        occurredAt: recorded.occurredAt
+      }),
+      lastSeen: recorded.occurredAt
+    };
+  }
+}
+
+function markSkillDiagnosisWrong(
+  skill: StudentSkill,
+  patch: StudentSkillPatch,
+  target: string,
+  note: string,
+  source: string
+): void {
+  const previous = skill.skills[target];
+  if (!previous) {
+    return;
+  }
+
+  skill.skills[target] = {
+    ...previous,
+    status: "disabled",
+    disabledReason: `用户标记这条判断不准：${note}`,
+    score: Math.max(0, roundScore(previous.score - 1)),
+    lastSeen: patch.occurredAt
+  };
+
+  for (const painPoint of previous.sourcePainPoints) {
+    const previousPainPoint = skill.errorModel[painPoint] ?? {
+      count: 0,
+      score: 0,
+      lastSeen: patch.occurredAt,
+      examples: [],
+      counterexamples: []
+    };
+
+    skill.errorModel[painPoint] = {
+      ...previousPainPoint,
+      lastSeen: patch.occurredAt,
+      counterexamples: appendEvidence(previousPainPoint.counterexamples, {
+        problemId: patch.problemId,
+        topic: patch.topic,
+        evidence: note,
+        source,
+        occurredAt: patch.occurredAt
+      })
+    };
+  }
 }
 
 function disableSkill(skill: StudentSkill, patch: StudentSkillPatch, name: string, reason: string): void {

@@ -122,4 +122,86 @@ describe("teaching taxonomy", () => {
 
     expect(normalized.skillUpdate?.candidate).toBe("numeric-geometry-formatting");
   });
+
+  test("prefers binary-tree depth skill over generic recursion when the problem context is tree depth", () => {
+    const normalized = normalizeTeachingDiagnosisReport(
+      {
+        painPoints: [
+          {
+            label: "recursion_base_case",
+            confidence: 0.92,
+            evidence: "The empty child is counted as depth 1."
+          }
+        ],
+        hint: "空孩子的深度应为 0。",
+        skillUpdate: {
+          candidate: "recursion-base-case-pattern",
+          reason: "MiMo returned the broad recursion skill.",
+          rules: ["Define the empty subtree before adding the current node."]
+        }
+      },
+      {
+        currentProblemId: "P4913",
+        problemSummary: "Recursive base cases and binary tree depth definitions with numbered children."
+      }
+    );
+
+    expect(normalized.skillUpdate?.candidate).toBe("binary-tree-depth-numbered-children");
+  });
+
+  test("keeps generic recursion skill for non-tree recursion contexts", () => {
+    const normalized = normalizeTeachingDiagnosisReport(
+      {
+        painPoints: [
+          {
+            label: "recursion_base_case",
+            confidence: 0.9,
+            evidence: "The Fibonacci recursion never reaches a base case for n=0."
+          }
+        ],
+        hint: "先补递归出口。",
+        skillUpdate: {
+          candidate: "recursion-base-case-pattern",
+          reason: "Generic recursion base case.",
+          rules: ["Write the base cases before the recursive call."]
+        }
+      },
+      {
+        problemSummary: "Fibonacci recursion and recurrence relation practice."
+      }
+    );
+
+    expect(normalized.skillUpdate?.candidate).toBe("recursion-base-case-pattern");
+  });
+
+  test("keeps traversal reconstruction more specific than tree-depth context when traversal pain points are present", () => {
+    const normalized = normalizeTeachingDiagnosisReport(
+      {
+        painPoints: [
+          {
+            label: "traversal_order_confusion",
+            confidence: 0.9,
+            evidence: "The solution returns left + right + root."
+          },
+          {
+            label: "recursion_base_case",
+            confidence: 0.7,
+            evidence: "The recursive split also needs a base case."
+          }
+        ],
+        hint: "先修输出根节点的位置。",
+        skillUpdate: {
+          candidate: "recursion-base-case-pattern",
+          reason: "MiMo picked the broad recursion label.",
+          rules: ["Preorder emits root before children."]
+        }
+      },
+      {
+        currentProblemId: "P1030",
+        problemSummary: "Binary tree traversal reconstruction; tree depth is not the target skill here."
+      }
+    );
+
+    expect(normalized.skillUpdate?.candidate).toBe("binary-tree-traversal-reconstruction");
+  });
 });

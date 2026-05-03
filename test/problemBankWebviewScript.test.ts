@@ -17,15 +17,22 @@ describe("problem bank webview script", () => {
     expect(source).toContain('renderArchivedProblem(data.archivedProblem)');
   });
 
-  test("separates problem paste, AI interaction, and problem search into three UI layers", async () => {
+  test("makes the AI coach the first screen and keeps three Chinese UI layers", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
+    expect(source).toContain('activePage: "ai"');
+    expect(source).toContain('switchPage("ai")');
     expect(source).toContain('id="tabProblem"');
     expect(source).toContain('id="tabAi"');
-    expect(source).toContain('id="tabSearch"');
+    expect(source).not.toContain('id="tabSearch"');
     expect(source).toContain('id="problemPage"');
     expect(source).toContain('id="aiPage"');
-    expect(source).toContain('id="searchPage"');
+    expect(source).not.toContain('id="searchPage"');
+    expect(source).toContain('id="tabSkill"');
+    expect(source).toContain(">AI 教练<");
+    expect(source).toContain(">题目<");
+    expect(source).toContain(">学习画像<");
+    expect(source).toContain("AI 根据你的做题记录形成的可纠偏教学记忆");
     expect(source).toContain('id="coachQuestion"');
     expect(source).toContain('id="coachOjVerdict"');
     expect(source).toContain('id="aiConfigMode"');
@@ -34,6 +41,7 @@ describe("problem bank webview script", () => {
     expect(source).toContain('command: "requestOptimizationReview"');
     expect(source).toContain("renderOptimizationReport(data.optimizationReport)");
     expect(source).toContain("优化复盘");
+    expect(source).toContain("AI 估计，不代表官方 OJ");
     expect(source).toContain('command: "requestSolutionScore"');
     expect(source).toContain("studentRequest: coachQuestion.value.trim()");
     expect(source).not.toContain('command: "requestSolutionScore",\n        problemKey: keyOf(problem),\n        studentRequest: coachQuestion.value.trim(),\n        ojVerdict: {\n          status: "AC"\n        }');
@@ -58,6 +66,10 @@ describe("problem bank webview script", () => {
     expect(source).toContain('id="skillPage"');
     expect(source).toContain('id="studentSkillPanel"');
     expect(source).toContain('id="studentSkillVersions"');
+    expect(source).toContain("这条不准");
+    expect(source).toContain("查看证据");
+    expect(source).toContain('command: "recordStudentSkillFeedback"');
+    expect(source).toContain("handleStudentSkillFeedbackRequest");
     expect(source).toContain("renderStudentSkill()");
     expect(source).toContain('command: "disableStudentSkill"');
     expect(source).toContain('command: "rollbackStudentSkill"');
@@ -75,5 +87,16 @@ describe("problem bank webview script", () => {
     expect(source).toContain('type: "problemRecommendation"');
     expect(source).toContain("renderProblemRecommendation(data)");
     expect(source).toContain("规则推荐");
+  });
+
+  test("exposes internal-test recording only as a clearly labeled local panel", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain('id="internalTestPanel"');
+    expect(source).toContain("内测记录版");
+    expect(source).toContain("internalTesting");
+    expect(source).toContain('command: "copyInternalTestSummary"');
+    expect(source).toContain("renderInternalTesting()");
+    expect(source).toContain("本地记录");
   });
 });

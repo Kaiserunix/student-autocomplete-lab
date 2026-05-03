@@ -156,6 +156,50 @@ describe("recommendation engine", () => {
     expect(result.recommendations[0].problem.id).toBe("P1161");
     expect(result.recommendations[0].difficultySignal).toContain("目标难度 1");
   });
+
+  test("does not immediately recommend archived or abandoned problems again", () => {
+    const profile = studentProfile({
+      output_order: { count: 3, score: 2.5 }
+    });
+
+    const result = recommendNextProblems({
+      profile,
+      attemptEvents: [
+        {
+          eventId: "archive-1",
+          problemKey: "luogu:P1427",
+          problemId: "P1427",
+          platform: "luogu",
+          kind: "archived",
+          outcome: "abandoned",
+          occurredAt: "2026-05-01T00:00:00.000Z",
+          painPoints: ["output_order"]
+        }
+      ],
+      candidates: [
+        buildRecommendationCandidate({
+          platform: "luogu",
+          id: "P1427",
+          title: "小鱼的数字游戏",
+          difficulty: 1,
+          tags: ["array", "output-order"],
+          targetPainPoints: ["output_order"]
+        }),
+        buildRecommendationCandidate({
+          platform: "luogu",
+          id: "P5727",
+          title: "冰雹猜想",
+          difficulty: 1,
+          tags: ["simulation", "output-order"],
+          targetPainPoints: ["output_order"]
+        })
+      ],
+      limit: 2
+    });
+
+    expect(result.strategy.excludedProblemIds).toContain("P1427");
+    expect(result.recommendations.map((item) => item.problem.id)).toEqual(["P5727"]);
+  });
 });
 
 function studentProfile(

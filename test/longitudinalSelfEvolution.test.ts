@@ -10,10 +10,21 @@ describe("longitudinal self-evolution", () => {
     const samples = generateLongitudinalSelfEvolutionSamples(1000);
 
     expect(samples).toHaveLength(1000);
+    expect(new Set(samples.map((sample) => sample.problemId)).size).toBe(200);
     expect(samples[0]).toMatchObject({
       sampleId: "long-0001",
       stage: 1,
-      difficulty: 1
+      difficulty: 1,
+      expectedOjStatus: "WA",
+      expectedPrimaryPainPoint: expect.any(String),
+      expectedSkillCandidate: expect.any(String),
+      bruteForceAllowed: expect.any(Boolean),
+      recommendationRange: expect.any(Array)
+    });
+    expect(samples[0].minimumCounterexample).toMatchObject({
+      input: expect.any(String),
+      expectedOutput: expect.any(String),
+      actualOutput: expect.any(String)
     });
     expect(samples.at(-1)).toMatchObject({
       sampleId: "long-1000",
@@ -49,5 +60,46 @@ describe("longitudinal self-evolution", () => {
     expect(result.steps.some((step) => step.skillCandidateHit)).toBe(true);
     expect(Object.keys(result.finalStudentSkill.skills).length).toBeGreaterThan(0);
     expect(result.usage.totalTokens).toBe(0);
+  });
+
+  test("normalizes broad recursion skill into binary-tree depth skill before scoring and Student Skill merge", async () => {
+    const sample = generateLongitudinalSelfEvolutionSamples(40)[5];
+
+    const result = await runLongitudinalSelfEvolutionBatch([sample], {
+      studentId: "longitudinal-depth-specificity",
+      occurredAt: "2026-05-01T00:00:00.000Z",
+      diagnose: () => ({
+        painPoints: [
+          {
+            label: "recursion_base_case",
+            confidence: 0.92,
+            evidence: "Empty child depth is counted incorrectly."
+          }
+        ],
+        hint: "先定义空孩子深度。",
+        skillUpdate: {
+          candidate: "recursion-base-case-pattern",
+          reason: "MiMo selected the broad recursion skill.",
+          rules: ["Empty child contributes 0; real node contributes 1."]
+        },
+        recommendation: {
+          problemId: "P4913",
+          reason: "Practice tree depth on numbered children."
+        }
+      })
+    });
+
+    expect(sample).toMatchObject({
+      problemId: "SIM-0002",
+      expectedSkillCandidate: "binary-tree-depth-numbered-children"
+    });
+    expect(result.steps[0]).toMatchObject({
+      actualSkillCandidate: "binary-tree-depth-numbered-children",
+      skillCandidateHit: true
+    });
+    expect(result.finalStudentSkill.skills["binary-tree-depth-numbered-children"]).toMatchObject({
+      name: "binary-tree-depth-numbered-children"
+    });
+    expect(result.finalStudentSkill.skills["recursion-base-case-pattern"]).toBeUndefined();
   });
 });

@@ -38,7 +38,8 @@ export async function requestMimoTeachingDiagnosis(
 
   try {
     return normalizeTeachingDiagnosisReport(parseTeachingDiagnosisReport(text), {
-      currentProblemId: context.problem.id
+      currentProblemId: context.problem.id,
+      problemSummary: context.problem.summary
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);

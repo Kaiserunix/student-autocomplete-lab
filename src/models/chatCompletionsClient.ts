@@ -1,3 +1,6 @@
+import { appendFile, mkdir } from "node:fs/promises";
+import * as path from "node:path";
+
 export interface ChatCompletionProviderConfig {
   baseUrl: string;
   apiKey: string;
@@ -18,6 +21,7 @@ export interface ChatCompletionRequest {
   temperature: number;
   responseFormat?: { type: "json_object" };
   onUsage?: ChatCompletionUsageSink;
+  usageLogPath?: string | false;
 }
 
 export interface ChatCompletionUsage {
@@ -97,7 +101,9 @@ export async function requestChatCompletionText(
     throw new Error(`Chat completion request failed: ${message}`);
   }
 
-  emitUsage(request.onUsage, normalizeOpenAiUsage(payload.usage));
+  const usage = normalizeOpenAiUsage(payload.usage);
+  emitUsage(request.onUsage, usage);
+  await persistRuntimeUsage(config, usage, request.usageLogPath);
 
   const text = payload.choices?.[0]?.message?.content;
   if (typeof text !== "string") {
@@ -135,7 +141,9 @@ async function requestAnthropicMessageText(
     throw new Error(`Anthropic messages request failed: ${message}`);
   }
 
-  emitUsage(request.onUsage, normalizeAnthropicUsage(payload.usage));
+  const usage = normalizeAnthropicUsage(payload.usage);
+  emitUsage(request.onUsage, usage);
+  await persistRuntimeUsage(config, usage, request.usageLogPath);
 
   const text = payload.content?.find((block) => block.type === "text" && typeof block.text === "string")?.text;
   if (typeof text !== "string") {
@@ -166,6 +174,43 @@ function splitSystemMessages(messages: ChatMessage[]): { system: string | undefi
 function emitUsage(onUsage: ChatCompletionUsageSink | undefined, usage: ChatCompletionUsage | undefined): void {
   if (onUsage && usage) {
     onUsage(usage);
+  }
+}
+
+async function persistRuntimeUsage(
+  config: ChatCompletionProviderConfig,
+  usage: ChatCompletionUsage | undefined,
+  usageLogPath: string | false | undefined
+): Promise<void> {
+  if (!usage || usageLogPath === false) {
+    return;
+  }
+
+  const filePath = path.resolve(process.cwd(), usageLogPath ?? path.join(".runtime", "chat-completions-usage.jsonl"));
+  const event = {
+    schemaVersion: 1,
+    occurredAt: new Date().toISOString(),
+    providerFormat: config.format ?? "openai-chat",
+    mode: config.mode,
+    model: config.model,
+    baseUrl: sanitizeBaseUrl(config.baseUrl),
+    usage
+  };
+
+  try {
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await appendFile(filePath, `${JSON.stringify(event)}\n`, "utf8");
+  } catch {
+    // Usage accounting should never turn a successful model response into a failed teaching request.
+  }
+}
+
+function sanitizeBaseUrl(baseUrl: string): string {
+  try {
+    const parsed = new URL(baseUrl);
+    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return baseUrl.replace(/[?&]key=[^&]+/gi, "");
   }
 }
 

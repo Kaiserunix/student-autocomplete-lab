@@ -29,7 +29,14 @@ describe("teaching diagnosis prompt", () => {
         painPointCounts: {
           subtree_boundary: 2
         },
-        activeSkills: ["binary-tree-traversal-reconstruction"]
+        activeSkills: ["binary-tree-traversal-reconstruction"],
+        recentCorrections: [
+          {
+            type: "diagnosis_wrong",
+            target: "python-loop-boundary-check",
+            note: "这次不是循环边界。"
+          }
+        ]
       }
     });
 
@@ -50,6 +57,9 @@ describe("teaching diagnosis prompt", () => {
     expect(prompt).toContain("prefer graph_adjacency_model");
     expect(prompt).toContain("binary-tree-traversal-reconstruction");
     expect(prompt).toContain("ordered-multiset-semantics");
+    expect(prompt).toContain("recentCorrections");
+    expect(prompt).toContain("diagnosis_wrong");
+    expect(prompt).toContain("high-priority human correction");
   });
 
   test("can explicitly request Simplified Chinese JSON string values", () => {

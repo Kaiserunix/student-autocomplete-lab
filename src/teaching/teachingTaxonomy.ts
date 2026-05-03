@@ -76,6 +76,7 @@ export const PREFERRED_SKILL_CANDIDATES = [
 
 export interface TeachingTaxonomyNormalizeOptions {
   currentProblemId?: string;
+  problemSummary?: string;
 }
 
 const REUSABLE_SKILL_BY_PAIN_POINT: Record<string, string> = {
@@ -232,6 +233,7 @@ const FALLBACK_RECOMMENDATION_REASONS: Record<string, string> = {
 };
 
 const BROAD_PAIN_POINTS_SHOULD_STAY_CURRENT = new Set(["output_format", "numeric_input_type", "distance_formula", "needs_teacher_review"]);
+const TREE_TRAVERSAL_PAIN_POINTS = new Set(["traversal_order_confusion", "root_identification", "subtree_boundary"]);
 
 export function normalizeTeachingDiagnosisReport(
   report: TeachingDiagnosisReport,
@@ -256,7 +258,7 @@ export function normalizeTeachingDiagnosisReport(
     skillUpdate: report.skillUpdate
       ? {
           ...report.skillUpdate,
-          candidate: normalizeSkillCandidate(report.skillUpdate.candidate, topPainPoint)
+          candidate: normalizeSkillCandidate(report.skillUpdate.candidate, painPoints.map((painPoint) => painPoint.label), options)
         }
       : undefined,
     recommendation
@@ -272,13 +274,26 @@ export function normalizePainPointLabel(label: string): string {
   return PAIN_POINT_ALIASES[normalized] ?? "needs_teacher_review";
 }
 
-function normalizeSkillCandidate(candidate: string, topPainPoint?: string): string {
+function normalizeSkillCandidate(
+  candidate: string,
+  painPoints: string[],
+  options: TeachingTaxonomyNormalizeOptions
+): string {
   const normalized = candidate.trim().toLowerCase().replace(/[-\s]+/g, "_");
   const normalizedPainPoint = normalizePainPointLabel(normalized);
   const aliased = SKILL_ALIASES[normalized];
+  const topPainPoint = painPoints[0];
 
   if (aliased) {
     return aliased;
+  }
+
+  if (hasTraversalPainPoint(painPoints)) {
+    return "binary-tree-traversal-reconstruction";
+  }
+
+  if (shouldPreferBinaryTreeDepthSkill(candidate, normalized, normalizedPainPoint, painPoints, options)) {
+    return "binary-tree-depth-numbered-children";
   }
 
   if (topPainPoint && isPainPointLikeCandidate(normalized) && REUSABLE_SKILL_BY_PAIN_POINT[topPainPoint]) {
@@ -298,6 +313,49 @@ function normalizeSkillCandidate(candidate: string, topPainPoint?: string): stri
   }
 
   return candidate.trim();
+}
+
+function hasTraversalPainPoint(painPoints: string[]): boolean {
+  return painPoints.some((painPoint) => TREE_TRAVERSAL_PAIN_POINTS.has(painPoint));
+}
+
+function shouldPreferBinaryTreeDepthSkill(
+  candidate: string,
+  normalizedCandidate: string,
+  normalizedPainPoint: string,
+  painPoints: string[],
+  options: TeachingTaxonomyNormalizeOptions
+): boolean {
+  if (!isBinaryTreeDepthContext(options)) {
+    return false;
+  }
+
+  const candidateIsBroadRecursion =
+    candidate.trim() === "recursion-base-case-pattern" ||
+    normalizedCandidate === "recursion_base_case_pattern" ||
+    normalizedPainPoint === "recursion_base_case";
+  const painPointsAreDepthRelated =
+    painPoints.includes("recursion_base_case") || painPoints.includes("depth_definition") || painPoints.includes("child_indexing");
+
+  return candidateIsBroadRecursion && painPointsAreDepthRelated;
+}
+
+function isBinaryTreeDepthContext(options: TeachingTaxonomyNormalizeOptions): boolean {
+  const haystack = `${options.currentProblemId ?? ""} ${options.problemSummary ?? ""}`.toLowerCase();
+  if (!haystack) {
+    return false;
+  }
+
+  return (
+    haystack.includes("binary tree depth") ||
+    haystack.includes("tree depth definitions") ||
+    haystack.includes("numbered child") ||
+    haystack.includes("numbered children") ||
+    haystack.includes("p4913") ||
+    haystack.includes("p3884") ||
+    (haystack.includes("二叉树") && haystack.includes("深度")) ||
+    (haystack.includes("tree") && haystack.includes("depth") && haystack.includes("children"))
+  );
 }
 
 function isPainPointLikeCandidate(normalizedCandidate: string): boolean {

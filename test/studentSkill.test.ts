@@ -19,7 +19,8 @@ describe("student skill", () => {
     expect(skill.teachingPreferences.responseLanguage).toBe("zh-CN");
     expect(studentSkillSummaryForTeaching(skill)).toEqual({
       painPointCounts: {},
-      activeSkills: []
+      activeSkills: [],
+      recentCorrections: []
     });
   });
 
@@ -108,6 +109,71 @@ describe("student skill", () => {
         resolution: "kept existing disabled skill"
       }
     ]);
+  });
+
+  test("records a wrong-diagnosis correction and prevents silent reactivation", () => {
+    let skill = createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z");
+    skill = applyStudentSkillPatch(skill, {
+      source: "mimo-v2.5",
+      occurredAt: "2026-05-01T00:01:00.000Z",
+      problemId: "P1427",
+      skills: [
+        {
+          name: "python-loop-boundary-check",
+          status: "active",
+          reason: "Repeated loop misses.",
+          rules: ["Write first and last valid indexes before coding the loop."],
+          sourcePainPoints: ["loop_boundary"],
+          confidence: 0.95
+        }
+      ]
+    }).skill;
+
+    const corrected = applyStudentSkillPatch(skill, {
+      source: "sidebar-user",
+      occurredAt: "2026-05-01T00:02:00.000Z",
+      corrections: [
+        {
+          type: "diagnosis_wrong",
+          target: "python-loop-boundary-check",
+          note: "这次不是循环边界，而是输出顺序。",
+          source: "sidebar-user",
+          occurredAt: "2026-05-01T00:02:00.000Z"
+        }
+      ]
+    }).skill;
+
+    expect(corrected.skills["python-loop-boundary-check"]).toMatchObject({
+      status: "disabled",
+      disabledReason: "用户标记这条判断不准：这次不是循环边界，而是输出顺序。"
+    });
+    expect(corrected.hardRules.disabledSkills).toContain("python-loop-boundary-check");
+    expect(corrected.errorModel.loop_boundary.counterexamples[0]).toMatchObject({
+      evidence: "这次不是循环边界，而是输出顺序。",
+      source: "sidebar-user"
+    });
+    expect(corrected.correctionLog.at(-1)).toMatchObject({
+      type: "diagnosis_wrong",
+      target: "python-loop-boundary-check"
+    });
+
+    const reactivation = applyStudentSkillPatch(corrected, {
+      source: "mimo-v2.5",
+      occurredAt: "2026-05-01T00:03:00.000Z",
+      skills: [
+        {
+          name: "python-loop-boundary-check",
+          status: "active",
+          reason: "The model saw another loop issue.",
+          rules: ["Write bounds first."],
+          sourcePainPoints: ["loop_boundary"],
+          confidence: 0.9
+        }
+      ]
+    });
+
+    expect(reactivation.skill.skills["python-loop-boundary-check"].status).toBe("disabled");
+    expect(reactivation.conflicts[0]?.resolution).toBe("kept existing disabled skill");
   });
 
   test("builds an autocomplete context that excludes teacher-only evidence", () => {

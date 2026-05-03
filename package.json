@@ -1,8 +1,8 @@
 {
   "name": "student-autocomplete-lab",
   "displayName": "Student Autocomplete Lab",
-  "description": "A student-friendly VS Code autocomplete and problem-note prototype.",
-  "version": "0.0.1",
+  "description": "A Chinese-first VS Code algorithm coach with safe autocomplete and inspectable learning skills.",
+  "version": "0.1.0-beta.1",
   "publisher": "kaiserunix",
   "private": false,
   "license": "MIT",
@@ -89,6 +89,9 @@
     "trial:mimo-journey": "npm run compile && node dist/src/cli/mimoJourneyTrial.js",
     "trial:mimo": "npm run compile && node dist/src/cli/mimoAutocompleteTrial.js",
     "mcp:problem-search": "node dist/src/mcp/problemSearchServer.js",
+    "package:beta": "npm run compile && npx --yes @vscode/vsce package --no-dependencies --out .runtime/student-autocomplete-lab-0.1.0-beta.1.vsix",
+    "package:internal": "npm run compile && node scripts/packageInternalVsix.js",
+    "internal:test-report": "npm run compile && node dist/src/cli/internalTestReport.js",
     "test": "vitest run",
     "watch": "tsc -w -p ."
   },

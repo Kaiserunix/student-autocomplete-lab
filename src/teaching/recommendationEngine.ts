@@ -354,7 +354,13 @@ function collectExcludedProblemIds(currentProblemId: string | undefined, events:
   }
 
   for (const event of events) {
-    if (event.outcome === "ac" || event.outcome === "completed" || event.outcome === "removed") {
+    if (
+      event.outcome === "ac" ||
+      event.outcome === "completed" ||
+      event.outcome === "removed" ||
+      event.outcome === "abandoned" ||
+      event.outcome === "revealed"
+    ) {
       excluded.add(event.problemId.toUpperCase());
     }
   }
