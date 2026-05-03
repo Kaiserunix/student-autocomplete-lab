@@ -8,6 +8,8 @@ describe("internal packaging script", () => {
     expect(source).toContain("student-autocomplete-lab-internal");
     expect(source).toContain("studentAutocompleteInternal");
     expect(source).toContain("内测记录版");
+    expect(source).toContain("renameConfigurationProperties");
+    expect(source).toContain("studentAutocompleteInternal.ai");
     expect(source).toContain(".runtime");
     expect(source).not.toMatch(/\bgit\s+push\b/);
     expect(source).not.toMatch(/\bvsce\s+publish\b/);
@@ -23,6 +25,8 @@ describe("beta release packaging script", () => {
     expect(source).toContain("studentAutocompleteBetaRelease");
     expect(source).toContain("README.release.md");
     expect(source).toContain("tsconfig.release.json");
+    expect(source).toContain("renameConfigurationProperties");
+    expect(source).toContain("studentAutocompleteBetaRelease.ai");
     expect(source).toContain("internalTesting");
     expect(source).toContain("cli");
     expect(source).toContain(".js.map");

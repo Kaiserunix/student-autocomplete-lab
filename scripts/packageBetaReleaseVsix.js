@@ -11,6 +11,7 @@ const outPath = path.join(runtimeRoot, "student-autocomplete-lab-0.1.0-beta.1-re
 const releaseName = "student-autocomplete-lab-beta-release";
 const releaseViewPrefix = "studentAutocompleteBetaRelease";
 const releaseDisplayName = "Student Autocomplete Lab Beta Release";
+const releaseSettingsPrefix = "studentAutocompleteBetaRelease.ai";
 
 const allowedTopLevelRuntime = [
   "extension.js",
@@ -120,6 +121,11 @@ async function writeReleasePackageJson() {
       name: "做题陪练 Release"
     }))
   };
+  packageJson.contributes.configuration = renameConfigurationProperties(
+    packageJson.contributes.configuration,
+    "AI 做题陪练 Release",
+    releaseSettingsPrefix
+  );
   await writeFile(path.join(stagingRoot, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
 }
 
@@ -165,6 +171,25 @@ function renameContributionId(value) {
   return String(value)
     .replaceAll("studentAutocomplete.problemBankWebview", `${releaseViewPrefix}.problemBankWebview`)
     .replaceAll("studentAutocomplete", releaseViewPrefix);
+}
+
+function renameConfigurationProperties(configuration, title, expectedPrefix) {
+  if (!configuration?.properties) {
+    return configuration;
+  }
+
+  const properties = Object.fromEntries(
+    Object.entries(configuration.properties).map(([key, value]) => [renameContributionId(key), value])
+  );
+  if (!Object.keys(properties).some((key) => key.startsWith(`${expectedPrefix}.`))) {
+    throw new Error(`Beta release package configuration does not register ${expectedPrefix}.* settings.`);
+  }
+
+  return {
+    ...configuration,
+    title,
+    properties
+  };
 }
 
 async function copyIfExists(relativePath) {

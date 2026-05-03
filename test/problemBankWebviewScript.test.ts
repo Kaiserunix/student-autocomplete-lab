@@ -34,7 +34,15 @@ describe("problem bank webview script", () => {
     expect(source).toContain(">学习画像<");
     expect(source).toContain("AI 根据你的做题记录形成的可纠偏教学记忆");
     expect(source).toContain('id="coachQuestion"');
+    expect(source).toContain('id="coachAsk"');
+    expect(source).toContain(">发送给 AI<");
+    expect(source).toContain('document.getElementById("coachAsk").addEventListener("click", () => requestAiCoach("hint"))');
+    expect(source).toContain("event.ctrlKey && event.key === \"Enter\"");
     expect(source).toContain('id="coachOjVerdict"');
+    expect(source).toContain('<details class="aiConfigBox" open>');
+    expect(source).toContain("<summary>AI 接口配置</summary>");
+    expect(source).toContain('label for="aiBaseUrl">接口地址 Base URL</label>');
+    expect(source).toContain('label for="aiApiKey">API Key / 密钥</label>');
     expect(source).toContain('id="aiConfigMode"');
     expect(source).toContain('id="aiAutocompleteFormat"');
     expect(source).toContain('command: "saveAiConfig"');

@@ -10,6 +10,7 @@ const outPath = path.join(runtimeRoot, "student-autocomplete-lab-0.1.0-beta.1-in
 const internalName = "student-autocomplete-lab-internal";
 const internalViewPrefix = "studentAutocompleteInternal";
 const internalDisplayName = "Student Autocomplete Lab 内测记录版";
+const internalSettingsPrefix = "studentAutocompleteInternal.ai";
 
 main().catch((error) => {
   console.error(error instanceof Error ? error.message : String(error));
@@ -59,6 +60,11 @@ async function main() {
       name: "做题陪练 内测记录"
     }))
   };
+  packageJson.contributes.configuration = renameConfigurationProperties(
+    packageJson.contributes.configuration,
+    "AI 做题陪练 内测",
+    internalSettingsPrefix
+  );
 
   await writeFile(path.join(stagingRoot, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
   await patchCompiledContributionIds(path.join(stagingRoot, "dist"));
@@ -79,6 +85,25 @@ function renameContributionId(value) {
   return String(value)
     .replaceAll("studentAutocomplete.problemBankWebview", `${internalViewPrefix}.problemBankWebview`)
     .replaceAll("studentAutocomplete", internalViewPrefix);
+}
+
+function renameConfigurationProperties(configuration, title, expectedPrefix) {
+  if (!configuration?.properties) {
+    return configuration;
+  }
+
+  const properties = Object.fromEntries(
+    Object.entries(configuration.properties).map(([key, value]) => [renameContributionId(key), value])
+  );
+  if (!Object.keys(properties).some((key) => key.startsWith(`${expectedPrefix}.`))) {
+    throw new Error(`Internal package configuration does not register ${expectedPrefix}.* settings.`);
+  }
+
+  return {
+    ...configuration,
+    title,
+    properties
+  };
 }
 
 async function copyIfExists(relativePath) {

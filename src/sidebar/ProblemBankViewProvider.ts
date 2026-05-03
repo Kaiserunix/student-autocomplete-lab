@@ -1673,6 +1673,13 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       min-height: 76px;
     }
 
+    .coachQuestionActions {
+      display: grid;
+      gap: 7px;
+      grid-template-columns: 1fr;
+      margin-top: 7px;
+    }
+
     .aiConfigBox {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -2100,8 +2107,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         </div>
         <div class="panelBody">
           <div id="coachSelection" class="coachProblem"></div>
-          <details class="aiConfigBox">
-            <summary>AI 配置</summary>
+          <details class="aiConfigBox" open>
+            <summary>AI 接口配置</summary>
             <div class="panelBody">
               <div class="aiConfigGrid">
                 <div class="field">
@@ -2121,11 +2128,11 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
                   </select>
                 </div>
                 <div class="field wide">
-                  <label for="aiBaseUrl">Base URL</label>
+                  <label for="aiBaseUrl">接口地址 Base URL</label>
                   <input id="aiBaseUrl" placeholder="https://token-plan-cn.xiaomimimo.com/v1">
                 </div>
                 <div class="field wide">
-                  <label for="aiApiKey">API Key</label>
+                  <label for="aiApiKey">API Key / 密钥</label>
                   <input id="aiApiKey" type="password" placeholder="留空则保留已保存 key">
                 </div>
                 <div class="field">
@@ -2146,6 +2153,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           <div class="field">
             <label for="coachQuestion">问 AI</label>
             <textarea id="coachQuestion" class="coachQuestion" placeholder="可选：描述你卡在哪里、OJ 返回了什么、想让它重点看哪里。"></textarea>
+            <div class="coachQuestionActions">
+              <button id="coachAsk">发送给 AI</button>
+            </div>
           </div>
           <div class="coachOptions">
             <div class="field">
@@ -2359,6 +2369,13 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     });
 
     document.getElementById("coachHint").addEventListener("click", () => requestAiCoach("hint"));
+    document.getElementById("coachAsk").addEventListener("click", () => requestAiCoach("hint"));
+    coachQuestion.addEventListener("keydown", (event) => {
+      if (event.ctrlKey && event.key === "Enter") {
+        event.preventDefault();
+        requestAiCoach("hint");
+      }
+    });
     document.getElementById("coachSpecific").addEventListener("click", () => requestAiCoach("specific"));
     document.getElementById("coachGiveUp").addEventListener("click", () => requestAiCoach("giveUp"));
     document.getElementById("coachRecommend").addEventListener("click", () => requestAiCoach("recommend"));
