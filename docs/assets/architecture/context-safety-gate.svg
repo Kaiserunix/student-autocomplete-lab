@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" role="img" aria-labelledby="title desc">
+  <title id="title">Context safety gate</title>
+  <desc id="desc">A matrix diagram showing which context is allowed for autocomplete, coach, lesson, score, recommendation, and internal eval.</desc>
+  <defs>
+    <style>
+      .bg { fill: #fbfcfe; }
+      .title { font: 700 22px "Segoe UI", Arial, sans-serif; fill: #17212f; }
+      .head { fill: #20304a; }
+      .headText { font: 600 13px "Segoe UI", Arial, sans-serif; fill: #ffffff; }
+      .rowText { font: 600 13px "Segoe UI", Arial, sans-serif; fill: #263445; }
+      .cell { fill: #ffffff; stroke: #d5dce8; stroke-width: 1; }
+      .yes { fill: #dff3e4; stroke: #9ccfaa; }
+      .no { fill: #ffe4e4; stroke: #e6a0a0; }
+      .gated { fill: #fff2cc; stroke: #e1c568; }
+      .summary { fill: #eaf1ff; stroke: #a8bce8; }
+      .txt { font: 700 15px "Segoe UI", Arial, sans-serif; text-anchor: middle; dominant-baseline: middle; }
+      .small { font: 12px "Segoe UI", Arial, sans-serif; fill: #596677; }
+    </style>
+  </defs>
+  <rect class="bg" width="1280" height="720"/>
+  <text class="title" x="50" y="50">Context Gatekeeper Matrix</text>
+  <text class="small" x="50" y="76">The architecture is safe only if each model role receives exactly the context it is allowed to use.</text>
+
+  <g transform="translate(50,120)">
+    <rect class="head" x="0" y="0" width="230" height="48"/>
+    <text class="headText" x="18" y="29">Context Item</text>
+    <g>
+      <rect class="head" x="230" y="0" width="150" height="48"/>
+      <text class="headText" x="255" y="22">Autocomplete</text>
+      <text class="headText" x="278" y="38">code-only</text>
+    </g>
+    <g>
+      <rect class="head" x="380" y="0" width="150" height="48"/>
+      <text class="headText" x="430" y="29">Coach</text>
+    </g>
+    <g>
+      <rect class="head" x="530" y="0" width="150" height="48"/>
+      <text class="headText" x="580" y="29">Lesson</text>
+    </g>
+    <g>
+      <rect class="head" x="680" y="0" width="150" height="48"/>
+      <text class="headText" x="735" y="29">Score</text>
+    </g>
+    <g>
+      <rect class="head" x="830" y="0" width="150" height="48"/>
+      <text class="headText" x="870" y="29">Recommend</text>
+    </g>
+    <g>
+      <rect class="head" x="980" y="0" width="150" height="48"/>
+      <text class="headText" x="1010" y="29">Internal Eval</text>
+    </g>
+
+    <g transform="translate(0,48)">
+      <text class="rowText" x="16" y="36">Student code window</text>
+      <rect class="cell yes" x="230" y="0" width="150" height="48"/><text class="txt" x="305" y="25">YES</text>
+      <rect class="cell yes" x="380" y="0" width="150" height="48"/><text class="txt" x="455" y="25">YES</text>
+      <rect class="cell yes" x="530" y="0" width="150" height="48"/><text class="txt" x="605" y="25">YES</text>
+      <rect class="cell yes" x="680" y="0" width="150" height="48"/><text class="txt" x="755" y="25">YES</text>
+      <rect class="cell summary" x="830" y="0" width="150" height="48"/><text class="txt" x="905" y="25">SUMMARY</text>
+      <rect class="cell yes" x="980" y="0" width="150" height="48"/><text class="txt" x="1055" y="25">YES</text>
+    </g>
+    <g transform="translate(0,96)">
+      <text class="rowText" x="16" y="36">Problem statement</text>
+      <rect class="cell no" x="230" y="0" width="150" height="48"/><text class="txt" x="305" y="25">NO</text>
+      <rect class="cell yes" x="380" y="0" width="150" height="48"/><text class="txt" x="455" y="25">YES</text>
+      <rect class="cell yes" x="530" y="0" width="150" height="48"/><text class="txt" x="605" y="25">YES</text>
+      <rect class="cell yes" x="680" y="0" width="150" height="48"/><text class="txt" x="755" y="25">YES</text>
+      <rect class="cell summary" x="830" y="0" width="150" height="48"/><text class="txt" x="905" y="25">SUMMARY</text>
+      <rect class="cell yes" x="980" y="0" width="150" height="48"/><text class="txt" x="1055" y="25">YES</text>
+    </g>
+    <g transform="translate(0,144)">
+      <text class="rowText" x="16" y="36">Teacher Pack</text>
+      <rect class="cell no" x="230" y="0" width="150" height="48"/><text class="txt" x="305" y="25">NO</text>
+      <rect class="cell yes" x="380" y="0" width="150" height="48"/><text class="txt" x="455" y="25">YES</text>
+      <rect class="cell yes" x="530" y="0" width="150" height="48"/><text class="txt" x="605" y="25">YES</text>
+      <rect class="cell yes" x="680" y="0" width="150" height="48"/><text class="txt" x="755" y="25">YES</text>
+      <rect class="cell summary" x="830" y="0" width="150" height="48"/><text class="txt" x="905" y="25">SUMMARY</text>
+      <rect class="cell yes" x="980" y="0" width="150" height="48"/><text class="txt" x="1055" y="25">YES</text>
+    </g>
+    <g transform="translate(0,192)">
+      <text class="rowText" x="16" y="36">Standard answer</text>
+      <rect class="cell no" x="230" y="0" width="150" height="48"/><text class="txt" x="305" y="25">NO</text>
+      <rect class="cell no" x="380" y="0" width="150" height="48"/><text class="txt" x="455" y="25">NO</text>
+      <rect class="cell gated" x="530" y="0" width="150" height="48"/><text class="txt" x="605" y="25">GATED</text>
+      <rect class="cell no" x="680" y="0" width="150" height="48"/><text class="txt" x="755" y="25">NO</text>
+      <rect class="cell no" x="830" y="0" width="150" height="48"/><text class="txt" x="905" y="25">NO</text>
+      <rect class="cell gated" x="980" y="0" width="150" height="48"/><text class="txt" x="1055" y="25">FIXTURE</text>
+    </g>
+    <g transform="translate(0,240)">
+      <text class="rowText" x="16" y="36">Student Skill pain points</text>
+      <rect class="cell no" x="230" y="0" width="150" height="48"/><text class="txt" x="305" y="25">NO</text>
+      <rect class="cell yes" x="380" y="0" width="150" height="48"/><text class="txt" x="455" y="25">YES</text>
+      <rect class="cell yes" x="530" y="0" width="150" height="48"/><text class="txt" x="605" y="25">YES</text>
+      <rect class="cell yes" x="680" y="0" width="150" height="48"/><text class="txt" x="755" y="25">YES</text>
+      <rect class="cell yes" x="830" y="0" width="150" height="48"/><text class="txt" x="905" y="25">YES</text>
+      <rect class="cell yes" x="980" y="0" width="150" height="48"/><text class="txt" x="1055" y="25">YES</text>
+    </g>
+    <g transform="translate(0,288)">
+      <text class="rowText" x="16" y="36">Code habits</text>
+      <rect class="cell yes" x="230" y="0" width="150" height="48"/><text class="txt" x="305" y="25">YES</text>
+      <rect class="cell yes" x="380" y="0" width="150" height="48"/><text class="txt" x="455" y="25">YES</text>
+      <rect class="cell yes" x="530" y="0" width="150" height="48"/><text class="txt" x="605" y="25">YES</text>
+      <rect class="cell yes" x="680" y="0" width="150" height="48"/><text class="txt" x="755" y="25">YES</text>
+      <rect class="cell summary" x="830" y="0" width="150" height="48"/><text class="txt" x="905" y="25">SUMMARY</text>
+      <rect class="cell yes" x="980" y="0" width="150" height="48"/><text class="txt" x="1055" y="25">YES</text>
+    </g>
+    <g transform="translate(0,336)">
+      <text class="rowText" x="16" y="36">Internal raw logs</text>
+      <rect class="cell no" x="230" y="0" width="150" height="48"/><text class="txt" x="305" y="25">NO</text>
+      <rect class="cell no" x="380" y="0" width="150" height="48"/><text class="txt" x="455" y="25">NO</text>
+      <rect class="cell no" x="530" y="0" width="150" height="48"/><text class="txt" x="605" y="25">NO</text>
+      <rect class="cell no" x="680" y="0" width="150" height="48"/><text class="txt" x="755" y="25">NO</text>
+      <rect class="cell no" x="830" y="0" width="150" height="48"/><text class="txt" x="905" y="25">NO</text>
+      <rect class="cell yes" x="980" y="0" width="150" height="48"/><text class="txt" x="1055" y="25">YES</text>
+    </g>
+  </g>
+
+  <text class="small" x="50" y="680">Hard gate: autocomplete forbidden-context leak must be zero. Prompt tests and trace audits both enforce this.</text>
+</svg>

@@ -6,6 +6,8 @@ Status: master architecture blueprint for beta 0.2 and beyond. This document int
 
 This is not a public README. It is the "big brain" maintainer map for turning Student Autocomplete Lab from a promising VS Code prototype into a testable learning product.
 
+Revision note: the first version of this blueprint used the core reference documents but did not prove coverage. This revision adds an explicit reference coverage matrix and SVG diagrams. The SVG files are part of the architecture package and should be kept with the document.
+
 ## 0. North Star
 
 Student Autocomplete Lab should become a local-first algorithm learning coach:
@@ -82,7 +84,43 @@ From release-lane design:
 - internal logs and research artifacts never enter public release.
 - beta release must be staged cleanly by composition, not post-hoc string hope.
 
+### 1.3 Reference Coverage Matrix
+
+This matrix answers the question "were the current reference documents actually used?" The answer after this revision is yes: every current planning/reference document below is mapped to at least one architectural decision. Some documents are foundational; others constrain a specific lane.
+
+| Reference document | Used for | Architecture impact |
+| --- | --- | --- |
+| [requirements.md](../../requirements.md) | original product problem, positioning, model routing, completion behavior, habit learning | preserved the core split between autocomplete and teacher-mode analysis; kept habit learning as local evidence rather than hidden global telemetry |
+| [self-evolving-plugin-plan.md](../../self-evolving-plugin-plan.md) | early self-evolution architecture, evidence model, MCP problem context adapter, recommendation loop | evolved profile counters into Student Skill v2, retained MCP as problem discovery/context boundary, preserved explicit teacher action flow |
+| [beta-v2-final-goals.md](../../beta-v2-final-goals.md) | final beta target, Student Skill layers, evidence pipeline, beta gates, human inner-test gates | became the beta 0.2 done definition: inspectable Learning Profile, Teacher Pack cache, token usage, VSIX gates, internal human testing |
+| [beta-0.2-requirements-design.md](../../beta-0.2-requirements-design.md) | source inspiration map, version lanes, model roles, problem intake, non-goals | became the overall product and release scope; kept beta dev/release/internal lanes and the "algorithm coach, not auto solver" boundary |
+| [deep-research-agent-teaching-framework.md](../../deep-research-agent-teaching-framework.md) | agent framework research, deterministic `TeachingWorkflow`, role prompts, context gatekeeper, MCP scope | drove the core architecture: `AttemptSession`, `TeachingWorkflow`, role-specific model calls, trace spans, no generic agent runtime dependency |
+| [deep-research-teaching-eval-observability-batch-2.md](../../deep-research-teaching-eval-observability-batch-2.md) | teaching traces, scenario replay, spaced practice, micro-drills, MCP safety | added `TeachingTrace`, scenario replay eval tier, retrieval/transfer practice, and structural context safety rather than prompt-only safety |
+| [deep-research-learning-records-eval-ui-batch-3.md](../../deep-research-learning-records-eval-ui-batch-3.md) | learning event schema, eval/red-team harness, Playwright gates, UI implications | added Learning Event Ledger v3, screenshot gates, UI state machine, red-team suite, and local-only analytics framing |
+| [deep-research-skill-distillation-and-self-improvement.md](../../deep-research-skill-distillation-and-self-improvement.md) | colleague/Nuwa/self-improvement skill patterns, evidence, correction, transfer | drove Student Skill v2 lifecycle: observation, candidate, active, mastered, disabled; corrections and evidence cards are first-class |
+| [superpowers/specs/2026-05-10-refactor-architecture-design.md](2026-05-10-refactor-architecture-design.md) | staged refactor design, module layout, command protocol, storage gateway | became the implementation backbone: typed webview protocol, domain-core-first refactor, `ModelRouter`, `StorageGateway`, staged UI extraction |
+| [large-scale-growth-simulation.md](../../large-scale-growth-simulation.md) | 200-problem/1000-code fixture plan, cost estimation, scoring, pass levels | became the eval architecture and million-token budget discipline; live runs must be resumable and preceded by fixture dry runs |
+| [internal-testing.md](../../internal-testing.md) | real MiMo calibration, token usage evidence, long-run stability, transfer smoke | grounded metrics and gates: usage logging, mismatch summaries, primary pain-point accuracy, skill candidate accuracy, transfer validation |
+| [friend-internal-test-build.md](../../friend-internal-test-build.md) | internal VSIX, local JSONL recording, friend testing workflow | became the beta internal lane and privacy warning requirements; internal records never enter beta release |
+| [release-lanes.md](../../release-lanes.md) | beta/beta release/internal package names, publish rules, clean beta release rule | became the release architecture and package composition rules |
+| [open-source-release.md](../../open-source-release.md) | MIT release positioning, model rationale, included docs, packaging distinction | shaped the public-facing release boundary and why Teacher Pack/internal evidence is documented but not bundled as user data |
+| [problem-search-mcp.md](../../problem-search-mcp.md) | stdio MCP problem discovery, tools, client config, scope | drove public-ish MCP tool boundaries and the rule that npm lifecycle output must not corrupt MCP JSON-RPC |
+| [ai-problem-writing-standard.md](../../ai-problem-writing-standard.md) | manual Markdown problem authoring format | drove Problem Intake v2: Markdown import is the reliable path and synthetic/manual problems must use a parseable schema |
+| [codex-start-prompt.md](../../codex-start-prompt.md) | project handoff/start prompt | informs maintainer workflow only; not a runtime product feature |
+| [open-source docs and release notes as a set](../../open-source-release.md) | repo-public vs local-private boundary | reinforces the security/privacy and release hygiene architecture |
+
+Coverage gap after this revision: there is still no executable architecture validator that checks the blueprint against code structure. Add that later as a docs/architecture lint or dependency-boundary test.
+
 ## 2. Product Architecture In One Picture
+
+SVG package:
+
+- [Layered system diagram](../../assets/architecture/super-architecture-layered-system.svg)
+- [Teaching workflow sequence](../../assets/architecture/teaching-workflow-sequence.svg)
+- [Context safety gate](../../assets/architecture/context-safety-gate.svg)
+- [Eval and release lanes](../../assets/architecture/eval-release-lanes.svg)
+
+![Layered architecture](../../assets/architecture/super-architecture-layered-system.svg)
 
 ```mermaid
 flowchart TB
@@ -149,6 +187,8 @@ flowchart TB
 The key rule:
 
 > UI may request actions. UI may render state. UI may not own learning logic.
+
+The SVG above is the canonical visual overview. The Mermaid block remains as an editable text fallback.
 
 ## 3. System Layers
 
@@ -298,6 +338,8 @@ Design decisions:
 
 `TeachingWorkflow` is the deterministic orchestrator. It is not an autonomous agent.
 
+![Teaching workflow sequence](../../assets/architecture/teaching-workflow-sequence.svg)
+
 ```ts
 export interface TeachingWorkflow {
   giveHint(input: TeachingActionInput): Promise<TeachingActionResult>;
@@ -444,6 +486,8 @@ Fields:
 ## 7. Context Gatekeeper
 
 The Context Gatekeeper is the safety core.
+
+![Context safety gate](../../assets/architecture/context-safety-gate.svg)
 
 ```ts
 export interface ContextGatekeeper {
@@ -903,6 +947,8 @@ Hard gates:
 
 Three lanes remain non-negotiable:
 
+![Eval and release lanes](../../assets/architecture/eval-release-lanes.svg)
+
 | Lane | Package | Purpose | Publish |
 | --- | --- | --- | --- |
 | beta dev | `student-autocomplete-lab` | local development with docs/scripts/tests | no public marketplace |
@@ -1262,3 +1308,38 @@ Do not start with:
 
 The architecture has to earn those.
 
+## 23. Architecture Completeness Checklist
+
+This checklist is the guard against "big document, incomplete architecture".
+
+| Area | Covered in this blueprint? | Evidence |
+| --- | --- | --- |
+| Product north star | yes | Section 0 |
+| Source/reference coverage | yes | Section 1.3 |
+| Visual architecture | yes | SVG package in Section 2 and linked diagrams in Sections 5, 7, 15 |
+| Runtime module boundaries | yes | Sections 2-3 |
+| Attempt/session continuity | yes | Section 4 |
+| Teaching workflow state machine | yes | Section 5 |
+| Model/provider routing | yes | Section 6 |
+| Context safety | yes | Section 7 plus context safety SVG |
+| Student Skill self-evolution | yes | Section 8 |
+| Teacher Pack hidden-reference design | yes | Section 9 |
+| Recommendation engine | yes | Section 10 |
+| MCP boundary | yes | Section 11 |
+| UI architecture and screenshot gates | yes | Section 12 |
+| Learning records | yes | Section 13 |
+| Million-token eval architecture | yes | Section 14 |
+| Release/internal/public package split | yes | Section 15 |
+| Security/privacy | yes | Section 16 |
+| Data migration | yes | Section 17 |
+| Implementation epics | yes | Section 18 |
+| Governance rules | yes | Section 19 |
+| Debt register | yes | Section 20 |
+| Immediate execution order | yes | Section 22 |
+
+Remaining intentional non-coverage:
+
+- no React/Vite component architecture yet, because UI framework choice should wait until the domain core and typed protocol exist;
+- no cloud sync architecture, because beta 0.2 is local-first;
+- no automatic official OJ submission architecture, because it remains a non-goal;
+- no neural knowledge-tracing training plan, because current real user data is insufficient.
