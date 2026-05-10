@@ -3946,7 +3946,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     function countSkillEntries(entries) {
       return entries.reduce(
         (counts, entry) => {
-          if (entry.status === "active") {
+          if (entry.status === "active" || entry.status === "mastered") {
             counts.active += 1;
           } else if (entry.status === "disabled") {
             counts.disabled += 1;
@@ -3960,7 +3960,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     function skillStatusOrder(status) {
-      if (status === "active") {
+      if (status === "active" || status === "mastered") {
         return 0;
       }
       if (status === "candidate") {
@@ -3972,6 +3972,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     function skillStatusLabel(status) {
       if (status === "active") {
         return "已启用";
+      }
+      if (status === "mastered") {
+        return "已掌握";
       }
       if (status === "disabled") {
         return "已禁用";
@@ -5452,7 +5455,13 @@ function studentSkillStatusCounts(skill: StudentSkill): {
 } {
   return Object.values(skill.skills).reduce(
     (counts, entry) => {
-      counts[entry.status] += 1;
+      if (entry.status === "disabled") {
+        counts.disabled += 1;
+      } else if (entry.status === "candidate") {
+        counts.candidate += 1;
+      } else {
+        counts.active += 1;
+      }
       return counts;
     },
     { active: 0, candidate: 0, disabled: 0 }

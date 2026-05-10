@@ -1,9 +1,10 @@
 import type { TeachingDiagnosisReport } from "./teachingReport";
 import type { StudentProfile } from "./studentProfile";
 import type { TeachingStudentProfileSummary } from "./types";
+import { isStudentSkillDisabled, isStudentSkillTeachingActive } from "./studentSkillLifecycle";
 
 export type StudentSkillSchemaVersion = "student-skill/v1";
-export type StudentSkillStatus = "candidate" | "active" | "disabled";
+export type StudentSkillStatus = "candidate" | "active" | "mastered" | "disabled";
 export type StudentSkillCorrectionType = "diagnosis_wrong" | "diagnosis_helpful" | "skill_disabled" | "manual_note";
 
 export interface StudentSkillEvidenceExample {
@@ -298,7 +299,7 @@ export function studentSkillSummaryForTeaching(skill: StudentSkill): TeachingStu
     Object.entries(skill.errorModel).map(([label, state]) => [label, state.count])
   );
   const activeSkills = Object.values(skill.skills)
-    .filter((entry) => entry.status === "active")
+    .filter((entry) => isStudentSkillTeachingActive(entry.status))
     .map((entry) => entry.name)
     .sort();
   const recentCorrections = [...skill.correctionLog]
@@ -318,7 +319,7 @@ export function buildAutocompleteSkillContext(skill: StudentSkill, language: str
     autocompleteMayReadProblemStatement: skill.hardRules.autocompleteMayReadProblemStatement,
     disabledSkills: [...skill.hardRules.disabledSkills].sort(),
     activeSkillNames: Object.values(skill.skills)
-      .filter((entry) => entry.status === "active")
+      .filter((entry) => isStudentSkillTeachingActive(entry.status))
       .map((entry) => entry.name)
       .sort(),
     rules: unique([...skill.codeHabits.globalRules, ...(skill.codeHabits.languageRules[language] ?? [])])
@@ -399,7 +400,10 @@ function applySkillEntryPatch(
   const incomingStatus = skillPatch.status ?? "candidate";
 
   let status = previous.status;
-  if (previous.status === "disabled" && incomingStatus !== "disabled") {
+  const hasWrongCorrection = skill.correctionLog.some(
+    (correction) => correction.type === "diagnosis_wrong" && correction.target === skillPatch.name
+  );
+  if (isStudentSkillDisabled(previous.status) && incomingStatus !== "disabled") {
     conflicts.push({
       field: `skills.${skillPatch.name}.status`,
       existing: previous.status,
@@ -408,14 +412,25 @@ function applySkillEntryPatch(
     });
   } else if (incomingStatus === "disabled") {
     status = "disabled";
+  } else if (previous.status === "mastered") {
+    status = "mastered";
+  } else if (hasWrongCorrection && incomingStatus === "active") {
+    status = "candidate";
+    conflicts.push({
+      field: `skills.${skillPatch.name}.status`,
+      existing: previous.status,
+      incoming: incomingStatus,
+      resolution: "kept candidate after wrong-diagnosis correction"
+    });
   } else if (
     incomingStatus === "active" ||
+    incomingStatus === "mastered" ||
     previous.evidenceCount + 1 >= ACTIVE_EVIDENCE_COUNT ||
     previous.score + (skillPatch.confidence ?? 0) >= ACTIVE_SCORE
   ) {
-    status = "active";
+    status = incomingStatus === "mastered" ? "mastered" : "active";
   } else {
-    status = previous.status === "active" ? "active" : "candidate";
+    status = isStudentSkillTeachingActive(previous.status) ? previous.status : "candidate";
   }
 
   skill.skills[skillPatch.name] = {
@@ -449,6 +464,16 @@ function applyTransferPatch(
     estimatedHintReduction: Math.max(previous.estimatedHintReduction, transferPatch.estimatedHintReduction ?? 0),
     lastSeen: patch.occurredAt
   };
+
+  const nextTransfer = skill.transferEvidence[transferPatch.skillName];
+  const entry = skill.skills[transferPatch.skillName];
+  if (entry && !isStudentSkillDisabled(entry.status) && nextTransfer.passed >= 2 && nextTransfer.estimatedHintReduction > 0) {
+    skill.skills[transferPatch.skillName] = {
+      ...entry,
+      status: "mastered",
+      lastSeen: patch.occurredAt
+    };
+  }
 }
 
 function applyCorrection(skill: StudentSkill, patch: StudentSkillPatch, correction: StudentSkillCorrection): void {
@@ -495,8 +520,8 @@ function markSkillDiagnosisWrong(
 
   skill.skills[target] = {
     ...previous,
-    status: "disabled",
-    disabledReason: `用户标记这条判断不准：${note}`,
+    status: "candidate",
+    disabledReason: undefined,
     score: Math.max(0, roundScore(previous.score - 1)),
     lastSeen: patch.occurredAt
   };

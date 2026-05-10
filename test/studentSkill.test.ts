@@ -111,7 +111,7 @@ describe("student skill", () => {
     ]);
   });
 
-  test("records a wrong-diagnosis correction and prevents silent reactivation", () => {
+  test("records a wrong-diagnosis correction without treating it as hard disable", () => {
     let skill = createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z");
     skill = applyStudentSkillPatch(skill, {
       source: "mimo-v2.5",
@@ -144,10 +144,10 @@ describe("student skill", () => {
     }).skill;
 
     expect(corrected.skills["python-loop-boundary-check"]).toMatchObject({
-      status: "disabled",
-      disabledReason: "用户标记这条判断不准：这次不是循环边界，而是输出顺序。"
+      status: "candidate",
+      disabledReason: undefined
     });
-    expect(corrected.hardRules.disabledSkills).toContain("python-loop-boundary-check");
+    expect(corrected.hardRules.disabledSkills).not.toContain("python-loop-boundary-check");
     expect(corrected.errorModel.loop_boundary.counterexamples[0]).toMatchObject({
       evidence: "这次不是循环边界，而是输出顺序。",
       source: "sidebar-user"
@@ -172,8 +172,44 @@ describe("student skill", () => {
       ]
     });
 
-    expect(reactivation.skill.skills["python-loop-boundary-check"].status).toBe("disabled");
-    expect(reactivation.conflicts[0]?.resolution).toBe("kept existing disabled skill");
+    expect(reactivation.skill.skills["python-loop-boundary-check"].status).toBe("candidate");
+    expect(reactivation.conflicts[0]?.resolution).toBe("kept candidate after wrong-diagnosis correction");
+  });
+
+  test("marks a skill as mastered only after transfer evidence", () => {
+    let skill = applyStudentSkillPatch(createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z"), {
+      source: "mimo-v2.5",
+      occurredAt: "2026-05-01T00:01:00.000Z",
+      skills: [
+        {
+          name: "binary-tree-depth-numbered-children",
+          status: "active",
+          reason: "Depth recursion is stable on known cases.",
+          rules: ["Depth is one plus the deeper child depth."],
+          sourcePainPoints: ["recursion_base_case"],
+          confidence: 1
+        }
+      ]
+    }).skill;
+
+    skill = applyStudentSkillPatch(skill, {
+      source: "transfer-validator",
+      occurredAt: "2026-05-01T00:02:00.000Z",
+      transferEvidence: [
+        {
+          skillName: "binary-tree-depth-numbered-children",
+          probes: 2,
+          passed: 2,
+          estimatedHintReduction: 1
+        }
+      ]
+    }).skill;
+
+    expect(skill.skills["binary-tree-depth-numbered-children"].status).toBe("mastered");
+    expect(studentSkillSummaryForTeaching(skill).activeSkills).toEqual(["binary-tree-depth-numbered-children"]);
+    expect(buildAutocompleteSkillContext(skill, "python").activeSkillNames).toEqual([
+      "binary-tree-depth-numbered-children"
+    ]);
   });
 
   test("builds an autocomplete context that excludes teacher-only evidence", () => {
