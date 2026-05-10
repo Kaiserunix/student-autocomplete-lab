@@ -1298,7 +1298,9 @@ If we start implementing after this design, do these first:
 2. **AttemptSession seam**: add persistent session storage and route follow-up through it.
 3. **TeachingWorkflow seam**: move hint/follow-up/abandon/complete orchestration out of `ProblemBankViewProvider`.
 
-Execution guide for the next goal: [2026-05-10-next-goal-full-scale-execution-guide.md](../plans/2026-05-10-next-goal-full-scale-execution-guide.md).
+Single-goal execution guide for the beta 0.2 refactor: [2026-05-10-single-goal-beta-0.2-execution-plan.md](../plans/2026-05-10-single-goal-beta-0.2-execution-plan.md).
+
+Narrow first-epic guide, kept as a reference if the executor decides to split only after hitting a stop condition: [2026-05-10-next-goal-full-scale-execution-guide.md](../plans/2026-05-10-next-goal-full-scale-execution-guide.md).
 
 Do not start with:
 
