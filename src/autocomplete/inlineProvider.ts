@@ -1,7 +1,8 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { requireMimoAutocompleteConfig } from "../config/modelEnv";
+import type { AutocompleteProviderConfig } from "../config/modelEnv";
 import { loadModelEnvFromVsCode } from "../config/vscodeModelEnv";
+import { routeAutocompleteModel } from "../models/modelRouter";
 import { buildAutocompleteInputFromText } from "./context";
 import { requestMimoAutocomplete } from "./mimoAutocomplete";
 import { AutocompleteRequestGate } from "./requestGate";
@@ -27,14 +28,14 @@ export function createMimoInlineCompletionProvider(
     cacheTtlMs: options.cacheTtlMs
   });
 
-  async function loadConfig(): Promise<ReturnType<typeof requireMimoAutocompleteConfig>> {
+  async function loadConfig(): Promise<AutocompleteProviderConfig> {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
       throw new Error("Open a workspace folder before using Student Autocomplete inline completion.");
     }
 
     const envPath = path.join(workspaceFolder.uri.fsPath, "secrets", "models.env");
-    return requireMimoAutocompleteConfig(await loadModelEnvFromVsCode(options.extensionContext, envPath));
+    return routeAutocompleteModel(await loadModelEnvFromVsCode(options.extensionContext, envPath)).config;
   }
 
   return {

@@ -7,12 +7,11 @@ import { problemRefFromRecord } from "../attempt/session";
 import { buildAutocompleteInputFromText, extractStudentCodeFromText } from "../autocomplete/context";
 import { requestMimoAutocomplete } from "../autocomplete/mimoAutocomplete";
 import {
-  requireMimoAutocompleteConfig,
-  requireMimoTeachingConfig,
   type AiConfigView,
   type AiProviderConfigUpdate,
   type AiProviderMode,
-  type ModelEnv
+  type ModelEnv,
+  type TeachingProviderConfig
 } from "../config/modelEnv";
 import {
   buildAiConfigViewFromVsCode,
@@ -25,6 +24,7 @@ import {
   type InternalTestRecorder
 } from "../internalTesting/internalTestRecorder";
 import { listProviderModels } from "../models/providerModelsClient";
+import { routeAutocompleteModel, routeTeachingModel } from "../models/modelRouter";
 import { fetchLuoguProblem } from "../problemBank/luoguClient";
 import { fetchLuoguProblemSet } from "../problemBank/luoguProblemSetClient";
 import { searchLuoguProblems, searchLuoguProblemSets } from "../problemBank/luoguSearchClient";
@@ -640,7 +640,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       throw new Error("先打开你的代码文件，AI 才能分析当前卡点。");
     }
 
-    const config = requireMimoTeachingConfig(await this.loadRuntimeModelEnv());
+    const config = routeTeachingModel(await this.loadRuntimeModelEnv()).config;
     const profile = await loadStudentProfile(this.profilePath());
     const studentSkill = await this.loadStudentSkillForProfile(profile);
     const teacherPack = await this.ensureTeacherPack(problem, config);
@@ -988,7 +988,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     const occurredAt = new Date().toISOString();
-    const config = requireMimoTeachingConfig(await this.loadRuntimeModelEnv());
+    const config = routeTeachingModel(await this.loadRuntimeModelEnv()).config;
     const profile = await loadStudentProfile(this.profilePath());
     const attemptStats = summarizeAttemptEvents(await this.loadAttemptEvents(), problemKey);
     const teachingContext = buildSidebarTeachingContext({
@@ -1113,7 +1113,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     const occurredAt = new Date().toISOString();
-    const config = requireMimoTeachingConfig(await this.loadRuntimeModelEnv());
+    const config = routeTeachingModel(await this.loadRuntimeModelEnv()).config;
     const profile = await loadStudentProfile(this.profilePath());
     const attemptStats = summarizeAttemptEvents(await this.loadAttemptEvents(), problemKey);
     const studentCode = extractStudentCodeFromText(editor.document.getText());
@@ -1276,7 +1276,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     const occurredAt = new Date().toISOString();
-    const config = requireMimoTeachingConfig(await this.loadRuntimeModelEnv());
+    const config = routeTeachingModel(await this.loadRuntimeModelEnv()).config;
     const profile = await loadStudentProfile(this.profilePath());
     const profileBefore = profileSummary(profile);
     const teachingContext = buildSidebarTeachingContext({
@@ -1424,7 +1424,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       throw new Error("先打开你的代码文件，再测试补全。");
     }
 
-    const config = requireMimoAutocompleteConfig(await this.loadRuntimeModelEnv());
+    const config = routeAutocompleteModel(await this.loadRuntimeModelEnv()).config;
     const position = editor.selection.active;
     const input = buildAutocompleteInputFromText({
       text: editor.document.getText(),
@@ -1476,7 +1476,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       throw new Error("先打开你的代码文件，再做 AI 找错复盘。");
     }
 
-    const config = requireMimoTeachingConfig(await this.loadRuntimeModelEnv());
+    const config = routeTeachingModel(await this.loadRuntimeModelEnv()).config;
     const profile = await loadStudentProfile(this.profilePath());
     const teachingContext = buildSidebarTeachingContext({
       problem,
@@ -1605,7 +1605,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
   private async tryPrepareTeacherPack(problem: ProblemRecord): Promise<TeacherPackRecord | undefined> {
     try {
-      const config = requireMimoTeachingConfig(await this.loadRuntimeModelEnv());
+      const config = routeTeachingModel(await this.loadRuntimeModelEnv()).config;
       return this.ensureTeacherPack(problem, config);
     } catch {
       return undefined;
@@ -1614,7 +1614,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
   private async ensureTeacherPack(
     problem: ProblemRecord,
-    config: ReturnType<typeof requireMimoTeachingConfig>
+    config: TeachingProviderConfig
   ): Promise<TeacherPackRecord | undefined> {
     const cached = await findTeacherPack(this.teacherPacksPath(), problem.platform, problem.id);
     if (cached) {
@@ -5739,12 +5739,12 @@ function completionReasonLabel(reason: CompletionReason): string {
 
 function readAutocompleteStatus(env: ModelEnv): AiRuntimeStatus["autocomplete"] {
   try {
-    const config = requireMimoAutocompleteConfig(env);
+    const route = routeAutocompleteModel(env);
     return {
       configured: true,
-      model: config.model,
-      format: config.format,
-      endpoint: providerEndpoint(config.baseUrl, config.format === "anthropic-messages" ? "messages" : config.format === "openai-chat" ? "chat" : "completions")
+      model: route.model,
+      format: route.format,
+      endpoint: route.endpoint
     };
   } catch (error) {
     return {
@@ -5756,12 +5756,12 @@ function readAutocompleteStatus(env: ModelEnv): AiRuntimeStatus["autocomplete"] 
 
 function readTeachingStatus(env: ModelEnv): AiRuntimeStatus["teaching"] {
   try {
-    const config = requireMimoTeachingConfig(env);
+    const route = routeTeachingModel(env);
     return {
       configured: true,
-      model: config.model,
-      format: config.format,
-      endpoint: providerEndpoint(config.baseUrl, config.format === "anthropic-messages" ? "messages" : "chat")
+      model: route.model,
+      format: route.format,
+      endpoint: route.endpoint
     };
   } catch (error) {
     return {
@@ -5769,17 +5769,6 @@ function readTeachingStatus(env: ModelEnv): AiRuntimeStatus["teaching"] {
       error: error instanceof Error ? error.message : String(error)
     };
   }
-}
-
-function providerEndpoint(baseUrl: string, kind: "completions" | "chat" | "messages"): string {
-  const root = baseUrl.replace(/\/+$/, "");
-  if (kind === "messages") {
-    return `${root}/messages`;
-  }
-  if (kind === "chat") {
-    return `${root}/chat/completions`;
-  }
-  return `${root}/completions`;
 }
 
 async function readTextIfExists(filePath: string): Promise<string> {
