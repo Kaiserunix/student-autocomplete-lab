@@ -89,6 +89,8 @@ Fourth deep research follow-up: [deep-research-skill-distillation-and-self-impro
 
 Refactor architecture follow-up: [superpowers/specs/2026-05-10-refactor-architecture-design.md](superpowers/specs/2026-05-10-refactor-architecture-design.md) defines the beta 0.2 architecture refactor. Its recommended route is a domain-core refactor with staged UI extraction: introduce `AttemptSession`, `TeachingWorkflow`, `ModelRouter`, typed webview command contracts, storage gateways, and a Student Skill lifecycle before attempting a full frontend rewrite.
 
+Million-token super architecture follow-up: [superpowers/specs/2026-05-10-million-token-super-architecture-blueprint.md](superpowers/specs/2026-05-10-million-token-super-architecture-blueprint.md) integrates all previous research into the master beta 0.2+ blueprint. It defines the north star, product layers, context gatekeeper, Student Skill v2, Teacher Pack v2, recommendation v2, MCP boundaries, UI state machine, learning-event ledger, million-token eval budget, release architecture, security/privacy rules, migration strategy, and nine implementation epics.
+
 ## 3. Product Definition
 
 ### 3.1 User Story
