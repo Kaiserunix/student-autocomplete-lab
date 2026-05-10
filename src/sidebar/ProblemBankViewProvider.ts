@@ -1,6 +1,9 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
+import { appendAttemptEventToSession, ensureAttemptSession, loadAttemptSessions } from "../attempt/store";
+import type { AttemptStorePaths, CoachThreadTurn } from "../attempt/schema";
+import { problemRefFromRecord } from "../attempt/session";
 import { buildAutocompleteInputFromText, extractStudentCodeFromText } from "../autocomplete/context";
 import { requestMimoAutocomplete } from "../autocomplete/mimoAutocomplete";
 import {
@@ -28,6 +31,7 @@ import { searchLuoguProblems, searchLuoguProblemSets } from "../problemBank/luog
 import { parseManualProblemMarkdown } from "../problemBank/manualProblemParser";
 import type { ProblemRecord, ProblemSetRecord } from "../problemBank/types";
 import { appendJsonlRecord, readJsonlRecords, writeJsonlRecords } from "../storage/jsonlStore";
+import { createStudentAutocompleteStoragePaths, type StudentAutocompleteStoragePaths } from "../storage/StoragePaths";
 import { buildAttemptEvent, summarizeAttemptEvents, type AttemptEvent } from "../teaching/attemptEvent";
 import { requestMimoCoachFollowUp } from "../teaching/coachFollowUp";
 import { requestMimoLessonReport } from "../teaching/lessonReport";
@@ -116,8 +120,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewType = "studentAutocomplete.problemBankWebview";
 
   private readonly internalRecorder: InternalTestRecorder;
+  private readonly storagePaths: StudentAutocompleteStoragePaths;
 
   public constructor(private readonly context: vscode.ExtensionContext) {
+    this.storagePaths = createStudentAutocompleteStoragePaths(context.globalStorageUri.fsPath);
     this.internalRecorder = createInternalTestRecorder({
       globalStoragePath: context.globalStorageUri.fsPath,
       packageName: String(context.extension.packageJSON.name ?? "student-autocomplete-lab"),
@@ -354,31 +360,39 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   }
 
   private problemsPath(): string {
-    return path.join(this.context.globalStorageUri.fsPath, "problems.jsonl");
+    return this.storagePaths.problems;
   }
 
   private profilePath(): string {
-    return path.join(this.context.globalStorageUri.fsPath, "studentProfile.json");
+    return this.storagePaths.studentProfile;
   }
 
   private studentSkillPath(): string {
-    return path.join(this.context.globalStorageUri.fsPath, "studentSkill.json");
+    return this.storagePaths.studentSkill;
   }
 
   private studentSkillVersionsDir(): string {
-    return path.join(this.context.globalStorageUri.fsPath, "studentSkillVersions");
+    return this.storagePaths.studentSkillVersionsDir;
   }
 
   private completedProblemsPath(): string {
-    return path.join(this.context.globalStorageUri.fsPath, "completedProblems.jsonl");
+    return this.storagePaths.completedProblems;
   }
 
   private attemptEventsPath(): string {
-    return path.join(this.context.globalStorageUri.fsPath, "attemptEvents.jsonl");
+    return this.storagePaths.attemptEvents;
+  }
+
+  private attemptSessionsPath(): string {
+    return this.storagePaths.attemptSessions;
   }
 
   private teacherPacksPath(): string {
-    return path.join(this.context.globalStorageUri.fsPath, "teacherPacks.jsonl");
+    return this.storagePaths.teacherPacks;
+  }
+
+  private problemSetsPath(): string {
+    return this.storagePaths.problemSets;
   }
 
   private modelEnvPath(): string | undefined {
@@ -402,6 +416,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const problems = await this.loadSavedProblems();
     const completedProblems = await this.loadCompletedProblems();
     const studentSkillState = await this.loadStudentSkillState();
+    const attemptSessions = await this.loadAttemptSessions();
     return {
       type: "problemBankState",
       problems,
@@ -414,6 +429,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       uiLanguage: this.readUiLanguage(),
       studentSkill: studentSkillState.studentSkill,
       studentSkillVersions: studentSkillState.versions,
+      attemptSessions,
       internalTesting: await this.internalRecorder.summary(),
       selectedKey:
         selectedKey ??
@@ -522,8 +538,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     });
     await writeJsonlRecords(this.problemsPath(), removeProblemFromActiveQueue(problems, problemKey));
     await this.upsertCompletedProblems([archivedProblem]);
-    await appendJsonlRecord(
-      this.attemptEventsPath(),
+    await this.appendAttemptEvent(
+      problem,
       buildAttemptEvent({
         problemKey,
         problemId: problem.id,
@@ -570,6 +586,18 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     } else {
       await writeJsonlRecords(this.completedProblemsPath(), removeProblemFromCompletedArchive(completedProblems, problemKey));
     }
+    await this.appendAttemptEvent(
+      problem,
+      buildAttemptEvent({
+        problemKey,
+        problemId: problem.id,
+        platform: problem.platform,
+        kind: "archived",
+        outcome: "removed",
+        occurredAt: new Date().toISOString(),
+        note: `direct_delete:${deleteScope}`
+      })
+    );
     await this.recordInternalTestEvent({
       kind: "archive",
       action: "delete_problem",
@@ -639,9 +667,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         previousCoachTurn,
         responseLanguage: context.responseLanguage
       });
-      await appendJsonlRecord(
-        this.attemptEventsPath(),
-        buildAttemptEvent({
+      const event = buildAttemptEvent({
           problemKey,
           problemId: problem.id,
           platform: problem.platform,
@@ -650,7 +676,22 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           action,
           painPoints: [],
           model: config.model
-        })
+        });
+      await this.appendAttemptEvent(problem, event, [
+        {
+          role: "student",
+          kind: event.kind,
+          text: studentRequest?.trim() || "请把上一条提示讲得更详细但更容易懂。",
+          occurredAt
+        },
+        {
+          role: "assistant",
+          kind: event.kind,
+          text: compactMultiline([followUpReport.answer, followUpReport.tinyExample, followUpReport.nextAction]),
+          occurredAt,
+          model: config.model
+        }
+      ]
       );
       await this.recordInternalTestEvent({
         kind: "ai_coach",
@@ -694,9 +735,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       `${action} ${problem.id} via ${config.model}`,
       occurredAt
     );
-    await appendJsonlRecord(
-      this.attemptEventsPath(),
-      buildAttemptEvent({
+    const event = buildAttemptEvent({
         problemKey,
         problemId: problem.id,
         platform: problem.platform,
@@ -705,7 +744,22 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         action,
         painPoints: result.report.painPoints.map((painPoint) => painPoint.label),
         model: config.model
-      })
+      });
+    await this.appendAttemptEvent(problem, event, [
+      {
+        role: "student",
+        kind: event.kind,
+        text: studentRequest?.trim() || describeAiCoachAction(action, responseLanguage),
+        occurredAt
+      },
+      {
+        role: "assistant",
+        kind: event.kind,
+        text: compactMultiline([result.report.hint, result.report.specificHint, result.report.checkpoint]),
+        occurredAt,
+        model: config.model
+      }
+    ]
     );
     await this.recordInternalTestEvent({
       kind: "ai_coach",
@@ -888,8 +942,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       limit: 5
     });
     const occurredAt = new Date().toISOString();
-    await appendJsonlRecord(
-      this.attemptEventsPath(),
+    await this.appendAttemptEvent(
+      currentProblem,
       buildAttemptEvent({
         problemKey,
         problemId: currentProblem.id,
@@ -985,8 +1039,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     });
     await writeJsonlRecords(this.problemsPath(), removeProblemFromActiveQueue(await this.loadSavedProblems(), problemKey));
     await this.upsertCompletedProblems([archivedProblem]);
-    await appendJsonlRecord(
-      this.attemptEventsPath(),
+    await this.appendAttemptEvent(
+      problem,
       buildAttemptEvent({
         problemKey,
         problemId: problem.id,
@@ -996,7 +1050,22 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         occurredAt,
         painPoints: report.painPoints.map((painPoint) => painPoint.label),
         model: config.model
-      })
+      }),
+      [
+        {
+          role: "student",
+          kind: "lesson_reported",
+          text: studentRequest?.trim() || "我放弃了，需要讲解/补救。",
+          occurredAt
+        },
+        {
+          role: "assistant",
+          kind: "lesson_reported",
+          text: compactMultiline([report.standardApproach, ...report.minimalFixPath]),
+          occurredAt,
+          model: config.model
+        }
+      ]
     );
     await this.recordInternalTestEvent({
       kind: "lesson_report",
@@ -1124,8 +1193,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       await this.upsertCompletedProblems([archivedProblem]);
     }
 
-    await appendJsonlRecord(
-      this.attemptEventsPath(),
+    await this.appendAttemptEvent(
+      problem,
       buildAttemptEvent({
         problemKey,
         problemId: problem.id,
@@ -1138,7 +1207,22 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         painPoints: report.painPoints.map((painPoint) => painPoint.label),
         model: config.model,
         note: isCompletionReview ? "completion_review" : isArchivedReview ? "archived_review" : undefined
-      })
+      }),
+      [
+        {
+          role: "student",
+          kind: "solution_scored",
+          text: studentRequest?.trim() || (isCompletionReview ? "我已完成，进行复盘。" : "请做学习评分。"),
+          occurredAt
+        },
+        {
+          role: "assistant",
+          kind: "solution_scored",
+          text: compactMultiline([report.summary, report.nextAction, report.complexityAssessment.reason]),
+          occurredAt,
+          model: config.model
+        }
+      ]
     );
     await this.recordInternalTestEvent({
       kind: "solution_score",
@@ -1246,8 +1330,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       optimizationReport: report
     };
     await this.upsertCompletedProblems([completedWithReport]);
-    await appendJsonlRecord(
-      this.attemptEventsPath(),
+    await this.appendAttemptEvent(
+      archivedProblem,
       buildAttemptEvent({
         problemKey,
         problemId: archivedProblem.id,
@@ -1258,7 +1342,22 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         painPoints: painPoints.map((painPoint) => painPoint.label),
         model: config.model,
         note: report.verdict
-      })
+      }),
+      [
+        {
+          role: "student",
+          kind: "optimization_reviewed",
+          text: studentRequest?.trim() || "请复盘这道已归档题是否还需要优化。",
+          occurredAt
+        },
+        {
+          role: "assistant",
+          kind: "optimization_reviewed",
+          text: compactMultiline([report.summary, report.nextStep, report.verdict]),
+          occurredAt,
+          model: config.model
+        }
+      ]
     );
     await this.recordInternalTestEvent({
       kind: "optimization_review",
@@ -1487,6 +1586,30 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     return readJsonlRecords<AttemptEvent>(this.attemptEventsPath());
   }
 
+  private async loadAttemptSessions() {
+    return loadAttemptSessions(this.attemptSessionsPath());
+  }
+
+  private attemptStorePaths(): AttemptStorePaths {
+    return {
+      eventsPath: this.attemptEventsPath(),
+      sessionsPath: this.attemptSessionsPath()
+    };
+  }
+
+  private async appendAttemptEvent(
+    problem: Pick<ProblemRecord, "id" | "platform" | "title">,
+    event: AttemptEvent,
+    coachThreadTurns: CoachThreadTurn[] = []
+  ) {
+    return appendAttemptEventToSession({
+      paths: this.attemptStorePaths(),
+      problem: problemRefFromRecord(event.problemKey, problem),
+      event,
+      coachThreadTurns
+    });
+  }
+
   private async tryPrepareTeacherPack(problem: ProblemRecord): Promise<TeacherPackRecord | undefined> {
     try {
       const config = requireMimoTeachingConfig(await this.loadRuntimeModelEnv());
@@ -1569,6 +1692,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     await writeJsonlRecords(this.problemsPath(), [...nextByKey.values()]);
+    for (const problem of problems) {
+      await ensureAttemptSession(this.attemptSessionsPath(), problemRefFromRecord(makeProblemKey(problem), problem));
+    }
   }
 
   private async upsertCompletedProblems(problems: CompletedProblemRecord[]): Promise<void> {
@@ -1591,8 +1717,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async saveProblemSet(problemSet: ProblemSetRecord): Promise<void> {
-    const storagePath = path.join(this.context.globalStorageUri.fsPath, "problemSets.jsonl");
-    await appendJsonlRecord(storagePath, {
+    await appendJsonlRecord(this.problemSetsPath(), {
       ...problemSet,
       savedAt: new Date().toISOString()
     });
@@ -5353,6 +5478,13 @@ function formatDateTimeForStatus(value: string): string {
     hour: "2-digit",
     minute: "2-digit"
   });
+}
+
+function compactMultiline(values: Array<string | undefined>): string {
+  return values
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .join("\n");
 }
 
 function makeProblemKey(problem: Pick<ProblemRecord, "platform" | "id">): string {

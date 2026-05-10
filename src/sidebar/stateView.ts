@@ -1,4 +1,5 @@
 import type { AiConfigView } from "../config/modelEnv";
+import type { AttemptSession } from "../attempt/schema";
 import type { InternalTestSummary } from "../internalTesting/internalTestRecorder";
 import type { ProblemRecord } from "../problemBank/types";
 import type { StudentSkill } from "../teaching/studentSkill";
@@ -61,6 +62,7 @@ export interface ProblemBankStateView {
   uiLanguage: UiLanguage;
   studentSkill: StudentSkill;
   studentSkillVersions: StudentSkillVersionView[];
+  attemptSessions: AttemptSession[];
   internalTesting: InternalTestSummary;
   selectedKey: string;
   status?: string;
