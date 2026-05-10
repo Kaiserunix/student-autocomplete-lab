@@ -79,6 +79,8 @@ Reference links used for orientation:
 - [AlphaCode paper](https://www.science.org/doi/10.1126/science.abq1158)
 - [CodeT paper](https://arxiv.org/abs/2207.10397)
 
+Deep research follow-up: [deep-research-agent-teaching-framework.md](deep-research-agent-teaching-framework.md) refines this source map into a concrete teaching-agent architecture. Its main conclusion is that beta 0.2 should not embed a generic multi-agent runtime. Instead, it should implement a TypeScript-native deterministic `TeachingWorkflow` with role-specific prompts, strict context policies, persistent `AttemptSession` state, Student Skill knowledge tracing, and MCP only as a tool boundary.
+
 ## 3. Product Definition
 
 ### 3.1 User Story
@@ -771,6 +773,9 @@ Build:
 - per-problem coach thread;
 - "Ask AI" route that actually sends free-form follow-up;
 - post-archive chat.
+- route-level `TeachingContextPolicy`;
+- local `TeachingTrace` spans for every AI/tool action;
+- feedback actions for `too hard`, `too vague`, `helpful`, and `not accurate`.
 
 Exit criteria:
 
@@ -791,6 +796,21 @@ Exit criteria:
 
 - autocomplete and analysis models can differ;
 - provider tests cover OpenAI, compatible, Anthropic, and local-compatible shape.
+
+### Phase 2.5: Teaching Workflow Core
+
+Build:
+
+- `TeachingWorkflow` as the deterministic orchestrator for hint, follow-up, abandon, completion review, scoring, optimization, recommendation, and deletion;
+- role-specific prompt modules: diagnosis, hint, follow-up, lesson, completion review, skill patch, recommendation;
+- output validators for every model route;
+- a single place where allowed and forbidden context is enforced.
+
+Exit criteria:
+
+- autocomplete route cannot access full problem, Teacher Pack, standard answer, or coach thread;
+- coach routes can show a "context used" summary;
+- every model response is attached to the current `AttemptSession` instead of becoming a stateless one-off card.
 
 ### Phase 3: Problem Intake v2
 
