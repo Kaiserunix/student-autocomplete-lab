@@ -11,7 +11,6 @@ export interface StudentAutocompleteStoragePaths {
   studentProfile: string;
   studentSkill: string;
   studentSkillVersionsDir: string;
-  internalTestEvents: string;
 }
 
 export function createStudentAutocompleteStoragePaths(root: string): StudentAutocompleteStoragePaths {
@@ -25,7 +24,6 @@ export function createStudentAutocompleteStoragePaths(root: string): StudentAuto
     teacherPacks: path.join(root, "teacherPacks.jsonl"),
     studentProfile: path.join(root, "studentProfile.json"),
     studentSkill: path.join(root, "studentSkill.json"),
-    studentSkillVersionsDir: path.join(root, "studentSkillVersions"),
-    internalTestEvents: path.join(root, "internalTestEvents.jsonl")
+    studentSkillVersionsDir: path.join(root, "studentSkillVersions")
   };
 }

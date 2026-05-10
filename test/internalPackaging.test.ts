@@ -42,7 +42,11 @@ describe("beta release packaging script", () => {
     expect(source).toContain("studentAutocompleteBetaRelease.ai");
     expect(source).toContain("coachFollowUp.js");
     expect(source).toContain("luoguMcpRecommendationCandidates.js");
-    expect(source).toContain("problemSearchTools.js");
+    expect(source).toContain('"recommendation"');
+    expect(source).toContain('"attempt"');
+    expect(source).toContain('"mcp"');
+    expect(source).toContain("problemSearchServer.js");
+    expect(source).toContain("longitudinalSelfEvolution.js");
     expect(source).toContain("assertNoBlockedReleaseContent");
     expect(source).toContain("internalTestPanel");
     expect(source).not.toContain("studentAutocomplete.problemBankWebview");

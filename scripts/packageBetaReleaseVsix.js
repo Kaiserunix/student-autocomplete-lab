@@ -14,11 +14,14 @@ const releaseDisplayName = "Student Autocomplete Lab Beta Release";
 const releaseSettingsPrefix = "studentAutocompleteBetaRelease.ai";
 
 const allowedTopLevelRuntime = [
+  "attempt",
   "extension.js",
   "autocomplete",
   "config",
+  "mcp",
   "models",
   "problemBank",
+  "recommendation",
   "release",
   "sidebar",
   "storage"
@@ -38,6 +41,7 @@ const allowedTeachingFiles = [
   "studentProfile.js",
   "studentProfileStore.js",
   "studentSkill.js",
+  "studentSkillLifecycle.js",
   "studentSkillStore.js",
   "submissionJudge.js",
   "teacherPack.js",
@@ -48,8 +52,15 @@ const allowedTeachingFiles = [
   "types.js"
 ];
 
-const allowedMcpFiles = [
-  "problemSearchTools.js"
+const blockedCompiledReleaseFiles = [
+  path.join("teaching", "fixtureTeachingContext.js"),
+  path.join("teaching", "journeyTrial.js"),
+  path.join("teaching", "longitudinalSelfEvolution.js"),
+  path.join("teaching", "selfEvolutionEval.js"),
+  path.join("teaching", "selfEvolutionTrial.js"),
+  path.join("teaching", "stubTeacher.js"),
+  path.join("teaching", "transferValidation.js"),
+  path.join("mcp", "problemSearchServer.js")
 ];
 
 main().catch((error) => {
@@ -108,9 +119,8 @@ async function copyReleaseRuntime() {
   for (const file of allowedTeachingFiles) {
     await cp(path.join(releaseDist, "teaching", file), path.join(stagingRoot, "dist", "src", "teaching", file));
   }
-  await mkdir(path.join(stagingRoot, "dist", "src", "mcp"), { recursive: true });
-  for (const file of allowedMcpFiles) {
-    await cp(path.join(releaseDist, "mcp", file), path.join(stagingRoot, "dist", "src", "mcp", file));
+  for (const relativePath of blockedCompiledReleaseFiles) {
+    await rm(path.join(stagingRoot, "dist", "src", relativePath), { force: true });
   }
 }
 
@@ -186,6 +196,11 @@ function assertCleanReleaseTree() {
     "scripts/",
     "dist/src/cli/",
     "dist/src/internalTesting/",
+    "dist/src/teaching/longitudinalSelfEvolution.js",
+    "dist/src/teaching/selfEvolution",
+    "dist/src/teaching/journeyTrial.js",
+    "dist/src/teaching/transferValidation.js",
+    "dist/src/mcp/problemSearchServer.js",
     "fixtures/",
     "test/",
     "secrets/",
