@@ -83,6 +83,8 @@ Deep research follow-up: [deep-research-agent-teaching-framework.md](deep-resear
 
 Second deep research follow-up: [deep-research-teaching-eval-observability-batch-2.md](deep-research-teaching-eval-observability-batch-2.md) adds the learning-system layer. Its main conclusion is that beta 0.2 should add local teaching traces, scenario replay, spaced retrieval practice, micro-drills, and stricter MCP/context guardrails before expanding more autonomous-agent behavior.
 
+Third deep research follow-up: [deep-research-learning-records-eval-ui-batch-3.md](deep-research-learning-records-eval-ui-batch-3.md) adds the implementation discipline: xAPI/Caliper-inspired local learning events, eval/red-team harnesses, interpretable knowledge tracing, and Playwright screenshot gates for real UI regression testing.
+
 ## 3. Product Definition
 
 ### 3.1 User Story
@@ -517,6 +519,31 @@ The coach should also follow a small pedagogy policy:
 - if the user says an answer is too hard, lower reading level and reduce the next task size;
 - if the user says an answer is too vague, keep the same pain point and add one concrete clue or counterexample.
 
+### 10.6 Learning Event Ledger
+
+Beta 0.2 should add a local learning-event ledger inspired by xAPI and Caliper, without implementing a full external LRS:
+
+```text
+actor did verb to object with result in context at timestamp
+```
+
+Minimum event fields:
+
+- `eventId`;
+- `schemaVersion`;
+- `actor`;
+- `verb`;
+- `objectType`;
+- `objectId`;
+- `result`;
+- `context.attemptId`;
+- `context.problemId`;
+- `context.skillIds`;
+- `context.traceId`;
+- `createdAt`.
+
+This ledger is the evidence base for Student Skill, recommendation, replay, and internal testing.
+
 ## 11. Autocomplete 0.2
 
 Autocomplete must be boring, fast, and safe.
@@ -681,6 +708,14 @@ Student Skill should remain inspectable, but gain a compatible practice-state la
 
 This is the bridge from "the model noticed a pain point" to "the system can test whether the student retained and transferred it."
 
+### 13.5 Knowledge Tracing Boundary
+
+0.2 should stay interpretable:
+
+- use mastery estimates, evidence counts, retrieval passes, transfer passes, failures, and correction logs;
+- do not train or ship neural knowledge tracing yet;
+- revisit Bayesian/deep knowledge tracing only after thousands of real local events and a stable skill taxonomy.
+
 ## 14. Internal Testing and 5M Token Program
 
 The 5M token target should be a controlled evaluation budget, not waste.
@@ -787,6 +822,22 @@ Additional gates:
 - hint actionability: >= 0.85;
 - "too hard" repair success: >= 0.80;
 - initial retrieval probe pass rate after lesson: >= 0.70.
+
+### 14.6 Playwright UI Gates
+
+Playwright is now a dev dependency for source snapshots and UI regression testing. Internal gates should cover:
+
+- extension sidebar loads without "no data provider";
+- AI Coach tab is the first useful screen;
+- manual Markdown import is reachable;
+- Ask AI sends custom content;
+- skill action buttons work;
+- rollback button works;
+- primary controls fit at narrow sidebar widths;
+- no overlapping text in Chinese or English;
+- no duplicate entrances for the same main action.
+
+Screenshots and research snapshots live under `.runtime/` and must not enter git or release packages.
 
 ## 15. Privacy, Safety, and Open-Source Hygiene
 
@@ -1003,7 +1054,11 @@ The next plan should be split into independent implementation tracks:
 5. `student-skill-0.2`: evidence timeline, export, correction merge hardening.
 6. `mcp-suite-0.2`: problem search/attempt/skill/eval/browser import servers.
 7. `internal-5m-eval`: resumable runs, token ledger, mismatch reports.
+8. `playwright-ui-gates`: screenshot-driven UI smoke and regression checks.
+9. `learning-event-ledger-v3`: local learning records for replay and Student Skill evidence.
 
 Batch 2 adjusts the order: build `TeachingTrace` and context-policy spans before expanding more UI or model routes. Trace first makes every later failure cheaper to diagnose.
+
+Batch 3 adds one more ordering rule: build the local learning-event ledger before claiming self-evolution improvements, and use Playwright gates before calling UI work done.
 
 These tracks can be parallelized later because their write scopes are separable. The first implementation should start with track 1 and 2, because the user-visible pain is still "AI chat/follow-up feels stateless" and "model configuration must be real."

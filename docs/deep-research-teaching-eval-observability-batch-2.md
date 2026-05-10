@@ -4,6 +4,8 @@ Date: 2026-05-10
 
 Status: second research pass after `deep-research-agent-teaching-framework.md`.
 
+Third pass: [deep-research-learning-records-eval-ui-batch-3.md](deep-research-learning-records-eval-ui-batch-3.md) extends this with local learning records, eval/red-team harness design, interpretable knowledge-tracing boundaries, and Playwright UI gates.
+
 ## 0. Summary
 
 The first research pass answered the runtime question: do not embed a generic multi-agent framework in the VS Code extension. Build a deterministic TypeScript `TeachingWorkflow` instead.
