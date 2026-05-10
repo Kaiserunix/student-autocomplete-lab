@@ -28,7 +28,6 @@ import { routeAutocompleteModel, routeTeachingModel } from "../models/modelRoute
 import { fetchLuoguProblem } from "../problemBank/luoguClient";
 import { fetchLuoguProblemSet } from "../problemBank/luoguProblemSetClient";
 import { searchLuoguProblems, searchLuoguProblemSets } from "../problemBank/luoguSearchClient";
-import { parseManualProblemMarkdown } from "../problemBank/manualProblemParser";
 import type { ProblemRecord, ProblemSetRecord } from "../problemBank/types";
 import { appendJsonlRecord, readJsonlRecords, writeJsonlRecords } from "../storage/jsonlStore";
 import { createStudentAutocompleteStoragePaths, type StudentAutocompleteStoragePaths } from "../storage/StoragePaths";
@@ -74,6 +73,7 @@ import type { OjVerdict } from "../teaching/types";
 import { runCoachDiagnosisWorkflow } from "../teaching/workflow/actions";
 import type { HostEvent } from "./hostEvents";
 import { localizeTeachingDiagnosisReport } from "./localizeTeachingReport";
+import { buildManualProblemFromMarkdownFile } from "./manualMarkdownImport";
 import type { AiCoachAction, CoachResponseLanguage, WebviewMessage } from "./messageProtocol";
 import {
   buildCompletedProblemRecord,
@@ -90,6 +90,7 @@ import {
   type PracticeLanguage
 } from "./practiceFile";
 import { buildSidebarTeachingContext } from "./sidebarTeachingContext";
+import { createWebviewNonce } from "./html";
 import type {
   AiRuntimeStatus,
   ProblemBankStateView,
@@ -98,6 +99,7 @@ import type {
   StudentSkillVersionView,
   UiLanguage
 } from "./stateView";
+import { normalizeUiLanguage as normalizeSidebarUiLanguage } from "./webview/i18n";
 
 const starterPresets: StarterPreset[] = [
   {
@@ -247,45 +249,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     if (message.command === "importManualMarkdownFile") {
-      const selected = await vscode.window.showOpenDialog({
-        title: "选择手动导入的 Markdown 题目",
-        canSelectFiles: true,
-        canSelectFolders: false,
-        canSelectMany: false,
-        filters: {
-          Markdown: ["md", "markdown"],
-          Text: ["txt"]
-        }
-      });
-      if (!selected?.[0]) {
-        return this.problemBankState(undefined, "已取消 Markdown 文件导入。");
-      }
-
-      const fileUri = selected[0];
-      const markdown = await readFile(fileUri.fsPath, "utf8");
-      const parsed = parseManualProblemMarkdown({
-        fallbackTitle: path.basename(fileUri.fsPath, path.extname(fileUri.fsPath)),
-        markdown
-      });
-      const problem: ProblemRecord = {
-        platform: "manual",
-        id: `manual-${Date.now()}`,
-        title: parsed.title,
-        sourceUrl: fileUri.toString(),
-        difficulty: parsed.difficulty,
-        tags: parsed.tags,
-        statement: parsed.statement,
-        inputFormat: parsed.inputFormat,
-        outputFormat: parsed.outputFormat,
-        samples: parsed.samples,
-        hint: parsed.hint
-      };
-      await this.saveProblem(problem);
-      const teacherPack = await this.tryPrepareTeacherPack(problem);
-      const packSuffix = teacherPack ? " 已生成隐藏 Teacher Pack。" : " Teacher Pack 将在首次 AI 分析时尝试生成。";
-      return this.problemBankState(makeProblemKey(problem), `已从 Markdown 文件导入《${problem.title}》。${packSuffix}`, {
-        teacherPackReady: Boolean(teacherPack)
-      });
+      return this.handleManualMarkdownFileImport();
     }
 
     if (message.command === "requestAiCoach") {
@@ -470,7 +434,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async handleSaveUiLanguageRequest(language: UiLanguage): Promise<Record<string, unknown>> {
-    const normalized = normalizeUiLanguage(language);
+    const normalized = normalizeSidebarUiLanguage(language);
     await vscode.workspace.getConfiguration("studentAutocomplete.ui").update(
       "language",
       normalized,
@@ -517,6 +481,35 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       models: result.models,
       status: `已拉取 ${result.models.length} 个模型。`
     };
+  }
+
+  private async handleManualMarkdownFileImport(): Promise<Record<string, unknown>> {
+    const selected = await vscode.window.showOpenDialog({
+      title: "选择手动导入的 Markdown 题目",
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: false,
+      filters: {
+        Markdown: ["md", "markdown"],
+        Text: ["txt"]
+      }
+    });
+    if (!selected?.[0]) {
+      return this.problemBankState(undefined, "已取消 Markdown 文件导入。");
+    }
+
+    const fileUri = selected[0];
+    const problem = buildManualProblemFromMarkdownFile({
+      filePath: fileUri.fsPath,
+      sourceUrl: fileUri.toString(),
+      markdown: await readFile(fileUri.fsPath, "utf8")
+    });
+    await this.saveProblem(problem);
+    const teacherPack = await this.tryPrepareTeacherPack(problem);
+    const packSuffix = teacherPack ? " 已生成隐藏 Teacher Pack。" : " Teacher Pack 将在首次 AI 分析时尝试生成。";
+    return this.problemBankState(makeProblemKey(problem), `已从 Markdown 文件导入《${problem.title}》。${packSuffix}`, {
+      teacherPackReady: Boolean(teacherPack)
+    });
   }
 
   private async handleArchiveProblemRequest(
@@ -1557,7 +1550,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
   private readUiLanguage(): UiLanguage {
     const inspected = vscode.workspace.getConfiguration("studentAutocomplete.ui").inspect<string>("language");
-    return normalizeUiLanguage(inspected?.globalValue);
+    return normalizeSidebarUiLanguage(inspected?.globalValue);
   }
 
   private async loadSavedProblems(): Promise<SavedProblemRecord[]> {
@@ -1724,7 +1717,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   }
 
   private renderHtml(webview: vscode.Webview): string {
-    const nonce = String(Date.now());
+    const nonce = createWebviewNonce();
     const starterPresetsJson = safeJson(starterPresets);
     const practiceLanguageOptionsJson = safeJson(practiceLanguageOptions);
 

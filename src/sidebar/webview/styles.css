@@ -1,0 +1,27 @@
+:root {
+  --student-autocomplete-accent: var(--vscode-textLink-foreground);
+  --student-autocomplete-line: var(--vscode-sideBarSectionHeader-border, rgba(128, 128, 128, 0.28));
+}
+
+.coachShell {
+  display: grid;
+  gap: 10px;
+}
+
+.coachPrimaryAction {
+  min-height: 32px;
+}
+
+.markdownBody {
+  overflow-wrap: anywhere;
+  line-height: 1.62;
+}
+
+.markdownBody pre {
+  overflow: auto;
+  white-space: pre;
+}
+
+.mathInline {
+  font-family: var(--vscode-editor-font-family);
+}

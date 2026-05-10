@@ -248,11 +248,10 @@ describe("problem bank webview script", () => {
     expect(source).toContain('command: "importManualMarkdownFile"');
     expect(source).toContain("showOpenDialog");
     expect(source).toContain("AI 写题规范");
-    expect(source).toContain("parseManualProblemMarkdown");
-    expect(source).toContain("title: parsed.title");
+    expect(source).toContain("handleManualMarkdownFileImport");
+    expect(source).toContain("buildManualProblemFromMarkdownFile");
     expect(source).toContain("sourceUrl: fileUri.toString()");
-    expect(source).toContain("inputFormat: parsed.inputFormat");
-    expect(source).toContain("samples: parsed.samples");
+    expect(source).toContain("markdown: await readFile(fileUri.fsPath, \"utf8\")");
     expect(source).toContain("已从 Markdown 文件导入");
     expect(source).not.toContain('textarea id="manualStatement"');
     expect(source).not.toContain('command: "saveManual"');
