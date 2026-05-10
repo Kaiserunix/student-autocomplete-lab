@@ -169,4 +169,51 @@ describe("OpenAI-compatible chat completions client", () => {
       }
     });
   });
+
+  test("explains transient MiMo 5xx failures without leaking the API key", async () => {
+    const fakeFetch = async (): Promise<Response> =>
+      new Response(JSON.stringify({ error: { message: "<html>502 Bad Gateway</html>" } }), {
+        status: 500,
+        headers: { "content-type": "application/json" }
+      });
+
+    await expect(
+      requestChatCompletionText(
+        {
+          mode: "openai-compatible",
+          format: "openai-chat",
+          baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+          apiKey: "secret-key",
+          model: "mimo-v2.5"
+        },
+        {
+          messages: [{ role: "user", content: "Return JSON." }],
+          maxTokens: 64,
+          temperature: 0,
+          responseFormat: { type: "json_object" },
+          usageLogPath: false
+        },
+        fakeFetch as typeof fetch
+      )
+    ).rejects.toThrow(/mimo-v2\.5-pro/);
+
+    await expect(
+      requestChatCompletionText(
+        {
+          mode: "openai-compatible",
+          format: "openai-chat",
+          baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+          apiKey: "secret-key",
+          model: "mimo-v2.5"
+        },
+        {
+          messages: [{ role: "user", content: "Return JSON." }],
+          maxTokens: 64,
+          temperature: 0,
+          usageLogPath: false
+        },
+        fakeFetch as typeof fetch
+      )
+    ).rejects.not.toThrow("secret-key");
+  });
 });

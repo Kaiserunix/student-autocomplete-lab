@@ -108,9 +108,9 @@ Add two buttons: `AI 回答` and `题库导入`.
 
 Keep current problem, language selector, hint buttons, autocomplete test, AI result, and full题面 preview here.
 
-- [ ] **Step 3: Move queue/search/problem-set/manual paste into import page**
+- [ ] **Step 3: Move queue/search/problem-set/manual Markdown import into import page**
 
-Problem list, search, presets,题单导入,粘贴题目 only appear here.
+Problem list, search, presets,题单导入,Markdown 文件导入 only appear here.
 
 ### Task 4: Chinese-First MiMo Output
 

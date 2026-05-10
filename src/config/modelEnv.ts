@@ -151,10 +151,7 @@ export function requireTeachingConfig(env: ModelEnv): TeachingProviderConfig {
       env.AI_OPENAI_COMPAT_API_KEY || env.MIMO_API_KEY,
       "Missing OpenAI-compatible API key in secrets/models.env."
     ),
-    model:
-      env.AI_OPENAI_COMPAT_CHAT_MODEL ||
-      normalizeMimoV25Model(env.MIMO_CHAT_MODEL ?? "mimo-v2.5") ||
-      "mimo-v2.5"
+    model: env.AI_OPENAI_COMPAT_CHAT_MODEL || env.MIMO_CHAT_MODEL || "mimo-v2.5"
   };
 }
 
@@ -201,10 +198,7 @@ export function requireAutocompleteConfig(env: ModelEnv): AutocompleteProviderCo
       env.AI_OPENAI_COMPAT_API_KEY || env.MIMO_API_KEY,
       "Missing OpenAI-compatible API key in secrets/models.env."
     ),
-    model:
-      env.AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL ||
-      normalizeMimoV25Model(env.MIMO_AUTOCOMPLETE_MODEL ?? "mimo-v2.5") ||
-      "mimo-v2.5"
+    model: env.AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL || env.MIMO_AUTOCOMPLETE_MODEL || "mimo-v2.5"
   };
 }
 
@@ -228,18 +222,6 @@ export function requireMimoTeachingConfig(env: ModelEnv): {
   anthropicVersion?: string;
 } {
   return requireTeachingConfig(env);
-}
-
-function normalizeMimoV25Model(model: string | undefined): string | undefined {
-  if (!model) {
-    return undefined;
-  }
-
-  if (model === "mimo-v2.5-pro") {
-    return "mimo-v2.5";
-  }
-
-  return model;
 }
 
 export function withModelOverride(
@@ -288,9 +270,8 @@ export function buildAiConfigView(env: ModelEnv): AiConfigView {
     baseUrl: env.AI_OPENAI_COMPAT_BASE_URL || env.MIMO_OPENAI_BASE_URL || "",
     hasApiKey: Boolean(env.AI_OPENAI_COMPAT_API_KEY || env.MIMO_API_KEY),
     apiKeyPreview: env.AI_OPENAI_COMPAT_API_KEY || env.MIMO_API_KEY ? "已保存" : "",
-    chatModel: env.AI_OPENAI_COMPAT_CHAT_MODEL || normalizeMimoV25Model(env.MIMO_CHAT_MODEL ?? "mimo-v2.5") || "",
-    autocompleteModel:
-      env.AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL || normalizeMimoV25Model(env.MIMO_AUTOCOMPLETE_MODEL ?? "mimo-v2.5") || "",
+    chatModel: env.AI_OPENAI_COMPAT_CHAT_MODEL || env.MIMO_CHAT_MODEL || "mimo-v2.5",
+    autocompleteModel: env.AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL || env.MIMO_AUTOCOMPLETE_MODEL || "mimo-v2.5",
     autocompleteFormat: normalizeAutocompleteFormat(env.AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT, "openai-completions")
   };
 }

@@ -49,6 +49,13 @@ export function removeProblemFromActiveQueue<T extends Pick<ProblemRecord, "plat
   return problems.filter((problem) => makeProblemKey(problem) !== problemKey);
 }
 
+export function removeProblemFromCompletedArchive<T extends Pick<CompletedProblemRecord, "platform" | "id" | "problemKey">>(
+  problems: T[],
+  problemKey: string
+): T[] {
+  return problems.filter((problem) => problem.problemKey !== problemKey && makeProblemKey(problem) !== problemKey);
+}
+
 export function summarizePainSnapshot(snapshot: PainSnapshot, limit = 3): string {
   return Object.entries(snapshot.painPointCounts)
     .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))

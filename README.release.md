@@ -7,9 +7,10 @@ It is not an automatic problem solver, an official OJ client, or an automatic su
 ## What Is Included
 
 - `AI 教练`: hints, lesson reports after giving up, AI-estimated submission checks, learning scores, optimization review, archiving, and next-problem recommendations.
-- `题目`: paste/import/search problems and create starter files.
+- `题目`: import Markdown problem files, search/import Luogu problems, and create starter files.
 - `学习画像`: inspectable and correctable local teaching memory.
 - `安全补全`: inline completion reads student-code context only, not the full problem statement or hidden reference material.
+- English beta support: main sidebar labels, explicit English AI-output mode, and English Markdown problem import.
 - Provider settings for OpenAI, OpenAI-compatible services, and Anthropic Messages.
 
 ## Model Setup
@@ -31,5 +32,6 @@ This beta release package does not include the internal friend-test recorder. Lo
 ## Limitations
 
 - Luogu import/search is best-effort and depends on public web endpoints.
-- LeetCode support is manual paste unless a stable adapter is added.
+- LeetCode support uses manual Markdown-file import unless a stable adapter is added.
 - AI judgment is not an official OJ verdict.
+- English UI is beta-level; Chinese remains the most complete interface language.

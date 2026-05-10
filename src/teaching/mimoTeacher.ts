@@ -28,7 +28,7 @@ export async function requestMimoTeachingDiagnosis(
           content: buildTeachingDiagnosisPrompt(context)
         }
       ],
-      maxTokens: 700,
+      maxTokens: 1000,
       temperature: 0.2,
       responseFormat: { type: "json_object" },
       onUsage

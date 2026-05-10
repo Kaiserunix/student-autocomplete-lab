@@ -1,6 +1,6 @@
 const { cp, mkdir, readFile, rm, writeFile } = require("node:fs/promises");
 const { existsSync } = require("node:fs");
-const { execSync } = require("node:child_process");
+const { execFileSync } = require("node:child_process");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -69,22 +69,30 @@ async function main() {
   await writeFile(path.join(stagingRoot, "package.json"), `${JSON.stringify(packageJson, null, 2)}\n`, "utf8");
   await patchCompiledContributionIds(path.join(stagingRoot, "dist"));
 
-  execSync(
-    `npx --yes @vscode/vsce package --no-dependencies --allow-missing-repository --out "${outPath}"`,
-    {
-      cwd: stagingRoot,
-      stdio: "inherit"
-    }
-  );
+  runVscePackage(stagingRoot, outPath);
 
   console.log(`Internal local-recording VSIX created: ${outPath}`);
   console.log("LOCAL INTERNAL TEST BUILD ONLY. DO NOT PUBLISH.");
 }
 
+function runVscePackage(cwd, outputPath) {
+  const args = ["--yes", "@vscode/vsce", "package", "--no-dependencies", "--allow-missing-repository", "--out", outputPath];
+  if (process.platform === "win32") {
+    execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "npx.cmd", ...args], {
+      cwd,
+      stdio: "inherit"
+    });
+    return;
+  }
+
+  execFileSync("npx", args, {
+    cwd,
+    stdio: "inherit"
+  });
+}
+
 function renameContributionId(value) {
-  return String(value)
-    .replaceAll("studentAutocomplete.problemBankWebview", `${internalViewPrefix}.problemBankWebview`)
-    .replaceAll("studentAutocomplete", internalViewPrefix);
+  return String(value).replaceAll("studentAutocomplete", internalViewPrefix);
 }
 
 function renameConfigurationProperties(configuration, title, expectedPrefix) {
@@ -132,7 +140,6 @@ async function patchCompiledContributionIds(dir) {
 
     const source = await readFile(fullPath, "utf8");
     const patched = source
-      .replaceAll("studentAutocomplete.problemBankWebview", `${internalViewPrefix}.problemBankWebview`)
       .replaceAll("studentAutocomplete", internalViewPrefix)
       .replaceAll("Student Autocomplete Lab", internalDisplayName);
     await writeFile(fullPath, patched, "utf8");

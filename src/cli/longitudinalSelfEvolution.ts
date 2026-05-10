@@ -77,6 +77,7 @@ async function main(): Promise<void> {
         batchStart: output.batchStart,
         batchEnd: output.batchEnd,
         scores: result.scores,
+        errorCount: result.errorCount,
         usage: result.usage,
         finalStudentSkillRevision: result.finalStudentSkill.revision,
         activeSkills: Object.values(result.finalStudentSkill.skills)
@@ -121,6 +122,7 @@ async function resolveTeacher(provider: LongitudinalProvider, retries: number): 
                 error instanceof Error ? error.message : String(error)
               }`
             );
+            await delay(500 * (attempt + 1));
           }
         }
 
@@ -191,6 +193,10 @@ function readNumberArg(args: string[], name: string): number | undefined {
   }
 
   return parsed;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 main().catch((error) => {

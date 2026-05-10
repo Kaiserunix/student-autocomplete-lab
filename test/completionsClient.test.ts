@@ -104,4 +104,44 @@ describe("OpenAI-compatible completions client", () => {
     expect(calls[0].url).toBe("https://api.anthropic.com/v1/messages");
     expect(headers["x-api-key"]).toBe("anthropic-key");
   });
+
+  test("explains OpenAI-compatible completion fetch failures with endpoint and model", async () => {
+    const fakeFetch = async (): Promise<Response> => {
+      throw new TypeError("fetch failed");
+    };
+
+    await expect(
+      requestCompletion(
+        {
+          format: "openai-completions",
+          baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+          apiKey: "secret-key",
+          model: "mimo-v2.5"
+        },
+        {
+          prompt: "def add(a, b):\n    ",
+          maxTokens: 64,
+          temperature: 0
+        },
+        fakeFetch as typeof fetch
+      )
+    ).rejects.toThrow(/Completion request failed before HTTP response/);
+
+    await expect(
+      requestCompletion(
+        {
+          format: "openai-completions",
+          baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+          apiKey: "secret-key",
+          model: "mimo-v2.5"
+        },
+        {
+          prompt: "def add(a, b):\n    ",
+          maxTokens: 64,
+          temperature: 0
+        },
+        fakeFetch as typeof fetch
+      )
+    ).rejects.not.toThrow("secret-key");
+  });
 });

@@ -51,4 +51,39 @@ describe("teaching diagnosis report parser", () => {
 
     expect(report.painPoints[0].confidence).toBe(0.9);
   });
+
+  test("parses layered hints for basic and more-specific coaching actions", () => {
+    const report = parseTeachingDiagnosisReport(
+      JSON.stringify({
+        pain_points: [
+          {
+            label: "loop_boundary",
+            confidence: 0.78,
+            evidence: "The loop skips the last nickname line."
+          }
+        ],
+        hint: "先盯住读取昵称的循环范围：它现在没有覆盖全部 n 行。",
+        specific_hint: "把循环变量和 n 对齐检查一次：从第 1 行昵称开始读，连续读 n 次；不要把第一行 n 当作昵称处理。",
+        checkpoint: "用 n=1 且只有一个昵称的样例手算，看看循环是否真的进入一次。",
+        micro_steps: ["标出读入 n 的语句", "标出处理昵称的循环", "确认循环次数等于 n"]
+      })
+    );
+
+    expect(report.hint).toContain("循环范围");
+    expect(report.specificHint).toContain("连续读 n 次");
+    expect(report.checkpoint).toContain("n=1");
+    expect(report.microSteps).toEqual(["标出读入 n 的语句", "标出处理昵称的循环", "确认循环次数等于 n"]);
+  });
+
+  test("accepts newline micro_steps strings from loose live model responses", () => {
+    const report = parseTeachingDiagnosisReport(
+      JSON.stringify({
+        pain_points: [{ label: "output_format", confidence: 0.7, evidence: "Extra prompt text is printed." }],
+        hint: "先删掉额外的提示文字。",
+        micro_steps: "1. 找到所有 print 提示语\n2. 只保留题目要求的输出\n3. 用样例逐字符对比"
+      })
+    );
+
+    expect(report.microSteps).toEqual(["找到所有 print 提示语", "只保留题目要求的输出", "用样例逐字符对比"]);
+  });
 });

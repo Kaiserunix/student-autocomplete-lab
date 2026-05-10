@@ -140,6 +140,15 @@
           "type": "string",
           "default": "",
           "description": "Anthropic 自动补全模型。"
+        },
+        "studentAutocomplete.ui.language": {
+          "type": "string",
+          "enum": [
+            "zh",
+            "en"
+          ],
+          "default": "zh",
+          "description": "侧栏界面语言。当前为 beta 级适配：中文完整，英文覆盖主界面与核心操作。"
         }
       }
     },
@@ -177,6 +186,7 @@
     "package:beta": "npm run compile && npx --yes @vscode/vsce package --no-dependencies --out .runtime/student-autocomplete-lab-0.1.0-beta.1.vsix",
     "package:beta-release": "npm run compile:release && node scripts/packageBetaReleaseVsix.js",
     "package:internal": "npm run compile && node scripts/packageInternalVsix.js",
+    "check:hygiene": "node scripts/checkProjectHygiene.js",
     "compile:release": "tsc -p tsconfig.release.json",
     "internal:test-report": "npm run compile && node dist/src/cli/internalTestReport.js",
     "test": "vitest run",

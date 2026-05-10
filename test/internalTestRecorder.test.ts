@@ -1,4 +1,4 @@
-import { mkdtemp } from "node:fs/promises";
+import { appendFile, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import * as path from "node:path";
 import { describe, expect, test } from "vitest";
@@ -28,7 +28,7 @@ describe("internal test recorder", () => {
       packageName: "student-autocomplete-lab-internal",
       displayName: "Student Autocomplete Lab 内测记录版",
       version: "0.1.0-beta.1-internal.1",
-      workspaceFolder: "C:\\Users\\qwerf\\Desktop\\Source\\leetcodepy"
+      workspaceFolder: "C:\\Users\\student\\Desktop\\Source\\leetcodepy"
     });
 
     expect(recorder.enabled).toBe(true);
@@ -61,7 +61,7 @@ describe("internal test recorder", () => {
         version: "0.1.0-beta.1-internal.1"
       },
       workspace: {
-        folder: "C:\\Users\\qwerf\\Desktop\\Source\\leetcodepy"
+        folder: "C:\\Users\\student\\Desktop\\Source\\leetcodepy"
       },
       kind: "ai_coach",
       problemId: "P1030"
@@ -74,6 +74,54 @@ describe("internal test recorder", () => {
       hintCount: 1,
       solutionScoreCount: 1,
       models: ["mimo-v2.5"]
+    });
+  });
+
+  test("keeps concurrent internal-test writes as valid JSONL records", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "student-autocomplete-internal-concurrent-"));
+    const recorder = createInternalTestRecorder({
+      globalStoragePath: root,
+      packageName: "student-autocomplete-lab-internal",
+      version: "0.1.0-beta.1-internal.1",
+      workspaceFolder: "C:\\Users\\student\\Desktop\\Source\\leetcodepy"
+    });
+
+    await Promise.all(
+      Array.from({ length: 50 }, (_, index) =>
+        recorder.record({
+          kind: "autocomplete_event",
+          action: "request",
+          note: `python C:\\Users\\student\\Desktop\\Python开发驱动练习题库\\题目\\题 ${index}.py:1`
+        })
+      )
+    );
+
+    const lines = (await readFile(recorder.eventsPath, "utf8")).trim().split(/\r?\n/);
+    expect(lines).toHaveLength(50);
+    expect(lines.map((line) => JSON.parse(line))).toHaveLength(50);
+  });
+
+  test("summarizes valid internal-test rows while counting corrupt JSONL rows", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "student-autocomplete-internal-corrupt-"));
+    const recorder = createInternalTestRecorder({
+      globalStoragePath: root,
+      packageName: "student-autocomplete-lab-internal",
+      version: "0.1.0-beta.1-internal.1",
+      workspaceFolder: "C:\\Users\\student\\Desktop\\Source\\leetcodepy"
+    });
+
+    await recorder.record({
+      kind: "autocomplete_event",
+      action: "request",
+      note: "python C:\\Users\\student\\Desktop\\Source\\leetcodepy\\P1001.py:1"
+    });
+    await appendFile(recorder.eventsPath, "\\\\Desktop\\\\Python开发驱动练习题库\\\\题目\"}}\n", "utf8");
+
+    await expect(recorder.summary()).resolves.toMatchObject({
+      enabled: true,
+      totalEvents: 1,
+      autocompleteRequestCount: 1,
+      invalidRecordCount: 1
     });
   });
 
@@ -99,5 +147,6 @@ describe("internal test recorder", () => {
     expect(summary.privacyNotice).toContain("本地");
     expect(summary.skillFeedbackCount).toBe(1);
     expect(summary.byKind.skill_feedback).toBe(1);
+    expect(summary.invalidRecordCount).toBe(0);
   });
 });

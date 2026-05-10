@@ -63,6 +63,12 @@ interface AnthropicMessage {
   content: string;
 }
 
+interface JsonResponse<T> {
+  response: Response;
+  payload: T;
+  rawText: string;
+}
+
 function joinEndpoint(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
 }
@@ -80,26 +86,30 @@ export async function requestChatCompletionText(
     return requestAnthropicMessageText(config, request, fetchImpl);
   }
 
-  const response = await fetchImpl(joinEndpoint(config.baseUrl), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "content-type": "application/json"
+  const endpoint = joinEndpoint(config.baseUrl);
+  const { payload } = await fetchJson<ChatCompletionResponse>(
+    endpoint,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: request.messages,
+        max_tokens: request.maxTokens,
+        temperature: request.temperature,
+        response_format: request.responseFormat
+      })
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages: request.messages,
-      max_tokens: request.maxTokens,
-      temperature: request.temperature,
-      response_format: request.responseFormat
-    })
-  });
-  const payload = (await response.json()) as ChatCompletionResponse;
-
-  if (!response.ok) {
-    const message = typeof payload.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
-    throw new Error(`Chat completion request failed: ${message}`);
-  }
+    fetchImpl,
+    {
+      operation: "Chat completion",
+      endpoint,
+      config
+    }
+  );
 
   const usage = normalizeOpenAiUsage(payload.usage);
   emitUsage(request.onUsage, usage);
@@ -119,27 +129,31 @@ async function requestAnthropicMessageText(
   fetchImpl: typeof fetch
 ): Promise<string> {
   const { system, messages } = splitSystemMessages(request.messages);
-  const response = await fetchImpl(joinAnthropicEndpoint(config.baseUrl), {
-    method: "POST",
-    headers: {
-      "x-api-key": config.apiKey,
-      "anthropic-version": config.anthropicVersion ?? "2023-06-01",
-      "content-type": "application/json"
+  const endpoint = joinAnthropicEndpoint(config.baseUrl);
+  const { payload } = await fetchJson<AnthropicMessagesResponse>(
+    endpoint,
+    {
+      method: "POST",
+      headers: {
+        "x-api-key": config.apiKey,
+        "anthropic-version": config.anthropicVersion ?? "2023-06-01",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model: config.model,
+        max_tokens: request.maxTokens,
+        temperature: request.temperature,
+        system,
+        messages
+      })
     },
-    body: JSON.stringify({
-      model: config.model,
-      max_tokens: request.maxTokens,
-      temperature: request.temperature,
-      system,
-      messages
-    })
-  });
-  const payload = (await response.json()) as AnthropicMessagesResponse;
-
-  if (!response.ok) {
-    const message = typeof payload.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
-    throw new Error(`Anthropic messages request failed: ${message}`);
-  }
+    fetchImpl,
+    {
+      operation: "Anthropic messages",
+      endpoint,
+      config
+    }
+  );
 
   const usage = normalizeAnthropicUsage(payload.usage);
   emitUsage(request.onUsage, usage);
@@ -151,6 +165,78 @@ async function requestAnthropicMessageText(
   }
 
   return text;
+}
+
+async function fetchJson<T>(
+  endpoint: string,
+  init: RequestInit,
+  fetchImpl: typeof fetch,
+  context: { operation: string; endpoint: string; config: ChatCompletionProviderConfig }
+): Promise<JsonResponse<T>> {
+  let response: Response;
+  try {
+    response = await fetchImpl(endpoint, init);
+  } catch (error) {
+    throw new Error(
+      `${context.operation} request failed before HTTP response: ${requestContext(context)}; ${errorMessage(error)}`
+    );
+  }
+
+  const rawText = await response.text();
+  const payload = parseJsonObject(rawText) as T;
+  if (!response.ok) {
+    const upstream = errorFromPayload(payload) ?? previewText(rawText) ?? `HTTP ${response.status}`;
+    throw new Error(
+      `${context.operation} request failed: HTTP ${response.status}; ${requestContext(context)}; ${upstream}${modelHint(
+        context.config,
+        response.status
+      )}`
+    );
+  }
+
+  return { response, payload, rawText };
+}
+
+function parseJsonObject(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+function errorFromPayload(payload: unknown): string | undefined {
+  const record = asRecord(payload);
+  const error = asRecord(record?.error);
+  return typeof error?.message === "string" ? error.message : undefined;
+}
+
+function requestContext(context: {
+  endpoint: string;
+  config: ChatCompletionProviderConfig;
+}): string {
+  return `endpoint=${context.endpoint}; model=${context.config.model}; format=${context.config.format ?? "openai-chat"}`;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function previewText(text: string): string | undefined {
+  const preview = text.replace(/\s+/g, " ").trim().slice(0, 240);
+  return preview || undefined;
+}
+
+function modelHint(config: ChatCompletionProviderConfig, status: number): string {
+  if (
+    status >= 500 &&
+    sanitizeBaseUrl(config.baseUrl).includes("xiaomimimo.com") &&
+    config.model === "mimo-v2.5"
+  ) {
+    return " 当前 MiMo 模型 mimo-v2.5 可能不可用，建议切换 mimo-v2.5-pro 后重试。";
+  }
+
+  return "";
 }
 
 function splitSystemMessages(messages: ChatMessage[]): { system: string | undefined; messages: AnthropicMessage[] } {

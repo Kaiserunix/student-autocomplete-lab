@@ -28,17 +28,18 @@ It should not:
 
 ## Model Routing
 
-Priority order:
+Recommended routing:
 
-1. Xiaomi MiMo Token Plan through the OpenAI-compatible base URL.
-2. DeepSeek V4 Flash as fallback.
+1. Fast low-cost autocomplete model, such as `dsv4f`.
+2. Stronger teaching/analysis model, such as `dsv4pro`.
+3. MiMo remains supported through the OpenAI-compatible lane for live experiments.
 
-Known MiMo settings:
+Known OpenAI-compatible settings:
 
 - Base URL: `MIMO_OPENAI_BASE_URL`
 - Preferred autocomplete model: `MIMO_AUTOCOMPLETE_MODEL`
 - Use `/v1/completions` for autocomplete-style requests.
-- `mimo-v2.5-pro` worked better than `mimo-v2.5` in manual FIM-style testing.
+- `mimo-v2.5-pro` has been more reliable than `mimo-v2.5` for live teaching/comparison tests when using MiMo.
 
 Do not hardcode secrets in source files. Load them from `secrets/models.env`.
 

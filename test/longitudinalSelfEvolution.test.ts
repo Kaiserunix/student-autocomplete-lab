@@ -102,4 +102,80 @@ describe("longitudinal self-evolution", () => {
     });
     expect(result.finalStudentSkill.skills["recursion-base-case-pattern"]).toBeUndefined();
   });
+
+  test("treats depth definition as equivalent primary evidence for binary-tree depth samples", async () => {
+    const sample = generateLongitudinalSelfEvolutionSamples(40)[5];
+
+    const result = await runLongitudinalSelfEvolutionBatch([sample], {
+      studentId: "longitudinal-depth-primary-equivalence",
+      occurredAt: "2026-05-01T00:00:00.000Z",
+      diagnose: () => ({
+        painPoints: [
+          {
+            label: "depth_definition",
+            confidence: 0.95,
+            evidence: "The code uses a wrong depth definition for empty children."
+          }
+        ],
+        hint: "先统一深度定义。",
+        skillUpdate: {
+          candidate: "binary-tree-depth-numbered-children",
+          reason: "Depth definition on numbered-child trees.",
+          rules: ["Empty child contributes depth 0."]
+        }
+      })
+    });
+
+    expect(sample.expectedPrimaryPainPoint).toBe("recursion_base_case");
+    expect(result.steps[0]).toMatchObject({
+      actualPainPoints: ["depth_definition"],
+      primaryPainPointHit: true,
+      skillCandidateHit: true
+    });
+    expect(result.scores.primaryPainPointAccuracy).toBe(1);
+  });
+
+  test("records a failed live diagnosis step instead of aborting the batch", async () => {
+    const samples = generateLongitudinalSelfEvolutionSamples(40).slice(0, 2);
+
+    const result = await runLongitudinalSelfEvolutionBatch(samples, {
+      studentId: "longitudinal-live-error-tolerance",
+      occurredAt: "2026-05-01T00:00:00.000Z",
+      diagnose: (sample) => {
+        if (sample.sampleId === "long-0001") {
+          throw new Error("Chat completion request failed: HTTP 502");
+        }
+
+        return {
+          painPoints: [
+            {
+              label: sample.expectedPrimaryPainPoint,
+              confidence: 0.9,
+              evidence: "Recovered on the next sample."
+            }
+          ],
+          hint: "继续定位。",
+          skillUpdate: {
+            candidate: sample.expectedSkillCandidate,
+            reason: "Recovered candidate.",
+            rules: ["Keep going after a transient model error."]
+          }
+        };
+      }
+    });
+
+    expect(result.sampleCount).toBe(2);
+    expect(result.steps[0]).toMatchObject({
+      sampleId: "long-0001",
+      diagnosisError: expect.stringContaining("HTTP 502"),
+      painPointHit: false,
+      skillCandidateHit: false
+    });
+    expect(result.steps[1]).toMatchObject({
+      sampleId: "long-0002",
+      painPointHit: true,
+      skillCandidateHit: true
+    });
+    expect(result.errorCount).toBe(1);
+  });
 });

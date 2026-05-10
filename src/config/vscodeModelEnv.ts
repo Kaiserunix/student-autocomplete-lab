@@ -43,9 +43,7 @@ export async function saveAiConfigToVsCode(
   update: AiProviderConfigUpdate
 ): Promise<void> {
   const configuration = vscode.workspace.getConfiguration(settingSection);
-  const target = vscode.workspace.workspaceFolders?.[0]
-    ? vscode.ConfigurationTarget.Workspace
-    : vscode.ConfigurationTarget.Global;
+  const target = vscode.ConfigurationTarget.Global;
 
   await configuration.update("providerMode", update.mode, target);
   if (update.mode === "openai") {
@@ -138,7 +136,7 @@ function configuredValue<T>(configuration: vscode.WorkspaceConfiguration, key: s
   if (!inspected) {
     return undefined;
   }
-  return inspected.workspaceFolderValue ?? inspected.workspaceValue ?? inspected.globalValue;
+  return inspected.globalValue;
 }
 
 async function readTextIfExists(filePath: string): Promise<string> {

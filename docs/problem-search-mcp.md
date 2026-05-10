@@ -25,9 +25,9 @@ Use `node` directly as the MCP command. Avoid plain `npm run` as a stdio MCP com
     "problem-search": {
       "command": "node",
       "args": [
-        "C:\\Users\\qwerf\\Desktop\\student-autocomplete-lab\\dist\\src\\mcp\\problemSearchServer.js"
+        "<repo-root>\\dist\\src\\mcp\\problemSearchServer.js"
       ],
-      "cwd": "C:\\Users\\qwerf\\Desktop\\student-autocomplete-lab"
+      "cwd": "<repo-root>"
     }
   }
 }

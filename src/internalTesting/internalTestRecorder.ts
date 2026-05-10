@@ -1,5 +1,5 @@
 import * as path from "node:path";
-import { appendJsonlRecord, readJsonlRecords } from "../storage/jsonlStore";
+import { appendJsonlRecord, readJsonlRecordsLenient, type InvalidJsonlRecord } from "../storage/jsonlStore";
 
 export const internalTestSchemaVersion = "internal-test/v1" as const;
 
@@ -62,6 +62,8 @@ export interface InternalTestSummary {
   skillFeedbackCount: number;
   recommendationCount: number;
   autocompleteRequestCount: number;
+  invalidRecordCount: number;
+  invalidRecords?: InvalidJsonlRecord[];
   models: string[];
   firstAt?: string;
   lastAt?: string;
@@ -123,15 +125,15 @@ export function createInternalTestRecorder(options: InternalTestRecorderOptions)
         return emptyInternalTestSummary(false, eventsPath);
       }
 
-      const events = await readJsonlRecords<InternalTestEvent>(eventsPath);
-      return summarizeInternalTestEvents(events, { enabled, eventsPath });
+      const { records, invalidRecords } = await readJsonlRecordsLenient<InternalTestEvent>(eventsPath);
+      return summarizeInternalTestEvents(records, { enabled, eventsPath, invalidRecords });
     }
   };
 }
 
 export function summarizeInternalTestEvents(
   events: InternalTestEvent[],
-  options: { enabled?: boolean; eventsPath?: string } = {}
+  options: { enabled?: boolean; eventsPath?: string; invalidRecords?: InvalidJsonlRecord[] } = {}
 ): InternalTestSummary {
   const byKind: Partial<Record<InternalTestEventKind, number>> = {};
   const problemKeys = new Set<string>();
@@ -167,6 +169,8 @@ export function summarizeInternalTestEvents(
     skillFeedbackCount: byKind.skill_feedback ?? 0,
     recommendationCount: byKind.recommendation ?? 0,
     autocompleteRequestCount: events.filter((event) => event.kind === "autocomplete_event" && event.action === "request").length,
+    invalidRecordCount: options.invalidRecords?.length ?? 0,
+    invalidRecords: options.invalidRecords,
     models: Array.from(models).sort(),
     firstAt,
     lastAt,
@@ -187,6 +191,8 @@ function emptyInternalTestSummary(enabled: boolean, eventsPath?: string): Intern
     skillFeedbackCount: 0,
     recommendationCount: 0,
     autocompleteRequestCount: 0,
+    invalidRecordCount: 0,
+    invalidRecords: [],
     models: [],
     privacyNotice: "正式版默认不记录内测事件；内测记录只写入本地 JSONL，不自动上传。"
   };

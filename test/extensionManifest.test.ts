@@ -74,4 +74,21 @@ describe("VS Code extension manifest", () => {
     expect(properties).toHaveProperty("studentAutocomplete.ai.openaiCompatible.autocompleteFormat");
     expect(properties).toHaveProperty("studentAutocomplete.ai.anthropic.chatModel");
   });
+
+  test("exposes a beta UI language setting for Chinese and English", async () => {
+    const manifest = JSON.parse(await readFile("package.json", "utf8")) as ExtensionManifest;
+    const properties = manifest.contributes?.configuration?.properties ?? {};
+
+    expect(properties).toHaveProperty("studentAutocomplete.ui.language");
+    expect(JSON.stringify(properties["studentAutocomplete.ui.language"])).toContain("zh");
+    expect(JSON.stringify(properties["studentAutocomplete.ui.language"])).toContain("en");
+  });
+
+  test("command palette entries do not point at stale planned-feature placeholders", async () => {
+    const source = await readFile("src/extension.ts", "utf8");
+
+    expect(source).not.toContain("planned for the next slice");
+    expect(source).not.toContain("answer reveal and wrong-problem bank are planned");
+    expect(source).toContain("请在左侧 AI 教练");
+  });
 });

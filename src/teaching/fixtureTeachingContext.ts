@@ -1,6 +1,6 @@
 import * as path from "node:path";
 import { loadPracticeFixture } from "../practice/fixtureStore";
-import { verifyPracticeReport } from "../practice/practiceVerifier";
+import { verifyPracticeReport, type PracticeVerifierOptions } from "../practice/practiceVerifier";
 import { profileSummary, StudentProfile, createEmptyStudentProfile } from "./studentProfile";
 import { TeachingDiagnosisContext } from "./types";
 
@@ -22,10 +22,11 @@ const PROBLEM_SUMMARIES: Record<string, { title: string; summary: string }> = {
 export async function buildFixtureTeachingContext(
   fixturePath: string,
   wrongSubmissionIndex = 0,
-  profile: StudentProfile = createEmptyStudentProfile()
+  profile: StudentProfile = createEmptyStudentProfile(),
+  verifierOptions: Pick<PracticeVerifierOptions, "runSubmission" | "testCases"> = {}
 ): Promise<TeachingDiagnosisContext> {
   const report = await loadPracticeFixture(path.resolve(process.cwd(), fixturePath));
-  const verification = await verifyPracticeReport(report);
+  const verification = await verifyPracticeReport(report, verifierOptions);
   const wrongSubmission = report.wrongSubmissions[wrongSubmissionIndex];
   const wrongResult = verification.wrongSubmissionResults[wrongSubmissionIndex];
 

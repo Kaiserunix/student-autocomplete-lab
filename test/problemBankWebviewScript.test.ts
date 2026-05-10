@@ -8,13 +8,50 @@ describe("problem bank webview script", () => {
     expect(source).toContain('issue.fixHint ? "\\\\n提示：" + issue.fixHint : ""');
   });
 
-  test("exposes a completed-archive action without using AI analysis", async () => {
+  test("routes completed action through AI review before archiving", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
     expect(source).toContain('id="coachCompleted"');
     expect(source).toContain('id="completedList"');
-    expect(source).toContain('command: "archiveProblem"');
-    expect(source).toContain('renderArchivedProblem(data.archivedProblem)');
+    expect(source).toContain("requestCompletionReview()");
+    expect(source).toContain("archiveOnComplete: true");
+    expect(source).toContain("完成后复盘");
+    expect(source).toContain("AI 已完成");
+    expect(source).toContain("完成复盘并更新学习画像");
+    expect(source).not.toContain('document.getElementById("coachCompleted").addEventListener("click", () => requestArchiveProblem("completed"))');
+  });
+
+  test("keeps archived problems selectable and coachable after learning score", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain("function selectedActiveProblem()");
+    expect(source).toContain("function selectedArchivedProblem()");
+    expect(source).toContain("function selectedCoachProblem()");
+    expect(source).toContain("return selectedActiveProblem() || selectedArchivedProblem();");
+    expect(source).toContain("const activeProblemSelected = state.problems.some((problem) => keyOf(problem) === state.selectedKey);");
+    expect(source).toContain("const archivedProblemSelected = state.completedProblems.some((problem) => keyOf(problem) === state.selectedKey);");
+    expect(source).toContain("(await this.loadCompletedProblems()).find(");
+    expect(source).toContain("item.problemKey === problemKey || makeProblemKey(item) === problemKey");
+    expect(source).toContain("const selectedKey = problemKey;");
+    expect(source).toContain("const isArchivedCoachProblem = Boolean(selectedArchivedProblem());");
+    expect(source).toContain("coachGiveUp.disabled = Boolean(isBusy || isArchivedCoachProblem);");
+    expect(source).toContain("coachCompleted.disabled = Boolean(isBusy || isArchivedCoachProblem);");
+    expect(source).toContain("复盘归档题");
+  });
+
+  test("exposes direct problem deletion without archiving", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain('command: "deleteProblem"');
+    expect(source).toContain("handleDeleteProblemRequest");
+    expect(source).toContain("requestDeleteProblem");
+    expect(source).toContain('requestDeleteProblem(keyOf(problem), "active")');
+    expect(source).toContain('requestDeleteProblem(keyOf(problem), "completed")');
+    expect(source).toContain('deleteScope: "active" | "completed"');
+    expect(source).toContain("直接删除");
+    expect(source).toContain("不写入已归档");
+    expect(source).toContain("removeProblemFromCompletedArchive");
+    expect(source).not.toContain("requestDeleteProblem(reason)");
   });
 
   test("makes the AI coach the first screen and keeps three Chinese UI layers", async () => {
@@ -22,6 +59,7 @@ describe("problem bank webview script", () => {
 
     expect(source).toContain('activePage: "ai"');
     expect(source).toContain('switchPage("ai")');
+    expect(source).toContain("grid-template-columns: repeat(3, minmax(0, 1fr));");
     expect(source).toContain('id="tabProblem"');
     expect(source).toContain('id="tabAi"');
     expect(source).not.toContain('id="tabSearch"');
@@ -34,25 +72,86 @@ describe("problem bank webview script", () => {
     expect(source).toContain(">学习画像<");
     expect(source).toContain("AI 根据你的做题记录形成的可纠偏教学记忆");
     expect(source).toContain('id="coachQuestion"');
-    expect(source).toContain('id="coachAsk"');
-    expect(source).toContain(">发送给 AI<");
-    expect(source).toContain('document.getElementById("coachAsk").addEventListener("click", () => requestAiCoach("hint"))');
+    expect(source).toContain('id="coachHint"');
+    expect(source).toContain('id="coachFollowUp"');
+    expect(source).toContain('id="coachSendCustom"');
+    expect(source).toContain('id="coachCompleted"');
+    expect(source).not.toContain('id="coachAsk"');
+    expect(source).not.toContain('id="coachRecommend"');
+    expect(source).not.toContain('id="coachSolved"');
+    expect(source).not.toContain('id="coachSubmitCheck"');
+    expect(source).not.toContain('id="coachAutocomplete"');
+    expect(source).toContain('class="coachQuestionActions"');
+    expect(source).toContain("追问 / 闲聊");
+    expect(source).toContain("吐槽两句都可以");
+    expect(source).toContain(">发送<");
+    expect(source).toContain(">继续聊<");
+    expect(source).toContain('function sendCustomFollowUp()');
+    expect(source).toContain('document.getElementById("coachSendCustom").addEventListener("click", () => sendCustomFollowUp())');
+    expect(source).toContain('document.getElementById("coachFollowUp").addEventListener("click", () => requestAiCoach("followUp"))');
+    expect(source).toContain('document.getElementById("coachHint").addEventListener("click", () => requestAiCoach("hint"))');
+    expect(source).toContain('source !== "custom"');
+    expect(source).toContain("请根据上一轮内容继续讲");
+    expect(source).toContain('if ("selectedKey" in data)');
+    expect(source).not.toContain("data.selectedKey || state.selectedKey");
+    expect(source).not.toContain("planned for the next slice");
+    expect(source).not.toContain('document.getElementById("coachRecommend").addEventListener');
+    expect(source).not.toContain('document.getElementById("coachSolved").addEventListener');
+    expect(source).not.toContain('document.getElementById("coachSubmitCheck").addEventListener');
+    expect(source).not.toContain('document.getElementById("coachAutocomplete").addEventListener');
     expect(source).toContain("event.ctrlKey && event.key === \"Enter\"");
+    expect(source).toContain('type: "coachFollowUp"');
+    expect(source).toContain("renderCoachFollowUp(data)");
+    expect(source).toContain("appendCoachFollowUpTurn");
     expect(source).toContain('id="coachOjVerdict"');
-    expect(source).toContain('<details class="aiConfigBox" open>');
+    expect(source).toContain('<details class="aiConfigBox">');
     expect(source).toContain("<summary>AI 接口配置</summary>");
+    expect(source.indexOf('<div class="field coachAskBox">')).toBeLessThan(source.indexOf('<details class="aiConfigBox">'));
+    expect(source.indexOf('<div id="aiResponse" class="aiResponse">')).toBeLessThan(source.indexOf('<details class="aiConfigBox">'));
     expect(source).toContain('label for="aiBaseUrl">接口地址 Base URL</label>');
     expect(source).toContain('label for="aiApiKey">API Key / 密钥</label>');
     expect(source).toContain('id="aiConfigMode"');
     expect(source).toContain('id="aiAutocompleteFormat"');
     expect(source).toContain('command: "saveAiConfig"');
+    expect(source).toContain('id="fetchAiModels"');
+    expect(source).toContain('id="aiModelResults"');
+    expect(source).toContain('command: "fetchAiModels"');
+    expect(source).toContain('renderAiModelResults(data)');
+    expect(source).toContain("设为分析");
+    expect(source).toContain("设为补全");
     expect(source).toContain('command: "requestOptimizationReview"');
     expect(source).toContain("renderOptimizationReport(data.optimizationReport)");
+    expect(source).toContain("buildLuoguMcpRecommendationCandidates");
+    expect(source).toContain("Luogu MCP：搜索 ");
+    expect(source).toContain("luoguMcpQueryCount");
+    expect(source).toContain("requestSubmissionJudge(keyOf(problem))");
+    expect(source).toContain("找错复盘");
+    expect(source).toContain("requestSolutionScore(keyOf(problem))");
     expect(source).toContain("优化复盘");
     expect(source).toContain("AI 估计，不代表官方 OJ");
     expect(source).toContain('command: "requestSolutionScore"');
-    expect(source).toContain("studentRequest: coachQuestion.value.trim()");
+    expect(source).toContain("const rawStudentRequest = coachQuestion.value.trim();");
+    expect(source).toContain('action === "followUp" && !rawStudentRequest && source !== "custom"');
+    expect(source).toContain("正在发送你的追问：");
+    expect(source).toContain("coachThreads: {}");
+    expect(source).toContain("previousCoachTurn: summarizeCoachThreadForPrompt(keyOf(problem))");
+    expect(source).toContain("appendCoachTurn(problemKey, data, report, localized)");
     expect(source).not.toContain('command: "requestSolutionScore",\n        problemKey: keyOf(problem),\n        studentRequest: coachQuestion.value.trim(),\n        ojVerdict: {\n          status: "AC"\n        }');
+  });
+
+  test("exposes beta English UI and AI-output switches", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain('id="uiLanguage"');
+    expect(source).toContain('command: "saveUiLanguage"');
+    expect(source).toContain('uiLanguage: "zh"');
+    expect(source).toContain('value="en">English');
+    expect(source).toContain('option value="en"');
+    expect(source).toContain('responseLanguage === "en" ? "en-US"');
+    expect(source).toContain("applyUiLanguage()");
+    expect(source).toContain("AI Coach");
+    expect(source).toContain("Problems");
+    expect(source).toContain("Learning Profile");
   });
 
   test("persists Student Skill updates from AI coaching actions", async () => {
@@ -86,6 +185,93 @@ describe("problem bank webview script", () => {
     expect(source).toContain("listStudentSkillVersions");
   });
 
+  test("does not rely on blocked browser dialogs for webview actions", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).not.toContain("prompt(");
+    expect(source).not.toContain("confirm(");
+    expect(source).not.toContain("alert(");
+    expect(source).toContain("renderEvidenceDetails");
+    expect(source).toContain("defaultSkillFeedbackNoteForWebview");
+  });
+
+  test("renders AI and problem text through a safe markdown renderer", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain("function markdownBlock(text, className)");
+    expect(source).toContain("function parseMarkdownBlocks(text)");
+    expect(source).toContain("function appendMarkdownBlock(root, block)");
+    expect(source).toContain('block.appendChild(markdownBlock(bodyText, "hint"));');
+    expect(source).toContain('const block = markdownBlock(bodyText, "textBlock markdownBody");');
+    expect(source).toContain("appendInlineMarkdown");
+    expect(source).toContain("appendMarkdownLink");
+    expect(source).toContain("function appendMathInline(parent, source)");
+    expect(source).toContain("function normalizeInlineMathText(source)");
+    expect(source).toContain('appendMathInline(parent, value.slice(next.start + 1, end));');
+    expect(source).toContain("mathInline");
+    expect(source).toContain("mathSup");
+    expect(source).toContain("function appendMathTextWithScripts(parent, text)");
+    expect(source).toContain("function readMathScript(value, start)");
+    expect(source).toContain("≤");
+    expect(source).toContain("markdownQuote");
+    expect(source).toContain("markdownParagraph");
+    expect(source).toContain("markdownBody");
+    expect(source).not.toContain("math.textContent = value.slice(next.start, end + 1);");
+    expect(source).not.toContain("marked.parse");
+    expect(source).not.toContain(".innerHTML = markdown");
+  });
+
+  test("renders more-specific AI hints as a separate stronger coaching layer", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain('data.action === "specific"');
+    expect(source).toContain('data.action === "followUp"');
+    expect(source).toContain("rawSpecificHint");
+    expect(source).toContain("specificHintTitle");
+    expect(source).toContain("checkpointTitle");
+    expect(source).toContain("microStepsTitle");
+    expect(source).toContain("optionalDetailsBlock");
+    expect(source).toContain("requestFollowUpWithText");
+    expect(source).toContain("讲简单点");
+    expect(source).toContain("再讲简单点");
+    expect(source).toContain("继续追问");
+    expect(source).toContain("小例子");
+    expect(source).toContain("更具体的下一步");
+  });
+
+  test("uses Markdown file import instead of in-panel problem paste", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain('<details class="panel manualPastePanel" open>');
+    expect(source).toContain("<summary>Markdown 文件导入</summary>");
+    expect(source).toContain('id="importManualMarkdownFile"');
+    expect(source).toContain('command: "importManualMarkdownFile"');
+    expect(source).toContain("showOpenDialog");
+    expect(source).toContain("AI 写题规范");
+    expect(source).toContain("parseManualProblemMarkdown");
+    expect(source).toContain("title: parsed.title");
+    expect(source).toContain("sourceUrl: fileUri.toString()");
+    expect(source).toContain("inputFormat: parsed.inputFormat");
+    expect(source).toContain("samples: parsed.samples");
+    expect(source).toContain("已从 Markdown 文件导入");
+    expect(source).not.toContain('textarea id="manualStatement"');
+    expect(source).not.toContain('command: "saveManual"');
+    expect(source).not.toContain('id="manualPreview"');
+    expect(source).not.toContain("function renderManualPreview()");
+    expect(source).not.toContain("manualProblemTemplate");
+    expect(source).not.toContain("Markdown 预览");
+    expect(source).toContain("<summary>题号导入 / 搜索</summary>");
+    expect(source).not.toContain('<details class="panel" open>\n        <summary>题号导入 / 搜索</summary>');
+  });
+
+  test("keeps AI actions on the coach page instead of duplicating them in problem detail", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).not.toContain("problemDetail.appendChild(actions);");
+    expect(source).toContain('goCoachButton.textContent = "去 AI 教练提问";');
+    expect(source).toContain('id="coachHint"');
+  });
+
   test("routes next-problem recommendation through the rule engine", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
@@ -106,5 +292,6 @@ describe("problem bank webview script", () => {
     expect(source).toContain('command: "copyInternalTestSummary"');
     expect(source).toContain("renderInternalTesting()");
     expect(source).toContain("本地记录");
+    expect(source).toContain("损坏记录");
   });
 });

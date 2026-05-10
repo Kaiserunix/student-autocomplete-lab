@@ -44,6 +44,10 @@ interface AnthropicMessagesResponse {
   };
 }
 
+interface JsonResponse<T> {
+  payload: T;
+}
+
 function joinEndpoint(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/completions`;
 }
@@ -69,27 +73,26 @@ export async function requestCompletion(
     return requestAnthropicCompletion(config, request, fetchImpl);
   }
 
-  const response = await fetchImpl(joinEndpoint(config.baseUrl), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "content-type": "application/json"
+  const endpoint = joinEndpoint(config.baseUrl);
+  const { payload } = await fetchJson<CompletionResponse>(
+    endpoint,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model: config.model,
+        prompt: request.prompt,
+        max_tokens: request.maxTokens,
+        temperature: request.temperature,
+        stop: request.stop
+      })
     },
-    body: JSON.stringify({
-      model: config.model,
-      prompt: request.prompt,
-      max_tokens: request.maxTokens,
-      temperature: request.temperature,
-      stop: request.stop
-    })
-  });
-
-  const payload = (await response.json()) as CompletionResponse;
-
-  if (!response.ok) {
-    const message = typeof payload.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
-    throw new Error(`Completion request failed: ${message}`);
-  }
+    fetchImpl,
+    { operation: "Completion", endpoint, config }
+  );
 
   const text = payload.choices?.[0]?.text;
   if (typeof text !== "string") {
@@ -104,35 +107,35 @@ async function requestChatCompletion(
   request: CompletionRequest,
   fetchImpl: typeof fetch
 ): Promise<string> {
-  const response = await fetchImpl(joinChatEndpoint(config.baseUrl), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "content-type": "application/json"
+  const endpoint = joinChatEndpoint(config.baseUrl);
+  const { payload } = await fetchJson<ChatCompletionResponse>(
+    endpoint,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: [
+          {
+            role: "system",
+            content: "Return only the immediate code continuation. Do not explain."
+          },
+          {
+            role: "user",
+            content: request.prompt
+          }
+        ],
+        max_tokens: request.maxTokens,
+        temperature: request.temperature,
+        stop: request.stop
+      })
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages: [
-        {
-          role: "system",
-          content: "Return only the immediate code continuation. Do not explain."
-        },
-        {
-          role: "user",
-          content: request.prompt
-        }
-      ],
-      max_tokens: request.maxTokens,
-      temperature: request.temperature,
-      stop: request.stop
-    })
-  });
-  const payload = (await response.json()) as ChatCompletionResponse;
-
-  if (!response.ok) {
-    const message = typeof payload.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
-    throw new Error(`Chat completion request failed: ${message}`);
-  }
+    fetchImpl,
+    { operation: "Chat completion", endpoint, config }
+  );
 
   const text = payload.choices?.[0]?.message?.content;
   if (typeof text !== "string") {
@@ -147,32 +150,32 @@ async function requestAnthropicCompletion(
   request: CompletionRequest,
   fetchImpl: typeof fetch
 ): Promise<string> {
-  const response = await fetchImpl(joinAnthropicEndpoint(config.baseUrl), {
-    method: "POST",
-    headers: {
-      "x-api-key": config.apiKey,
-      "anthropic-version": config.anthropicVersion ?? "2023-06-01",
-      "content-type": "application/json"
+  const endpoint = joinAnthropicEndpoint(config.baseUrl);
+  const { payload } = await fetchJson<AnthropicMessagesResponse>(
+    endpoint,
+    {
+      method: "POST",
+      headers: {
+        "x-api-key": config.apiKey,
+        "anthropic-version": config.anthropicVersion ?? "2023-06-01",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model: config.model,
+        max_tokens: request.maxTokens,
+        temperature: request.temperature,
+        system: "Return only the immediate code continuation. Do not explain.",
+        messages: [
+          {
+            role: "user",
+            content: request.prompt
+          }
+        ]
+      })
     },
-    body: JSON.stringify({
-      model: config.model,
-      max_tokens: request.maxTokens,
-      temperature: request.temperature,
-      system: "Return only the immediate code continuation. Do not explain.",
-      messages: [
-        {
-          role: "user",
-          content: request.prompt
-        }
-      ]
-    })
-  });
-  const payload = (await response.json()) as AnthropicMessagesResponse;
-
-  if (!response.ok) {
-    const message = typeof payload.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
-    throw new Error(`Anthropic messages request failed: ${message}`);
-  }
+    fetchImpl,
+    { operation: "Anthropic messages", endpoint, config }
+  );
 
   const text = payload.content?.find((block) => block.type === "text" && typeof block.text === "string")?.text;
   if (typeof text !== "string") {
@@ -180,4 +183,90 @@ async function requestAnthropicCompletion(
   }
 
   return text;
+}
+
+async function fetchJson<T>(
+  endpoint: string,
+  init: RequestInit,
+  fetchImpl: typeof fetch,
+  context: { operation: string; endpoint: string; config: CompletionProviderConfig }
+): Promise<JsonResponse<T>> {
+  let response: Response;
+  try {
+    response = await fetchImpl(endpoint, init);
+  } catch (error) {
+    throw new Error(
+      `${context.operation} request failed before HTTP response: ${requestContext(context)}; ${errorMessage(error)}`
+    );
+  }
+
+  const rawText = await response.text();
+  const payload = parseJsonObject(rawText) as T;
+  if (!response.ok) {
+    const upstream = errorFromPayload(payload) ?? previewText(rawText) ?? `HTTP ${response.status}`;
+    throw new Error(
+      `${context.operation} request failed: HTTP ${response.status}; ${requestContext(context)}; ${upstream}${modelHint(
+        context.config,
+        response.status
+      )}`
+    );
+  }
+
+  return { payload };
+}
+
+function parseJsonObject(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+function errorFromPayload(payload: unknown): string | undefined {
+  const record = asRecord(payload);
+  const error = asRecord(record?.error);
+  return typeof error?.message === "string" ? error.message : undefined;
+}
+
+function requestContext(context: { endpoint: string; config: CompletionProviderConfig }): string {
+  return `endpoint=${context.endpoint}; model=${context.config.model}; format=${context.config.format ?? "openai-completions"}`;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function previewText(text: string): string | undefined {
+  const preview = text.replace(/\s+/g, " ").trim().slice(0, 240);
+  return preview || undefined;
+}
+
+function modelHint(config: CompletionProviderConfig, status: number): string {
+  if (
+    status >= 500 &&
+    sanitizeBaseUrl(config.baseUrl).includes("xiaomimimo.com") &&
+    config.model === "mimo-v2.5"
+  ) {
+    return " 当前 MiMo 模型 mimo-v2.5 可能不可用，建议切换 mimo-v2.5-pro 后重试。";
+  }
+
+  return "";
+}
+
+function sanitizeBaseUrl(baseUrl: string): string {
+  try {
+    const parsed = new URL(baseUrl);
+    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return baseUrl.replace(/[?&]key=[^&]+/gi, "");
+  }
+}
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return undefined;
+  }
+
+  return value as Record<string, unknown>;
 }

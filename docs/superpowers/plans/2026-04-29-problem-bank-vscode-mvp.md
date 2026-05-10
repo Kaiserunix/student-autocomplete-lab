@@ -17,7 +17,7 @@
 - `vitest.config.ts`: Unit test configuration.
 - `src/problemBank/types.ts`: Shared problem, source, and pain-point types.
 - `src/problemBank/seedLuogu.ts`: Seed metadata for the Luogu problems supplied by the user.
-- `src/problemBank/sourcePolicy.ts`: Default import policy for Luogu, LeetCode, and manual paste.
+- `src/problemBank/sourcePolicy.ts`: Default import policy for Luogu, LeetCode, and manual Markdown-file import.
 - `src/problemBank/luoguClient.ts`: Public Luogu problem fetcher using `GET /problem/:pid` with `x-lentille-request: content-only`.
 - `src/problemBank/catalog.ts`: Catalog lookup and normalization helpers.
 - `src/autocomplete/filter.ts`: 1-3 line autocomplete post-filter.
@@ -53,7 +53,7 @@
 - Create: `test/luoguClient.test.ts`
 - Create: `test/catalog.test.ts`
 
-- [ ] Write tests that Luogu defaults to public import with manual paste fallback.
+- [ ] Write tests that Luogu defaults to public import with manual Markdown-file import fallback.
 - [ ] Write tests that LeetCode is optional-interface plus manual fallback until GraphQL is wired.
 - [ ] Write tests that all 20 supplied Luogu IDs are present.
 - [ ] Write tests that Luogu JSON normalizes into a local problem record.
@@ -107,7 +107,7 @@
 - Modify: `README.md`
 
 - [ ] Document how to install dependencies, compile, test, and launch the extension host.
-- [ ] Document the source policy: Luogu public import is attempted first; manual paste is the fallback; LeetCode remains manual until a stable GraphQL adapter is wired.
+- [ ] Document the source policy: Luogu public import is attempted first; manual Markdown-file import is the fallback; LeetCode remains manual until a stable GraphQL adapter is wired.
 - [ ] Run `npm test`.
 - [ ] Run `npm run compile`.
 - [ ] Commit docs and final verification.

@@ -6,7 +6,7 @@ Date: 2026-05-03
 
 ## Purpose
 
-The internal build is for giving a few friends a simple beta to try while collecting enough local evidence to improve the teaching loop. It is intentionally separate from the public beta candidate.
+The internal build is for giving a few friends a simple beta to try while collecting enough local evidence to improve the teaching loop. It is intentionally separate from the clean beta release candidate.
 
 Do not upload this VSIX to GitHub releases, package registries, or any public extension marketplace.
 
@@ -48,7 +48,7 @@ This command compiles the extension, stages a rewritten package under `.runtime/
 
 ```powershell
 code --install-extension .runtime\student-autocomplete-lab-0.1.0-beta.1-internal.1.vsix --force
-code -n "C:\Users\qwerf\Desktop\Source\leetcodepy"
+code -n "<your practice workspace>"
 ```
 
 The friend-testing checklist should record:

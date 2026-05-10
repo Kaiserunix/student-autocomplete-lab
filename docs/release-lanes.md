@@ -6,7 +6,7 @@ Student Autocomplete Lab now has three VSIX lanes. They must not be mixed.
 
 | Lane | Package name | View prefix | Intended use | Publish rule |
 | --- | --- | --- | --- | --- |
-| Beta | `student-autocomplete-lab` | `studentAutocomplete` | Normal local and small-scope testing with full project features | Can be shared as a test package |
+| Beta | `student-autocomplete-lab` | `studentAutocomplete` | Normal local and small-scope testing with full project features and engineering material | Local/trusted testing only; not a public artifact |
 | Beta Release | `student-autocomplete-lab-beta-release` | `studentAutocompleteBetaRelease` | Clean public candidate containing only runtime extension files | Publish only after clean-package gate passes |
 | Beta Internal | `student-autocomplete-lab-internal` | `studentAutocompleteInternal` | Friend testing with local JSONL records enabled | Never publish |
 

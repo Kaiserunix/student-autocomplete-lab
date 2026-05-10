@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import {
   applyAiConfigUpdateToEnvText,
@@ -43,14 +44,14 @@ DEEPSEEK_BASE_URL=https://fallback.test
     expect(config.model).toBe("mimo-v2.5-pro");
   });
 
-  test("defaults autocomplete to mimo-v2.5 even when Pro is configured for richer work", () => {
+  test("respects an explicitly configured MiMo Pro autocomplete model", () => {
     const env = loadModelEnvFromText(`
 MIMO_OPENAI_BASE_URL=https://example.test/openai
 MIMO_API_KEY=secret-value
 MIMO_AUTOCOMPLETE_MODEL=mimo-v2.5-pro
 `);
 
-    expect(requireMimoAutocompleteConfig(env).model).toBe("mimo-v2.5");
+    expect(requireMimoAutocompleteConfig(env).model).toBe("mimo-v2.5-pro");
   });
 
   test("uses MiMo 2.5 by default for teaching diagnosis", () => {
@@ -66,14 +67,14 @@ MIMO_API_KEY=secret-value
     });
   });
 
-  test("keeps teaching diagnosis on MiMo 2.5 when Pro is configured", () => {
+  test("respects an explicitly configured MiMo Pro teaching model", () => {
     const env = loadModelEnvFromText(`
 MIMO_OPENAI_BASE_URL=https://example.test/openai
 MIMO_API_KEY=secret-value
 MIMO_CHAT_MODEL=mimo-v2.5-pro
 `);
 
-    expect(requireMimoTeachingConfig(env).model).toBe("mimo-v2.5");
+    expect(requireMimoTeachingConfig(env).model).toBe("mimo-v2.5-pro");
   });
 
   test("builds official OpenAI config from the generic AI provider settings", () => {
@@ -102,7 +103,7 @@ AI_OPENAI_AUTOCOMPLETE_MODEL=gpt-4.1-mini
 AI_PROVIDER_MODE=openai-compatible
 AI_OPENAI_COMPAT_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
 AI_OPENAI_COMPAT_API_KEY=mimo-secret
-AI_OPENAI_COMPAT_CHAT_MODEL=mimo-v2.5
+AI_OPENAI_COMPAT_CHAT_MODEL=mimo-v2.5-pro
 AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL=mimo-v2.5
 AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT=openai-completions
 `);
@@ -111,10 +112,11 @@ AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT=openai-completions
       mode: "openai-compatible",
       format: "openai-chat",
       baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
-      model: "mimo-v2.5"
+      model: "mimo-v2.5-pro"
     });
     expect(requireAutocompleteConfig(env)).toMatchObject({
-      format: "openai-completions"
+      format: "openai-completions",
+      model: "mimo-v2.5"
     });
   });
 
@@ -150,11 +152,11 @@ MIMO_AUTOCOMPLETE_MODEL=mimo-v2.5-pro
     expect(requireTeachingConfig(env)).toMatchObject({
       mode: "openai-compatible",
       baseUrl: "https://legacy-mimo.test/v1",
-      model: "mimo-v2.5"
+      model: "mimo-v2.5-pro"
     });
     expect(requireAutocompleteConfig(env)).toMatchObject({
       format: "openai-completions",
-      model: "mimo-v2.5"
+      model: "mimo-v2.5-pro"
     });
   });
 
@@ -259,5 +261,13 @@ AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT=openai-completions
       format: "openai-completions",
       model: "legacy-complete"
     });
+  });
+
+  test("VS Code setting reader ignores workspace-scoped provider endpoints before applying SecretStorage keys", async () => {
+    const source = await readFile("src/config/vscodeModelEnv.ts", "utf8");
+
+    expect(source).toContain("vscode.ConfigurationTarget.Global");
+    expect(source).toContain("return inspected.globalValue;");
+    expect(source).not.toContain("workspaceFolderValue ?? inspected.workspaceValue");
   });
 });

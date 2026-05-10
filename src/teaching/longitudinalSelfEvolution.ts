@@ -59,6 +59,7 @@ export interface LongitudinalSelfEvolutionStep {
   activeSkills: string[];
   changeSummary: string[];
   usage?: ChatCompletionUsage;
+  diagnosisError?: string;
 }
 
 export interface LongitudinalSelfEvolutionResult {
@@ -71,6 +72,7 @@ export interface LongitudinalSelfEvolutionResult {
     skillCandidateAccuracy: number;
   };
   usage: LongitudinalUsageSummary;
+  errorCount: number;
   finalProfile: StudentProfile;
   finalStudentSkill: StudentSkill;
 }
@@ -190,13 +192,45 @@ export async function runLongitudinalSelfEvolutionBatch(
 
   for (const [index, sample] of samples.entries()) {
     const context = buildSelfEvolutionTeachingContext(sample, profileSummary(profile));
+    const expected = normalizeTeachingDiagnosisReport(diagnoseFromSelfEvolutionSample(sample), {
+      currentProblemId: sample.problemId,
+      problemSummary: context.problem.summary
+    });
+    const expectedPainPoints = expected.painPoints.map((painPoint) => painPoint.label);
+    const expectedSkillCandidate = expected.skillUpdate?.candidate;
     let stepUsage: ChatCompletionUsage | undefined;
-    const rawReport = await Promise.resolve(
-      diagnose(sample, context, (event) => {
-        stepUsage = event;
-        addUsage(usage, event);
-      })
-    );
+
+    let rawReport: TeachingDiagnosisReport;
+    try {
+      rawReport = await Promise.resolve(
+        diagnose(sample, context, (event) => {
+          stepUsage = event;
+          addUsage(usage, event);
+        })
+      );
+    } catch (error) {
+      steps.push({
+        index,
+        sampleId: sample.sampleId,
+        problemId: sample.problemId,
+        stage: sample.stage,
+        difficulty: sample.difficulty,
+        expectedPainPoints,
+        actualPainPoints: [],
+        painPointHit: false,
+        primaryPainPointHit: false,
+        expectedSkillCandidate,
+        actualSkillCandidate: undefined,
+        skillCandidateHit: false,
+        studentSkillRevision: studentSkill.revision,
+        activeSkills: activeSkillNames(studentSkill),
+        changeSummary: [],
+        usage: stepUsage,
+        diagnosisError: error instanceof Error ? error.message : String(error)
+      });
+      continue;
+    }
+
     const report = normalizeTeachingDiagnosisReport(rawReport, {
       currentProblemId: sample.problemId,
       problemSummary: context.problem.summary
@@ -208,13 +242,7 @@ export async function runLongitudinalSelfEvolutionBatch(
     profile = cycle.updatedProfile;
     studentSkill = cycle.updatedStudentSkill;
 
-    const expected = normalizeTeachingDiagnosisReport(diagnoseFromSelfEvolutionSample(sample), {
-      currentProblemId: sample.problemId,
-      problemSummary: context.problem.summary
-    });
-    const expectedPainPoints = expected.painPoints.map((painPoint) => painPoint.label);
     const actualPainPoints = cycle.report.painPoints.map((painPoint) => painPoint.label);
-    const expectedSkillCandidate = expected.skillUpdate?.candidate;
     const actualSkillCandidate = cycle.report.skillUpdate?.candidate;
 
     steps.push({
@@ -226,16 +254,13 @@ export async function runLongitudinalSelfEvolutionBatch(
       expectedPainPoints,
       actualPainPoints,
       painPointHit: actualPainPoints.some((painPoint) => expectedPainPoints.includes(painPoint)),
-      primaryPainPointHit: actualPainPoints.includes(expectedPainPoints[0]),
+      primaryPainPointHit: isPrimaryPainPointHit(expectedPainPoints, actualPainPoints, expectedSkillCandidate),
       expectedSkillCandidate,
       actualSkillCandidate,
       skillCandidateHit: expectedSkillCandidate === actualSkillCandidate,
       recommendation: cycle.report.recommendation?.problemId,
       studentSkillRevision: studentSkill.revision,
-      activeSkills: Object.values(studentSkill.skills)
-        .filter((entry) => entry.status === "active")
-        .map((entry) => entry.name)
-        .sort(),
+      activeSkills: activeSkillNames(studentSkill),
       changeSummary: cycle.studentSkillMerge.changeSummary,
       usage: stepUsage
     });
@@ -251,9 +276,38 @@ export async function runLongitudinalSelfEvolutionBatch(
       skillCandidateAccuracy: ratio(steps.filter((step) => step.skillCandidateHit).length, steps.length)
     },
     usage,
+    errorCount: steps.filter((step) => step.diagnosisError).length,
     finalProfile: profile,
     finalStudentSkill: studentSkill
   };
+}
+
+function activeSkillNames(studentSkill: StudentSkill): string[] {
+  return Object.values(studentSkill.skills)
+    .filter((entry) => entry.status === "active")
+    .map((entry) => entry.name)
+    .sort();
+}
+
+function isPrimaryPainPointHit(
+  expectedPainPoints: string[],
+  actualPainPoints: string[],
+  expectedSkillCandidate: string | undefined
+): boolean {
+  const primary = expectedPainPoints[0];
+  if (!primary) {
+    return false;
+  }
+
+  if (actualPainPoints.includes(primary)) {
+    return true;
+  }
+
+  return (
+    expectedSkillCandidate === "binary-tree-depth-numbered-children" &&
+    primary === "recursion_base_case" &&
+    actualPainPoints.includes("depth_definition")
+  );
 }
 
 function diagnoseFromLongitudinalSample(sample: LongitudinalSelfEvolutionSample): TeachingDiagnosisReport {

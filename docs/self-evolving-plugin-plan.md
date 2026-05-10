@@ -6,7 +6,7 @@
 
 **Architecture:** The plugin separates high-frequency autocomplete from teacher-mode analysis. Small autocomplete models only complete local code context; larger teacher models are used only after explicit student actions such as "give me a hint" or "I give up". The self-evolution loop converts repeated pain points into profile updates, skill candidates, and problem recommendations.
 
-**Tech Stack:** VS Code extension, local JSONL stores, MiMo v2.5 for cheap autocomplete, MiMo v2.5 Pro for teacher diagnosis, Luogu/LeetCode MCP servers for problem discovery, TypeScript tests and live MCP smoke tests.
+**Tech Stack:** VS Code extension, local JSONL stores, configurable autocomplete and teacher models, OpenAI-compatible/Anthropic/OpenAI provider lanes, Luogu/LeetCode MCP servers for problem discovery, TypeScript tests and live MCP smoke tests.
 
 **Beta target:** The final beta target is captured in [beta-v2-final-goals.md](beta-v2-final-goals.md). The key upgrade is moving from profile counters to a local, editable, rollbackable `Student Skill`.
 
@@ -19,8 +19,8 @@ This is not a general coding agent.
 The plugin should:
 
 - Help a student type obvious local code faster.
-- Keep pasted problem statements visible like a notebook page.
-- Avoid solving the pasted problem automatically.
+- Keep imported problem statements visible like a notebook page.
+- Avoid solving the imported problem automatically.
 - Trigger deeper model analysis only when the student explicitly asks.
 - Track pain points from the student's own attempts.
 - Recommend the next problem from diagnosed gaps.
@@ -36,7 +36,7 @@ The plugin should not:
 
 ## Core User Flow
 
-1. Student pastes or imports a problem.
+1. Student imports a Luogu problem or a manually-authored Markdown problem.
 2. The problem appears in the plugin side panel as a readable note.
 3. Autocomplete sees only local code context by default, not the full problem statement as a solve prompt.
 4. Student writes code normally.
@@ -53,14 +53,14 @@ The plugin should not:
 
 ### Autocomplete Route
 
-Use MiMo v2.5 by default.
+Use a fast, low-cost autocomplete model by default, such as `dsv4f`. MiMo remains an OpenAI-compatible experiment lane.
 
 Purpose:
 
 - Local continuation.
 - 1 to 3 lines.
 - Style preservation.
-- No problem-solving from pasted statements.
+- No problem-solving from imported statements.
 
 Inputs:
 

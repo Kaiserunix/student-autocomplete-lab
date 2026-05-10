@@ -19,6 +19,9 @@ export interface TeachingDiagnosisReport {
   studentErrorModel?: string;
   painPoints: TeachingPainPoint[];
   hint: string;
+  specificHint?: string;
+  checkpoint?: string;
+  microSteps?: string[];
   skillUpdate?: TeachingSkillUpdate;
   recommendation?: TeachingRecommendation;
 }
@@ -28,6 +31,11 @@ interface RawTeachingReport {
   studentErrorModel?: unknown;
   pain_points?: unknown;
   hint?: unknown;
+  specific_hint?: unknown;
+  specificHint?: unknown;
+  checkpoint?: unknown;
+  micro_steps?: unknown;
+  microSteps?: unknown;
   skill_update?: unknown;
   recommendation?: unknown;
 }
@@ -44,6 +52,9 @@ export function parseTeachingDiagnosisReport(text: string): TeachingDiagnosisRep
     studentErrorModel: optionalString(raw.student_error_model ?? raw.studentErrorModel),
     painPoints,
     hint: requireString(raw.hint, "hint"),
+    specificHint: optionalString(raw.specific_hint ?? raw.specificHint),
+    checkpoint: optionalString(raw.checkpoint),
+    microSteps: optionalStringArray(raw.micro_steps ?? raw.microSteps, "micro_steps"),
     skillUpdate: parseSkillUpdate(raw.skill_update),
     recommendation: parseRecommendation(raw.recommendation)
   };
@@ -117,6 +128,24 @@ function requireString(value: unknown, field: string): string {
 
 function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim().length > 0 ? value : undefined;
+}
+
+function optionalStringArray(value: unknown, field: string): string[] | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+
+  if (typeof value === "string") {
+    const lines = value
+      .split(/\r?\n/)
+      .map((line) => line.trim().replace(/^(?:[-*]|\d+[.)])\s*/, ""))
+      .filter((line) => line.length > 0);
+    return lines.length > 0 ? lines : undefined;
+  }
+
+  return requireArray(value, field)
+    .map((item) => requireString(item, `${field}[]`))
+    .filter((item) => item.trim().length > 0);
 }
 
 function requireNumber(value: unknown, field: string): number {

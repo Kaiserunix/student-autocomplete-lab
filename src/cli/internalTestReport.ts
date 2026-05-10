@@ -1,5 +1,10 @@
-import { readJsonlRecords } from "../storage/jsonlStore";
+import { readJsonlRecordsLenient } from "../storage/jsonlStore";
 import { summarizeInternalTestEvents, type InternalTestEvent } from "../internalTesting/internalTestRecorder";
+
+export async function buildInternalTestReportSummary(eventsPath: string) {
+  const { records, invalidRecords } = await readJsonlRecordsLenient<InternalTestEvent>(eventsPath);
+  return summarizeInternalTestEvents(records, { enabled: true, eventsPath, invalidRecords });
+}
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -10,8 +15,7 @@ async function main(): Promise<void> {
     throw new Error("Usage: node dist/src/cli/internalTestReport.js --events <internalTestEvents.jsonl> [--format json|markdown]");
   }
 
-  const events = await readJsonlRecords<InternalTestEvent>(eventsPath);
-  const summary = summarizeInternalTestEvents(events, { enabled: true, eventsPath });
+  const summary = await buildInternalTestReportSummary(eventsPath);
 
   if (format === "markdown") {
     console.log(`# Student Autocomplete Lab 内测摘要`);
@@ -24,6 +28,7 @@ async function main(): Promise<void> {
     console.log(`- 用户纠偏次数：${summary.skillFeedbackCount}`);
     console.log(`- 推荐次数：${summary.recommendationCount}`);
     console.log(`- 补全请求次数：${summary.autocompleteRequestCount}`);
+    console.log(`- 损坏记录数：${summary.invalidRecordCount}`);
     console.log(`- 模型：${summary.models.join(", ") || "未记录"}`);
     console.log(`- 记录文件：${summary.eventsPath}`);
     console.log("");
@@ -43,7 +48,9 @@ function valueAfter(args: string[], key: string): string | undefined {
   return args[index + 1];
 }
 
-main().catch((error) => {
-  console.error(error instanceof Error ? error.message : String(error));
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exitCode = 1;
+  });
+}

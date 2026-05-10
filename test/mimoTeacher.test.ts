@@ -20,6 +20,9 @@ describe("MiMo teaching diagnosis", () => {
                     }
                   ],
                   hint: "先确认后序遍历的最后一个字符代表什么。",
+                  specific_hint: "把 postorder[-1] 当作当前根，再用它去切 inorder 的左右子树；不要从 inorder[0] 取根。",
+                  checkpoint: "用只有根和一个左孩子的小树检查 root 来源。",
+                  micro_steps: ["找当前根", "切分中序左右段", "递归拼接根左右"],
                   skill_update: {
                     candidate: "binary-tree-traversal-reconstruction",
                     reason: "root identification is unstable",
@@ -56,6 +59,9 @@ describe("MiMo teaching diagnosis", () => {
     );
 
     expect(report.painPoints[0].label).toBe("root_identification");
+    expect(report.specificHint).toContain("postorder[-1]");
+    expect(report.checkpoint).toContain("左孩子");
+    expect(report.microSteps).toHaveLength(3);
     expect(calls[0].url).toBe("https://mimo.example.test/v1/chat/completions");
     expect(JSON.parse(String(calls[0].init?.body))).toMatchObject({
       model: "mimo-v2.5-pro",

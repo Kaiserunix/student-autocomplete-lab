@@ -13,6 +13,7 @@ export interface InternalTestSummary {
   skillFeedbackCount: number;
   recommendationCount: number;
   autocompleteRequestCount: number;
+  invalidRecordCount: number;
   models: string[];
   byKind: Record<string, number>;
   privacyNotice: string;
@@ -42,7 +43,7 @@ export function isInternalTestBuild(): boolean {
   return false;
 }
 
-export function summarizeInternalTestEvents(): InternalTestSummary {
+export function summarizeDisabledRecording(): InternalTestSummary {
   return disabledSummary();
 }
 
@@ -57,6 +58,7 @@ function disabledSummary(): InternalTestSummary {
     skillFeedbackCount: 0,
     recommendationCount: 0,
     autocompleteRequestCount: 0,
+    invalidRecordCount: 0,
     models: [],
     byKind: {},
     privacyNotice: "Beta release does not include internal-test recording."

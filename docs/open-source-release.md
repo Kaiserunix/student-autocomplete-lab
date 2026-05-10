@@ -8,7 +8,7 @@ Date: 2026-05-03
 
 This project is a VS Code extension beta candidate for algorithm-study coaching:
 
-- small inline autocomplete that avoids reading the pasted problem statement;
+- small inline autocomplete that avoids reading the imported problem statement;
 - Chinese-first sidebar with `AI 教练` as the first screen, plus `题目` and `学习画像`;
 - Luogu problem/training import and search adapters;
 - OpenAI, OpenAI-compatible, and Anthropic Messages style model configuration;
@@ -64,13 +64,13 @@ Teacher Packs are internal references. They may contain standard-solution reason
 
 ## 6. Packaging
 
-Package command:
+Full local beta test package command:
 
 ```powershell
 npm run package:beta
 ```
 
-The VSIX artifact is intentionally written to `.runtime/` and ignored by git.
+This package keeps full project features and engineering material for trusted local testing. It is intentionally written to `.runtime/` and ignored by git; it is not the clean public release artifact.
 
 Clean beta release package command:
 

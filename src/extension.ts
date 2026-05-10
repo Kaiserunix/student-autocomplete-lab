@@ -60,16 +60,16 @@ export function activate(context: vscode.ExtensionContext): void {
       vscode.commands.executeCommand(`${ProblemBankViewProvider.viewType}.focus`);
     }),
     vscode.commands.registerCommand("studentAutocomplete.giveHint", () => {
-      vscode.window.showInformationMessage("Student Autocomplete: hint analysis is planned for the next slice.");
+      focusCoachView("给点提示");
     }),
     vscode.commands.registerCommand("studentAutocomplete.moreSpecificHint", () => {
-      vscode.window.showInformationMessage("Student Autocomplete: deeper hint analysis is planned for the next slice.");
+      focusCoachView("更具体");
     }),
     vscode.commands.registerCommand("studentAutocomplete.revealAnswer", () => {
-      vscode.window.showInformationMessage("Student Autocomplete: answer reveal and wrong-problem bank are planned.");
+      focusCoachView("我放弃了");
     }),
     vscode.commands.registerCommand("studentAutocomplete.recommendNext", () => {
-      vscode.window.showInformationMessage("Student Autocomplete: recommendation is planned after pain-point events exist.");
+      focusCoachView("推荐下一题");
     }),
     vscode.commands.registerCommand("studentAutocomplete.triggerInlineCompletion", async () => {
       const editor = vscode.window.activeTextEditor;
@@ -84,6 +84,11 @@ export function activate(context: vscode.ExtensionContext): void {
       await vscode.commands.executeCommand("editor.action.inlineSuggest.trigger");
     })
   );
+}
+
+function focusCoachView(actionName: string): void {
+  void vscode.commands.executeCommand(`${ProblemBankViewProvider.viewType}.focus`);
+  void vscode.window.showInformationMessage(`请在左侧 AI 教练中点击「${actionName}」继续。`);
 }
 
 export function deactivate(): void {}

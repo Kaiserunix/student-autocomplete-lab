@@ -1,6 +1,6 @@
 const { cp, mkdir, readFile, rm, writeFile } = require("node:fs/promises");
 const { existsSync } = require("node:fs");
-const { execSync } = require("node:child_process");
+const { execFileSync } = require("node:child_process");
 const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
@@ -26,7 +26,9 @@ const allowedTopLevelRuntime = [
 
 const allowedTeachingFiles = [
   "attemptEvent.js",
+  "coachFollowUp.js",
   "lessonReport.js",
+  "luoguMcpRecommendationCandidates.js",
   "mimoTeacher.js",
   "optimizationReport.js",
   "recommendationCatalog.js",
@@ -44,6 +46,10 @@ const allowedTeachingFiles = [
   "teachingReport.js",
   "teachingTaxonomy.js",
   "types.js"
+];
+
+const allowedMcpFiles = [
+  "problemSearchTools.js"
 ];
 
 main().catch((error) => {
@@ -71,16 +77,27 @@ async function main() {
   await patchReleaseRuntime();
 
   assertCleanReleaseTree();
+  assertNoBlockedReleaseContent();
 
-  execSync(
-    `npx --yes @vscode/vsce package --no-dependencies --allow-missing-repository --out "${outPath}"`,
-    {
-      cwd: stagingRoot,
-      stdio: "inherit"
-    }
-  );
+  runVscePackage(stagingRoot, outPath);
 
   console.log(`Beta release VSIX created: ${outPath}`);
+}
+
+function runVscePackage(cwd, outputPath) {
+  const args = ["--yes", "@vscode/vsce", "package", "--no-dependencies", "--allow-missing-repository", "--out", outputPath];
+  if (process.platform === "win32") {
+    execFileSync(process.env.ComSpec || "cmd.exe", ["/d", "/s", "/c", "npx.cmd", ...args], {
+      cwd,
+      stdio: "inherit"
+    });
+    return;
+  }
+
+  execFileSync("npx", args, {
+    cwd,
+    stdio: "inherit"
+  });
 }
 
 async function copyReleaseRuntime() {
@@ -90,6 +107,10 @@ async function copyReleaseRuntime() {
   await mkdir(path.join(stagingRoot, "dist", "src", "teaching"), { recursive: true });
   for (const file of allowedTeachingFiles) {
     await cp(path.join(releaseDist, "teaching", file), path.join(stagingRoot, "dist", "src", "teaching", file));
+  }
+  await mkdir(path.join(stagingRoot, "dist", "src", "mcp"), { recursive: true });
+  for (const file of allowedMcpFiles) {
+    await cp(path.join(releaseDist, "mcp", file), path.join(stagingRoot, "dist", "src", "mcp", file));
   }
 }
 
@@ -135,8 +156,28 @@ async function patchReleaseRuntime() {
     text.replace('require("./internalTesting/internalTestRecorder")', 'require("./release/noopInternalTestRecorder")')
   );
   await patchTextFile(path.join(stagingRoot, "dist", "src", "sidebar", "ProblemBankViewProvider.js"), (text) =>
-    text.replace('require("../internalTesting/internalTestRecorder")', 'require("../release/noopInternalTestRecorder")')
+    stripReleaseInternalTestingUi(text).replace(
+      'require("../internalTesting/internalTestRecorder")',
+      'require("../release/noopInternalTestRecorder")'
+    )
   );
+}
+
+function stripReleaseInternalTestingUi(text) {
+  return text
+    .replaceAll("内测记录版", "本地记录未开启")
+    .replaceAll("内测记录摘要", "本地记录摘要不可用")
+    .replaceAll("内测记录", "本地记录")
+    .replaceAll("internalTestPanel", "releaseRecordPanel")
+    .replaceAll("internalTestEventsPath", "releaseRecordPath")
+    .replaceAll("internalTestEvents", "releaseRecordEvents")
+    .replaceAll("本地记录已开启，不会自动上传", "本地记录未开启")
+    .replaceAll(
+      "这个面板只会出现在内测包或显式开启环境变量时。记录可能包含题号、模型、痛点、纠偏备注和工作区路径。",
+      "公开包不包含本地记录面板。"
+    )
+    .replaceAll("Student Autocomplete Lab Beta Release 内测记录版", "Student Autocomplete Lab Beta Release")
+    .replaceAll("正式版：内测记录未开启。", "正式版：本地记录未开启。");
 }
 
 function assertCleanReleaseTree() {
@@ -158,6 +199,30 @@ function assertCleanReleaseTree() {
   }
 }
 
+function assertNoBlockedReleaseContent() {
+  const blockedPatterns = [
+    /internalTestPanel/,
+    /internalTestEvents/,
+    /STUDENT_AUTOCOMPLETE_INTERNAL_TEST/,
+    /内测记录版/,
+    /sk-[A-Za-z0-9_-]{12,}/,
+    /ghp_[A-Za-z0-9_]{12,}/,
+    /C:\\\\Users\\\\/i
+  ];
+  const files = listFiles(stagingRoot).filter((file) => /\.(js|json|md|txt|svg)$/i.test(file));
+  const bad = [];
+  for (const file of files) {
+    const content = require("node:fs").readFileSync(file, "utf8");
+    const match = blockedPatterns.find((pattern) => pattern.test(content));
+    if (match) {
+      bad.push(`${path.relative(stagingRoot, file)} matches ${match}`);
+    }
+  }
+  if (bad.length > 0) {
+    throw new Error(`Beta release package contains blocked content:\n${bad.join("\n")}`);
+  }
+}
+
 function listFiles(dir) {
   const fs = require("node:fs");
   const entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -168,9 +233,7 @@ function listFiles(dir) {
 }
 
 function renameContributionId(value) {
-  return String(value)
-    .replaceAll("studentAutocomplete.problemBankWebview", `${releaseViewPrefix}.problemBankWebview`)
-    .replaceAll("studentAutocomplete", releaseViewPrefix);
+  return String(value).replaceAll("studentAutocomplete", releaseViewPrefix);
 }
 
 function renameConfigurationProperties(configuration, title, expectedPrefix) {
@@ -216,7 +279,6 @@ async function patchCompiledContributionIds(dir) {
     }
     await patchTextFile(fullPath, (text) =>
       text
-        .replaceAll("studentAutocomplete.problemBankWebview", `${releaseViewPrefix}.problemBankWebview`)
         .replaceAll("studentAutocomplete", releaseViewPrefix)
         .replaceAll("Student Autocomplete Lab", releaseDisplayName)
     );

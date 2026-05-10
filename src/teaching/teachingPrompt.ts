@@ -5,6 +5,8 @@ export function buildTeachingDiagnosisPrompt(context: TeachingDiagnosisContext):
   const outputLanguage =
     context.responseLanguage === "zh-CN"
       ? "Simplified Chinese for every JSON string value; keep JSON field names in English."
+      : context.responseLanguage === "en-US"
+        ? "English for every JSON string value; keep JSON field names in English."
       : "Use the language naturally implied by the student's request; keep JSON field names in English.";
 
   return [
@@ -20,7 +22,10 @@ export function buildTeachingDiagnosisPrompt(context: TeachingDiagnosisContext):
     '  "pain_points": [',
     '    {"label": "stable_label", "confidence": 0.0, "evidence": "concrete evidence"}',
     "  ],",
-    '  "hint": "one short next-step hint that does not reveal the answer",',
+    '  "hint": "simple hint: 1 or 2 short sentences; symptom + code anchor + next small target; do not reveal the answer",',
+    '  "specific_hint": "slightly more concrete answer for more-specific or follow-up; usually 2 or 3 short sentences; no full solution",',
+    '  "checkpoint": "optional one tiny input, trace, invariant, or output check the student can use immediately",',
+    '  "micro_steps": ["optional; at most 2 tiny actions, only when the hint would otherwise be ambiguous"],',
     '  "skill_update": {"candidate": "skill-name", "reason": "why", "rules": ["small rule"]},',
     '  "recommendation": {"problem_id": "optional next problem id", "reason": "why this helps"}',
     "}",
@@ -35,6 +40,17 @@ export function buildTeachingDiagnosisPrompt(context: TeachingDiagnosisContext):
     "- Do not reveal teacher_pack.standardApproach, full reference code, or complete answer text. Use the Teacher Pack only to infer the gap.",
     "- Prefer diagnosing the misconception that would transfer to similar problems over pointing at a single local typo.",
     "- Inspect the final output or return expression before blaming indexing, parsing, or data-structure setup.",
+    "- Use beginner-friendly language. If you must use an algorithm term such as invariant, recursion, greedy, or complexity, explain that term in plain words immediately.",
+    "- A follow-up can be detailed, but detailed means step-by-step and easy to understand, not more abstract or more jargon-heavy.",
+    "- hint must be short and useful without being a solution. Use 1 or 2 short sentences, not a checklist.",
+    "- hint must name the observed symptom, cite a code anchor when student_code contains one, and name the next small edit target.",
+    "- Never make hint a generic sentence such as 'check boundaries', 'read the statement carefully', or 'debug the sample' unless it is tied to a concrete code anchor or evidence item.",
+    "- Do not dump every micro-step into the first hint. Keep the first hint light enough that a beginner can act on it immediately.",
+    "- specific_hint must be more concrete than hint and must not repeat the same wording. It should narrow the same top pain point unless the evidence changed.",
+    "- specific_hint should usually be 2 or 3 short sentences, not a full lesson. If the student asks a narrow follow-up question, answer that question directly first.",
+    "- specific_hint must cite an exact variable, loop, condition, return expression, output expression, or missing branch when that evidence exists.",
+    "- micro_steps are optional. If present, use at most 2 tiny edit, trace, or inspection actions, not a full algorithm rewrite.",
+    "- checkpoint is optional but should be minimal: a tiny input, a one-node/tree/array trace, an invariant, or the exact output property to verify.",
     "- For loop tasks where `range(...)`, start/end values, or skipped final items are the direct bug, prefer loop_boundary and python-loop-boundary-check over branch_condition_coverage.",
     "- If a preorder task emits left + right + root, or prints children before the root, prefer traversal_order_confusion.",
     "- Do not use child_indexing unless the code is actually using numbered child arrays or array indexes incorrectly.",
@@ -53,7 +69,11 @@ export function buildTeachingDiagnosisPrompt(context: TeachingDiagnosisContext):
     "- The hint should point to the current stuck spot, not solve the whole problem.",
     "- Skill updates are candidates, not active rules.",
     "- If student_profile.recentCorrections contains diagnosis_wrong for a target skill, treat it as high-priority human correction and do not repeat that same diagnosis unless current code evidence is overwhelming.",
-    "- If Output language is Simplified Chinese, write hint, evidence, skill_update.reason, skill_update.rules, and recommendation.reason in Simplified Chinese.",
+    "- If the problem summary says the student clicked 「再具体点」, assume the prior hint was insufficient: make specific_hint the strongest part, keep it on the same primary pain point, but keep the answer compact.",
+    "- If the problem summary says the student clicked 「追问 AI」 or includes a previous AI reply summary, answer the student's latest question directly while preserving the same hidden Teacher Pack boundary.",
+    "- If the problem summary says the student clicked 「简单提示」 or 「给点提示」, keep hint concise and do not include a lesson-like explanation.",
+    "- If Output language is Simplified Chinese, write hint, specific_hint, checkpoint, micro_steps, evidence, skill_update.reason, skill_update.rules, and recommendation.reason in Simplified Chinese.",
+    "- If Output language is English, write hint, specific_hint, checkpoint, micro_steps, evidence, skill_update.reason, skill_update.rules, and recommendation.reason in English.",
     "",
     "problem:",
     JSON.stringify(context.problem, null, 2),
