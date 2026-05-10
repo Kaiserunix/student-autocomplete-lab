@@ -1,5 +1,5 @@
 import { recommendProblemsByPainPoint, searchLuoguProblemsForMcp } from "../mcp/problemSearchTools";
-import type { RecommendationCandidateInput, RankedPainPoint } from "./recommendationEngine";
+import type { RecommendationCandidateInput, RankedPainPoint } from "../recommendation/schema";
 
 export interface LuoguMcpRecommendationCandidateResult {
   candidates: RecommendationCandidateInput[];

@@ -41,8 +41,8 @@ import { requestMimoOptimizationReport, type OptimizationReport } from "../teach
 import {
   mergeRecommendationCandidates,
   recommendationCandidatesFromProblems
-} from "../teaching/recommendationCatalog";
-import { recommendNextProblems } from "../teaching/recommendationEngine";
+} from "../recommendation/candidatePool";
+import { recommendNextProblems } from "../recommendation/rules";
 import { requestMimoSolutionScore } from "../teaching/solutionScore";
 import { hasSubstantiveStudentCode, normalizeScoreOjVerdict } from "../teaching/solutionScoreGate";
 import { applyTeachingDiagnosis, profileSummary, type StudentProfile } from "../teaching/studentProfile";
@@ -962,6 +962,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         luoguMcpErrorCount: luoguMcpCandidates.errorMessages.length
       }
     });
+    const recommendationLimitations =
+      luoguMcpCandidates.errorMessages.length > 0
+        ? `Luogu MCP 搜索有 ${luoguMcpCandidates.errorMessages.length} 个查询失败，已使用本地题库和内置候选继续推荐。`
+        : undefined;
 
     return {
       type: "problemRecommendation",
@@ -969,10 +973,13 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       currentProblem: { id: currentProblem.id, title: currentProblem.title },
       recommendation,
       luoguMcp: luoguMcpCandidates,
+      recommendationLimitations,
       profileSummary: profileSummary(profile),
       studentSkill,
       studentSkillVersions: await this.studentSkillVersionViews(),
-      status: `规则推荐已通过 Luogu MCP 搜索 ${luoguMcpCandidates.queryCount} 次，合并生成 ${recommendation.recommendations.length} 个候选。`
+      status: recommendationLimitations
+        ? `${recommendationLimitations} 合并生成 ${recommendation.recommendations.length} 个候选。`
+        : `规则推荐已通过 Luogu MCP 搜索 ${luoguMcpCandidates.queryCount} 次，合并生成 ${recommendation.recommendations.length} 个候选。`
     };
   }
 
@@ -4026,6 +4033,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           )
         );
       }
+      if (data.recommendationLimitations) {
+        aiResponse.appendChild(responseBlock("候选来源限制", data.recommendationLimitations));
+      }
 
       if (strategy.topPainPoints?.length) {
         const row = document.createElement("div");
@@ -4043,9 +4053,15 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
       items.forEach((item, index) => {
         const problem = item.problem || {};
+        const stable = item.recommendation || {};
         const block = responseBlock(
           (index + 1) + ". " + (problem.id || "?") + " · " + (problem.title || "未命名题目"),
-          "规则分 " + (item.score ?? "?") + " · " + (problem.difficulty !== undefined ? "难度 " + problem.difficulty : "难度未知")
+          "规则分 " +
+            (item.score ?? "?") +
+            " · " +
+            (problem.difficulty !== undefined ? "难度 " + problem.difficulty : "难度未知") +
+            " · " +
+            (stable.targetSkill ? "目标 " + stable.targetSkill : "目标 skill 未知")
         );
 
         if (item.matchedPainPoints?.length) {
@@ -4053,6 +4069,20 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           painRow.className = "tagRow";
           item.matchedPainPoints.forEach((painPoint) => painRow.appendChild(textSpan(painPoint, "tag")));
           block.appendChild(painRow);
+        }
+
+        if (stable.difficultyChange || stable.transferEvidenceStatus || stable.source) {
+          block.appendChild(
+            textSpan(
+              "来源 " +
+                (stable.source || problem.platform || "?") +
+                " · 难度变化 " +
+                (stable.difficultyChange || "?") +
+                " · 迁移状态 " +
+                (stable.transferEvidenceStatus || "?"),
+              "mini"
+            )
+          );
         }
 
         (item.reasons || []).slice(0, 4).forEach((reason) => {

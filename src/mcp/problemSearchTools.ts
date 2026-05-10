@@ -1,8 +1,8 @@
 import { fetchLuoguProblem } from "../problemBank/luoguClient";
 import { searchLuoguProblemSets, searchLuoguProblems } from "../problemBank/luoguSearchClient";
 import type { ProblemRecord, ProblemSearchResult, ProblemSetSearchResult } from "../problemBank/types";
-import { builtInRecommendationCandidates } from "../teaching/recommendationCatalog";
-import { recommendNextProblems } from "../teaching/recommendationEngine";
+import { builtInRecommendationCandidates } from "../recommendation/candidatePool";
+import { recommendNextProblems } from "../recommendation/rules";
 import { normalizePainPointLabel } from "../teaching/teachingTaxonomy";
 
 export interface ProblemToolSummary {
