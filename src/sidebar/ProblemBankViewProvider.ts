@@ -68,7 +68,9 @@ import {
 } from "../teaching/teacherPack";
 import { runTeachingCycle, runTeachingCycleWithStudentSkill } from "../teaching/teachingCycle";
 import type { OjVerdict } from "../teaching/types";
+import type { HostEvent } from "./hostEvents";
 import { localizeTeachingDiagnosisReport } from "./localizeTeachingReport";
+import type { AiCoachAction, CoachResponseLanguage, WebviewMessage } from "./messageProtocol";
 import {
   buildCompletedProblemRecord,
   type CompletedProblemRecord,
@@ -84,95 +86,14 @@ import {
   type PracticeLanguage
 } from "./practiceFile";
 import { buildSidebarTeachingContext } from "./sidebarTeachingContext";
-
-type WebviewMessage =
-  | { command: "loadProblems" }
-  | { command: "importLuogu"; pid: string; language?: string; createFile?: boolean }
-  | { command: "importPreset"; presetId: string }
-  | { command: "importLuoguProblemSet"; id: string }
-  | { command: "searchLuoguProblems"; keyword: string }
-  | { command: "searchLuoguProblemSets"; keyword: string }
-  | { command: "saveAiConfig"; config: AiProviderConfigUpdate }
-  | { command: "fetchAiModels"; config: AiProviderConfigUpdate }
-  | { command: "saveUiLanguage"; language: UiLanguage }
-  | { command: "importManualMarkdownFile" }
-  | {
-      command: "requestAiCoach";
-      action: AiCoachAction;
-      problemKey: string;
-      ojVerdict?: OjVerdict;
-      responseLanguage?: CoachResponseLanguage;
-      studentRequest?: string;
-      previousCoachTurn?: string;
-    }
-  | {
-      command: "requestSolutionScore";
-      problemKey: string;
-      ojVerdict?: OjVerdict;
-      studentRequest?: string;
-      archiveOnComplete?: boolean;
-    }
-  | { command: "requestOptimizationReview"; problemKey: string; studentRequest?: string }
-  | { command: "requestSubmissionJudge"; problemKey: string }
-  | { command: "requestAutocompletePreview" }
-  | { command: "copyInternalTestSummary" }
-  | { command: "archiveProblem"; problemKey: string; reason?: CompletionReason }
-  | { command: "deleteProblem"; problemKey: string; deleteScope: "active" | "completed" }
-  | { command: "disableStudentSkill"; skillName: string; reason?: string }
-  | {
-      command: "recordStudentSkillFeedback";
-      skillName: string;
-      feedbackType: StudentSkillCorrectionType;
-      note?: string;
-    }
-  | { command: "rollbackStudentSkill"; versionId: string }
-  | { command: "placeholder"; action: string };
-
-type AiCoachAction = "hint" | "specific" | "followUp" | "giveUp" | "recommend";
-type CoachResponseLanguage = "zh" | "en" | "raw";
-type UiLanguage = "zh" | "en";
-
-interface SavedProblemRecord extends ProblemRecord {
-  savedAt: string;
-  sourceSetId?: string;
-}
-
-interface StarterPreset {
-  id: string;
-  title: string;
-  subtitle: string;
-  problemIds: string[];
-  painPoints: string[];
-}
-
-interface AiRuntimeStatus {
-  envPath: string;
-  providerMode?: string;
-  autocomplete: {
-    configured: boolean;
-    model?: string;
-    endpoint?: string;
-    format?: string;
-    error?: string;
-  };
-  teaching: {
-    configured: boolean;
-    model?: string;
-    endpoint?: string;
-    format?: string;
-    error?: string;
-  };
-}
-
-interface StudentSkillVersionView {
-  versionId: string;
-  archivedAt: string;
-  reason: string;
-  revision: number;
-  activeSkillCount: number;
-  candidateSkillCount: number;
-  disabledSkillCount: number;
-}
+import type {
+  AiRuntimeStatus,
+  ProblemBankStateView,
+  SavedProblemRecord,
+  StarterPreset,
+  StudentSkillVersionView,
+  UiLanguage
+} from "./stateView";
 
 const starterPresets: StarterPreset[] = [
   {
@@ -232,7 +153,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
-  private async handleMessage(message: WebviewMessage): Promise<Record<string, unknown> | void> {
+  private async handleMessage(message: WebviewMessage): Promise<HostEvent | Record<string, unknown> | void> {
     if (message.command === "loadProblems") {
       return this.problemBankState();
     }
@@ -429,7 +350,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       return this.handleRollbackStudentSkillRequest(message.versionId);
     }
 
-    throw new Error(`未知的侧栏动作：${message.command}`);
+    throw new Error(`未知的侧栏动作：${(message as { command: string }).command}`);
   }
 
   private problemsPath(): string {
@@ -477,7 +398,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     selectedKey?: string,
     status?: string,
     extra: Record<string, unknown> = {}
-  ): Promise<Record<string, unknown>> {
+  ): Promise<ProblemBankStateView> {
     const problems = await this.loadSavedProblems();
     const completedProblems = await this.loadCompletedProblems();
     const studentSkillState = await this.loadStudentSkillState();
