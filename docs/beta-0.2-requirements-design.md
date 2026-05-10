@@ -81,6 +81,8 @@ Reference links used for orientation:
 
 Deep research follow-up: [deep-research-agent-teaching-framework.md](deep-research-agent-teaching-framework.md) refines this source map into a concrete teaching-agent architecture. Its main conclusion is that beta 0.2 should not embed a generic multi-agent runtime. Instead, it should implement a TypeScript-native deterministic `TeachingWorkflow` with role-specific prompts, strict context policies, persistent `AttemptSession` state, Student Skill knowledge tracing, and MCP only as a tool boundary.
 
+Second deep research follow-up: [deep-research-teaching-eval-observability-batch-2.md](deep-research-teaching-eval-observability-batch-2.md) adds the learning-system layer. Its main conclusion is that beta 0.2 should add local teaching traces, scenario replay, spaced retrieval practice, micro-drills, and stricter MCP/context guardrails before expanding more autonomous-agent behavior.
+
 ## 3. Product Definition
 
 ### 3.1 User Story
@@ -494,6 +496,27 @@ AI judge is allowed only as:
 - sample/counterexample-backed when possible;
 - never presented as official OJ.
 
+### 10.5 Teaching Trace and Pedagogy Policy
+
+Every AI teaching action should create a local `TeachingTrace` span:
+
+- route: hint, follow-up, lesson, score, optimize, recommendation;
+- attempt ID and current Student Skill revision;
+- provider, model, latency, token usage, parser retries;
+- context summary and forbidden-context check result;
+- output schema version;
+- user feedback, if any.
+
+The trace is not telemetry upload. It exists so internal testing can replay cases and so the UI can explain "why this hint" without exposing hidden Teacher Pack content.
+
+The coach should also follow a small pedagogy policy:
+
+- prefer retrieval and self-explanation over rereading;
+- after abandon, schedule a micro-repair or retrieval probe;
+- after AC, schedule transfer evidence before raising difficulty;
+- if the user says an answer is too hard, lower reading level and reduce the next task size;
+- if the user says an answer is too vague, keep the same pain point and add one concrete clue or counterexample.
+
 ## 11. Autocomplete 0.2
 
 Autocomplete must be boring, fast, and safe.
@@ -595,6 +618,18 @@ Every recommendation returns:
 - `whyNotHarder`;
 - `whyNotRepeat`.
 
+### 12.4 Practice Queue
+
+Recommendation 0.2 is not only "next problem." It should also maintain a practice queue:
+
+- retrieval probe due now;
+- transfer probe needed;
+- micro-drill after failure;
+- later spaced review;
+- blocked item needing user correction.
+
+Difficulty can rise only after transfer evidence or repeated low-hint success. If a retrieval probe fails, the next recommendation should become narrower and closer to the same pain point.
+
 ## 13. Student Skill 0.2
 
 Student Skill should feel like an editable teaching memory, not a black-box profile.
@@ -630,6 +665,21 @@ Student Skill should feel like an editable teaching memory, not a black-box prof
 - no raw code unless user opts in.
 
 This is useful for debugging and for letting a stronger model review the teaching memory without exposing entire local history.
+
+### 13.4 Practice State
+
+Student Skill should remain inspectable, but gain a compatible practice-state layer:
+
+- `dueAt`;
+- `intervalDays`;
+- `lastProbeType`;
+- `lastProbeResult`;
+- `transferEvidenceCount`;
+- `retrievalSuccessStreak`;
+- `recentHintBurden`;
+- `promotionBlockedReason`.
+
+This is the bridge from "the model noticed a pain point" to "the system can test whether the student retained and transferred it."
 
 ## 14. Internal Testing and 5M Token Program
 
@@ -714,6 +764,29 @@ Every run outputs:
 - token usage by route;
 - cost estimate by route;
 - examples worth reading manually.
+
+### 14.5 Scenario Replay and Trace Gates
+
+AI-related changes should be tested with scenario replay, not only fresh live calls. A replay scenario contains:
+
+- problem summary;
+- code snapshot;
+- OJ-like feedback;
+- current Student Skill;
+- previous coach turns;
+- expected primary pain point;
+- expected skill patch;
+- expected recommendation or practice action.
+
+Additional gates:
+
+- trace completeness: 100% of AI routes create a span;
+- forbidden context violation: 0;
+- answer leakage in hint route: 0;
+- schema replay stability: >= 0.95;
+- hint actionability: >= 0.85;
+- "too hard" repair success: >= 0.80;
+- initial retrieval probe pass rate after lesson: >= 0.70.
 
 ## 15. Privacy, Safety, and Open-Source Hygiene
 
@@ -930,5 +1003,7 @@ The next plan should be split into independent implementation tracks:
 5. `student-skill-0.2`: evidence timeline, export, correction merge hardening.
 6. `mcp-suite-0.2`: problem search/attempt/skill/eval/browser import servers.
 7. `internal-5m-eval`: resumable runs, token ledger, mismatch reports.
+
+Batch 2 adjusts the order: build `TeachingTrace` and context-policy spans before expanding more UI or model routes. Trace first makes every later failure cheaper to diagnose.
 
 These tracks can be parallelized later because their write scopes are separable. The first implementation should start with track 1 and 2, because the user-visible pain is still "AI chat/follow-up feels stateless" and "model configuration must be real."

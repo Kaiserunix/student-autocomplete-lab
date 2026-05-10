@@ -4,6 +4,8 @@ Date: 2026-05-10
 
 Status: research-backed framework refinement for `docs/beta-0.2-requirements-design.md`.
 
+Second pass: [deep-research-teaching-eval-observability-batch-2.md](deep-research-teaching-eval-observability-batch-2.md) extends this architecture with local trace/eval, spaced practice, micro-drills, and MCP safety gates.
+
 ## 0. Summary
 
 This research pass looked at agent frameworks, AI coding assistants, MCP tooling, competitive-programming import tools, and AI/programming-education research. The conclusion is deliberately conservative:
