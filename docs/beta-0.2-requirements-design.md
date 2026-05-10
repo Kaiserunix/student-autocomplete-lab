@@ -85,6 +85,8 @@ Second deep research follow-up: [deep-research-teaching-eval-observability-batch
 
 Third deep research follow-up: [deep-research-learning-records-eval-ui-batch-3.md](deep-research-learning-records-eval-ui-batch-3.md) adds the implementation discipline: xAPI/Caliper-inspired local learning events, eval/red-team harnesses, interpretable knowledge tracing, and Playwright screenshot gates for real UI regression testing.
 
+Fourth deep research follow-up: [deep-research-skill-distillation-and-self-improvement.md](deep-research-skill-distillation-and-self-improvement.md) studies local superpowers skills, colleague/dot-skill, Nuwa skill, and self-improving skill systems. Its main conclusion is that Student Skill should become a small, testable, user-correctable skill model: observations promote to candidates, candidates promote to active skills only with evidence, disabled skills never silently reactivate, and transfer probes are required before claiming real learning.
+
 ## 3. Product Definition
 
 ### 3.1 User Story
