@@ -70,8 +70,8 @@ import {
   upsertTeacherPack,
   type TeacherPackRecord
 } from "../teaching/teacherPack";
-import { runTeachingCycle, runTeachingCycleWithStudentSkill } from "../teaching/teachingCycle";
 import type { OjVerdict } from "../teaching/types";
+import { runCoachDiagnosisWorkflow } from "../teaching/workflow/actions";
 import type { HostEvent } from "./hostEvents";
 import { localizeTeachingDiagnosisReport } from "./localizeTeachingReport";
 import type { AiCoachAction, CoachResponseLanguage, WebviewMessage } from "./messageProtocol";
@@ -717,16 +717,17 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       };
     }
 
-    const result = await runTeachingCycleWithStudentSkill(
+    const result = await runCoachDiagnosisWorkflow({
+      action: action === "specific" ? "specific" : "hint",
+      problemKey,
+      platform: problem.platform,
       context,
       profile,
       studentSkill,
-      (diagnosisContext) => requestMimoTeachingDiagnosis(config, diagnosisContext),
-      {
-        occurredAt,
-        patchSource: config.model
-      }
-    );
+      occurredAt,
+      patchSource: config.model,
+      diagnose: (diagnosisContext) => requestMimoTeachingDiagnosis(config, diagnosisContext)
+    });
     await saveStudentProfile(this.profilePath(), result.updatedProfile);
     await saveStudentSkill(this.studentSkillPath(), result.updatedStudentSkill);
     await archiveStudentSkillVersion(
@@ -735,16 +736,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       `${action} ${problem.id} via ${config.model}`,
       occurredAt
     );
-    const event = buildAttemptEvent({
-        problemKey,
-        problemId: problem.id,
-        platform: problem.platform,
-        kind: actionToAttemptEventKind(action),
-        occurredAt,
-        action,
-        painPoints: result.report.painPoints.map((painPoint) => painPoint.label),
-        model: config.model
-      });
+    const event = buildAttemptEvent(result.attemptEventInput);
     await this.appendAttemptEvent(problem, event, [
       {
         role: "student",
@@ -771,7 +763,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       model: config.model,
       payload: {
         candidateSkill: result.report.skillUpdate?.candidate,
-        skillMergeChangeCount: result.studentSkillMerge.changeSummary.length
+        skillMergeChangeCount: result.studentSkillMerge.changeSummary.length,
+        workflowAudit: result.audit
       }
     });
 

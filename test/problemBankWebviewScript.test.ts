@@ -159,7 +159,7 @@ describe("problem bank webview script", () => {
 
     expect(source).toContain("studentSkillPath()");
     expect(source).toContain("studentSkillVersionsDir()");
-    expect(source).toContain("runTeachingCycleWithStudentSkill");
+    expect(source).toContain("runCoachDiagnosisWorkflow");
     expect(source).toContain("saveStudentSkill(this.studentSkillPath()");
     expect(source).toContain("archiveStudentSkillVersion(");
     expect(source).toContain("this.studentSkillVersionsDir()");
