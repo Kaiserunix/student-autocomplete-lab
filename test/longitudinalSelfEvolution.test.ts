@@ -2,7 +2,8 @@ import { describe, expect, test } from "vitest";
 import {
   generateLongitudinalSelfEvolutionSamples,
   runLongitudinalSelfEvolutionBatch,
-  selectLongitudinalBatch
+  selectLongitudinalBatch,
+  summarizeLongitudinalMismatches
 } from "../src/teaching/longitudinalSelfEvolution";
 
 describe("longitudinal self-evolution", () => {
@@ -58,8 +59,14 @@ describe("longitudinal self-evolution", () => {
       studentSkillRevision: 1
     });
     expect(result.steps.some((step) => step.skillCandidateHit)).toBe(true);
+    expect(result.steps[0]).toHaveProperty("expectedRecommendationRange");
+    expect(result.steps[0]).toHaveProperty("recommendationHit");
     expect(Object.keys(result.finalStudentSkill.skills).length).toBeGreaterThan(0);
     expect(result.usage.totalTokens).toBe(0);
+    expect(result.mismatchSummary).toMatchObject({
+      providerErrorCount: 0,
+      jsonRetryOrParseErrorCount: 0
+    });
   });
 
   test("normalizes broad recursion skill into binary-tree depth skill before scoring and Student Skill merge", async () => {
@@ -177,5 +184,73 @@ describe("longitudinal self-evolution", () => {
       skillCandidateHit: true
     });
     expect(result.errorCount).toBe(1);
+    expect(result.mismatchSummary.providerErrorCount).toBe(1);
+    expect(result.mismatchSummary.diagnosisErrors[0]).toMatchObject({
+      sampleId: "long-0001",
+      category: "provider"
+    });
+  });
+
+  test("summarizes mismatch pairs for beta calibration reports", () => {
+    const summary = summarizeLongitudinalMismatches([
+      {
+        index: 0,
+        sampleId: "long-0001",
+        problemId: "SIM-0001",
+        stage: 1,
+        difficulty: 1,
+        expectedPainPoints: ["traversal_order_confusion"],
+        actualPainPoints: ["child_indexing"],
+        painPointHit: false,
+        primaryPainPointHit: false,
+        expectedSkillCandidate: "binary-tree-traversal-reconstruction",
+        actualSkillCandidate: "binary-tree-depth-numbered-children",
+        skillCandidateHit: false,
+        expectedRecommendationRange: ["P1305", "P1030"],
+        recommendation: "P4913",
+        recommendationHit: false,
+        studentSkillRevision: 0,
+        activeSkills: [],
+        changeSummary: []
+      },
+      {
+        index: 1,
+        sampleId: "long-0002",
+        problemId: "SIM-0002",
+        stage: 1,
+        difficulty: 1,
+        expectedPainPoints: ["traversal_order_confusion"],
+        actualPainPoints: ["child_indexing"],
+        painPointHit: false,
+        primaryPainPointHit: false,
+        expectedSkillCandidate: "binary-tree-traversal-reconstruction",
+        actualSkillCandidate: "binary-tree-depth-numbered-children",
+        skillCandidateHit: false,
+        expectedRecommendationRange: ["P1305", "P1030"],
+        recommendation: "P4913",
+        recommendationHit: false,
+        studentSkillRevision: 0,
+        activeSkills: [],
+        changeSummary: [],
+        diagnosisError: "Invalid JSON response"
+      }
+    ]);
+
+    expect(summary.skillMismatchPairs[0]).toMatchObject({
+      expected: "binary-tree-traversal-reconstruction",
+      actual: "binary-tree-depth-numbered-children",
+      count: 2
+    });
+    expect(summary.primaryPainPointMismatchPairs[0]).toMatchObject({
+      expected: "traversal_order_confusion",
+      actual: "child_indexing",
+      count: 2
+    });
+    expect(summary.recommendationMismatchPairs[0]).toMatchObject({
+      expected: "P1305|P1030",
+      actual: "P4913",
+      count: 2
+    });
+    expect(summary.jsonRetryOrParseErrorCount).toBe(1);
   });
 });

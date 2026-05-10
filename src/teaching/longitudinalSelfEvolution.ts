@@ -54,7 +54,9 @@ export interface LongitudinalSelfEvolutionStep {
   expectedSkillCandidate?: string;
   actualSkillCandidate?: string;
   skillCandidateHit: boolean;
+  expectedRecommendationRange: string[];
   recommendation?: string;
+  recommendationHit: boolean;
   studentSkillRevision: number;
   activeSkills: string[];
   changeSummary: string[];
@@ -72,9 +74,33 @@ export interface LongitudinalSelfEvolutionResult {
     skillCandidateAccuracy: number;
   };
   usage: LongitudinalUsageSummary;
+  mismatchSummary: LongitudinalMismatchSummary;
   errorCount: number;
   finalProfile: StudentProfile;
   finalStudentSkill: StudentSkill;
+}
+
+export interface LongitudinalMismatchPair {
+  expected: string;
+  actual: string;
+  count: number;
+  sampleIds: string[];
+}
+
+export interface LongitudinalErrorSummary {
+  sampleId: string;
+  problemId: string;
+  category: "provider" | "json" | "unknown";
+  message: string;
+}
+
+export interface LongitudinalMismatchSummary {
+  skillMismatchPairs: LongitudinalMismatchPair[];
+  primaryPainPointMismatchPairs: LongitudinalMismatchPair[];
+  recommendationMismatchPairs: LongitudinalMismatchPair[];
+  diagnosisErrors: LongitudinalErrorSummary[];
+  providerErrorCount: number;
+  jsonRetryOrParseErrorCount: number;
 }
 
 export type LongitudinalDiagnose = (
@@ -222,6 +248,9 @@ export async function runLongitudinalSelfEvolutionBatch(
         expectedSkillCandidate,
         actualSkillCandidate: undefined,
         skillCandidateHit: false,
+        expectedRecommendationRange: sample.recommendationRange,
+        recommendation: undefined,
+        recommendationHit: false,
         studentSkillRevision: studentSkill.revision,
         activeSkills: activeSkillNames(studentSkill),
         changeSummary: [],
@@ -244,6 +273,7 @@ export async function runLongitudinalSelfEvolutionBatch(
 
     const actualPainPoints = cycle.report.painPoints.map((painPoint) => painPoint.label);
     const actualSkillCandidate = cycle.report.skillUpdate?.candidate;
+    const recommendation = cycle.report.recommendation?.problemId;
 
     steps.push({
       index,
@@ -258,7 +288,9 @@ export async function runLongitudinalSelfEvolutionBatch(
       expectedSkillCandidate,
       actualSkillCandidate,
       skillCandidateHit: expectedSkillCandidate === actualSkillCandidate,
-      recommendation: cycle.report.recommendation?.problemId,
+      expectedRecommendationRange: sample.recommendationRange,
+      recommendation,
+      recommendationHit: recommendation ? sample.recommendationRange.includes(recommendation) : false,
       studentSkillRevision: studentSkill.revision,
       activeSkills: activeSkillNames(studentSkill),
       changeSummary: cycle.studentSkillMerge.changeSummary,
@@ -276,15 +308,60 @@ export async function runLongitudinalSelfEvolutionBatch(
       skillCandidateAccuracy: ratio(steps.filter((step) => step.skillCandidateHit).length, steps.length)
     },
     usage,
+    mismatchSummary: summarizeLongitudinalMismatches(steps),
     errorCount: steps.filter((step) => step.diagnosisError).length,
     finalProfile: profile,
     finalStudentSkill: studentSkill
   };
 }
 
+export function summarizeLongitudinalMismatches(steps: LongitudinalSelfEvolutionStep[]): LongitudinalMismatchSummary {
+  const diagnosisErrors = steps
+    .filter((step) => step.diagnosisError)
+    .map((step) => ({
+      sampleId: step.sampleId,
+      problemId: step.problemId,
+      category: classifyDiagnosisError(step.diagnosisError ?? ""),
+      message: step.diagnosisError ?? ""
+    }));
+
+  return {
+    skillMismatchPairs: summarizePairs(
+      steps
+        .filter((step) => !step.skillCandidateHit)
+        .map((step) => ({
+          sampleId: step.sampleId,
+          expected: step.expectedSkillCandidate ?? "missing",
+          actual: step.actualSkillCandidate ?? "missing"
+        }))
+    ),
+    primaryPainPointMismatchPairs: summarizePairs(
+      steps
+        .filter((step) => !step.primaryPainPointHit)
+        .map((step) => ({
+          sampleId: step.sampleId,
+          expected: step.expectedPainPoints[0] ?? "missing",
+          actual: step.actualPainPoints[0] ?? "missing"
+        }))
+    ),
+    recommendationMismatchPairs: summarizePairs(
+      steps
+        .filter((step) => !step.recommendationHit)
+        .map((step) => ({
+          sampleId: step.sampleId,
+          expected: step.expectedRecommendationRange.join("|") || "missing",
+          actual: step.recommendation ?? "missing"
+        }))
+    ),
+    diagnosisErrors,
+    providerErrorCount: diagnosisErrors.filter((error) => error.category === "provider").length,
+    jsonRetryOrParseErrorCount: diagnosisErrors.filter((error) => error.category === "json").length
+  };
+}
+
 function activeSkillNames(studentSkill: StudentSkill): string[] {
   return Object.values(studentSkill.skills)
-    .filter((entry) => entry.status === "active")
+    .filter((entry) => entry.status === "active" || entry.status === "mastered")
     .map((entry) => entry.name)
     .sort();
 }
@@ -341,7 +418,9 @@ function buildSample(index: number, totalCount: number): LongitudinalSelfEvoluti
     expectedSkillCandidate: expectation.expectedSkillCandidate,
     minimumCounterexample: expectation.minimumCounterexample,
     bruteForceAllowed: expectation.bruteForceAllowed,
-    recommendationRange: expectation.recommendationRange
+    recommendationRange: shouldAllowStayCurrentRecommendation(expectation.expectedPrimaryPainPoint)
+      ? unique([...expectation.recommendationRange, problemId])
+      : unique(expectation.recommendationRange)
   };
 }
 
@@ -677,4 +756,52 @@ function ratio(hitCount: number, total: number): number {
   }
 
   return Math.round((hitCount / total) * 1000) / 1000;
+}
+
+function shouldAllowStayCurrentRecommendation(primaryPainPoint: string): boolean {
+  return (
+    primaryPainPoint === "output_format" ||
+    primaryPainPoint === "numeric_input_type" ||
+    primaryPainPoint === "distance_formula" ||
+    primaryPainPoint === "needs_teacher_review"
+  );
+}
+
+function summarizePairs(
+  pairs: Array<{ expected: string; actual: string; sampleId: string }>
+): LongitudinalMismatchPair[] {
+  const grouped = new Map<string, LongitudinalMismatchPair>();
+  for (const pair of pairs) {
+    const key = `${pair.expected} -> ${pair.actual}`;
+    const previous = grouped.get(key);
+    if (previous) {
+      previous.count += 1;
+      previous.sampleIds = unique([...previous.sampleIds, pair.sampleId]).slice(0, 10);
+    } else {
+      grouped.set(key, {
+        expected: pair.expected,
+        actual: pair.actual,
+        count: 1,
+        sampleIds: [pair.sampleId]
+      });
+    }
+  }
+
+  return [...grouped.values()].sort((left, right) => right.count - left.count || left.expected.localeCompare(right.expected));
+}
+
+function classifyDiagnosisError(message: string): LongitudinalErrorSummary["category"] {
+  if (/json|parse|schema/i.test(message)) {
+    return "json";
+  }
+
+  if (/fetch|http|timeout|502|503|500|provider|completion|network/i.test(message)) {
+    return "provider";
+  }
+
+  return "unknown";
+}
+
+function unique(values: string[]): string[] {
+  return Array.from(new Set(values)).sort();
 }

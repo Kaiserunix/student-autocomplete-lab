@@ -24,6 +24,7 @@ async function main(): Promise<void> {
   const stamp = new Date().toISOString().replace(/[^0-9A-Za-z._-]/g, "-");
   const outPath =
     readStringArg(args, "--out") ?? path.join(".runtime", "longitudinal-self-evolution", `run-${stamp}.json`);
+  const summaryOutPath = readStringArg(args, "--summary-out");
   const samplesOutPath =
     readStringArg(args, "--samples-out") ??
     path.join(".runtime", "longitudinal-self-evolution", `samples-${count}.json`);
@@ -63,6 +64,22 @@ async function main(): Promise<void> {
       samples
     });
     await writeJson(path.resolve(process.cwd(), outPath), output);
+    if (summaryOutPath) {
+      await writeJson(path.resolve(process.cwd(), summaryOutPath), {
+        schemaVersion: 1,
+        provider: "longitudinal-self-evolution-mismatch-summary",
+        teacherProvider: teacher.name,
+        model: teacher.model,
+        count,
+        offset,
+        limit,
+        batchStart: batch[0]?.sampleId,
+        batchEnd: batch.at(-1)?.sampleId,
+        scores: result.scores,
+        usage: result.usage,
+        mismatchSummary: result.mismatchSummary
+      });
+    }
   }
 
   console.log(
@@ -79,12 +96,20 @@ async function main(): Promise<void> {
         scores: result.scores,
         errorCount: result.errorCount,
         usage: result.usage,
+        mismatchSummary: {
+          skillMismatchPairs: result.mismatchSummary.skillMismatchPairs.slice(0, 5),
+          primaryPainPointMismatchPairs: result.mismatchSummary.primaryPainPointMismatchPairs.slice(0, 5),
+          recommendationMismatchPairs: result.mismatchSummary.recommendationMismatchPairs.slice(0, 5),
+          providerErrorCount: result.mismatchSummary.providerErrorCount,
+          jsonRetryOrParseErrorCount: result.mismatchSummary.jsonRetryOrParseErrorCount
+        },
         finalStudentSkillRevision: result.finalStudentSkill.revision,
         activeSkills: Object.values(result.finalStudentSkill.skills)
-          .filter((entry) => entry.status === "active")
+          .filter((entry) => entry.status === "active" || entry.status === "mastered")
           .map((entry) => entry.name)
           .sort(),
         outPath: args.includes("--no-write") ? undefined : outPath,
+        summaryOutPath: args.includes("--no-write") ? undefined : summaryOutPath,
         samplesOutPath: args.includes("--no-write") ? undefined : samplesOutPath
       },
       null,
