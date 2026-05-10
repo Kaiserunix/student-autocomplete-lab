@@ -87,6 +87,8 @@ Third deep research follow-up: [deep-research-learning-records-eval-ui-batch-3.m
 
 Fourth deep research follow-up: [deep-research-skill-distillation-and-self-improvement.md](deep-research-skill-distillation-and-self-improvement.md) studies local superpowers skills, colleague/dot-skill, Nuwa skill, and self-improving skill systems. Its main conclusion is that Student Skill should become a small, testable, user-correctable skill model: observations promote to candidates, candidates promote to active skills only with evidence, disabled skills never silently reactivate, and transfer probes are required before claiming real learning.
 
+Refactor architecture follow-up: [superpowers/specs/2026-05-10-refactor-architecture-design.md](superpowers/specs/2026-05-10-refactor-architecture-design.md) defines the beta 0.2 architecture refactor. Its recommended route is a domain-core refactor with staged UI extraction: introduce `AttemptSession`, `TeachingWorkflow`, `ModelRouter`, typed webview command contracts, storage gateways, and a Student Skill lifecycle before attempting a full frontend rewrite.
+
 ## 3. Product Definition
 
 ### 3.1 User Story
