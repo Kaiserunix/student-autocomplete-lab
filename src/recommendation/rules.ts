@@ -61,8 +61,12 @@ export function recommendNextProblems(input: RecommendNextProblemsInput): Proble
     repeatedFailurePainPoints,
     excludedProblemIds
   };
-  const recommendations = candidates
+  const scoredRecommendations = candidates
     .map((candidate) => scoreCandidate(candidate, strategy, input.studentSkill))
+    .filter((recommendation) => !isBlindHarderRecommendation(recommendation, strategy));
+  const hasPainMatchedCandidate = scoredRecommendations.some((recommendation) => recommendation.matchedPainPoints.length > 0);
+  const recommendations = scoredRecommendations
+    .filter((recommendation) => !hasPainMatchedCandidate || recommendation.matchedPainPoints.length > 0)
     .sort(sortRecommendation)
     .slice(0, normalizeLimit(input.limit));
 
@@ -90,6 +94,8 @@ function scoreCandidate(
   const reasons = buildRecommendationReasons({ problem, matchedPainPoints, difficultySignal, transferSignal });
   const targetSkill = chooseTargetSkill(problem, matchedPainPoints);
   const transferEvidenceStatus = resolveTransferEvidenceStatus(problem, studentSkill);
+  const whyNotHarder = explainWhyNotHarder(problem, strategy, difficultyChange, transferEvidenceStatus);
+  const whyNotRepeat = explainWhyNotRepeat(strategy);
 
   return {
     problem,
@@ -104,7 +110,9 @@ function scoreCandidate(
       reasons,
       targetSkill,
       difficultyChange,
-      transferEvidenceStatus
+      transferEvidenceStatus,
+      whyNotHarder,
+      whyNotRepeat
     }),
     breakdown: {
       painPointScore,
@@ -113,6 +121,47 @@ function scoreCandidate(
       repeatPenalty
     }
   };
+}
+
+function isBlindHarderRecommendation(
+  recommendation: ProblemRecommendation,
+  strategy: RecommendationStrategy
+): boolean {
+  return (
+    recommendation.recommendation.difficultyChange === "up" &&
+    !canIncreaseDifficulty(recommendation.problem, strategy.transferReadySkills, strategy.lowHintSuccessSkills)
+  );
+}
+
+function explainWhyNotHarder(
+  problem: RecommendationCandidate,
+  strategy: RecommendationStrategy,
+  difficultyChange: RecommendationDifficultyChange,
+  transferEvidenceStatus: string
+): string {
+  if (difficultyChange === "up") {
+    return strategy.transferReadySkills.length > 0 || strategy.lowHintSuccessSkills.length > 0
+      ? `已有迁移或低提示成功证据（${transferEvidenceStatus}），允许小幅上探。`
+      : "没有足够迁移证据，不应该盲目推荐更难题。";
+  }
+
+  if (strategy.repeatedFailurePainPoints.length > 0) {
+    return `存在重复失败痛点：${strategy.repeatedFailurePainPoints.join(" / ")}，先用同阶或更窄题稳定。`;
+  }
+
+  if (typeof problem.difficulty === "number" && problem.difficulty < strategy.targetDifficulty) {
+    return "候选难度更低，用来修补基础痛点，而不是提前加压。";
+  }
+
+  return "当前没有足够迁移证据，先保持同难度练习。";
+}
+
+function explainWhyNotRepeat(strategy: RecommendationStrategy): string {
+  if (strategy.excludedProblemIds.length === 0) {
+    return "当前没有近期完成/放弃/删除记录；推荐会避开当前题。";
+  }
+
+  return `已排除当前题和近期题：${strategy.excludedProblemIds.slice(0, 6).join(" / ")}。`;
 }
 
 function rankPainPoints(profile: StudentProfile, studentSkill?: StudentSkill): RankedPainPoint[] {

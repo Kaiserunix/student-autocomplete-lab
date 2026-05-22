@@ -13,7 +13,8 @@ describe("problem-search MCP tools", () => {
     });
 
     expect(result.painPoint).toBe("traversal_order_confusion");
-    expect(result.items.map((item) => item.id)).toEqual(["P1305", "P1030", "P1827"]);
+    expect(result.items.map((item) => item.id)).toEqual(["P1305"]);
+    expect(result.items[0].difficultySignal).toContain("稳态练习");
     expect(result.searchHints).toContain("二叉树 遍历");
   });
 
@@ -24,7 +25,7 @@ describe("problem-search MCP tools", () => {
     });
 
     expect(result.painPoint).toBe("needs_teacher_review");
-    expect(result.items).toHaveLength(2);
+    expect(result.items).toHaveLength(1);
     expect(result.items[0].id).toBe("P4913");
   });
 

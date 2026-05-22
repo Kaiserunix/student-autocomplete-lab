@@ -25,6 +25,7 @@ export const webviewCommandNames = [
   "requestSolutionScore",
   "requestSubmissionJudge",
   "rollbackStudentSkill",
+  "runAiHealthCheck",
   "saveAiConfig",
   "saveUiLanguage",
   "searchLuoguProblems",
@@ -42,6 +43,7 @@ export type WebviewMessage =
   | { command: "searchLuoguProblemSets"; keyword: string }
   | { command: "saveAiConfig"; config: AiProviderConfigUpdate }
   | { command: "fetchAiModels"; config: AiProviderConfigUpdate }
+  | { command: "runAiHealthCheck"; config: AiProviderConfigUpdate }
   | { command: "saveUiLanguage"; language: UiLanguage }
   | { command: "importManualMarkdownFile" }
   | {

@@ -98,7 +98,7 @@ export async function requestChatCompletionText(
       body: JSON.stringify({
         model: config.model,
         messages: request.messages,
-        max_tokens: request.maxTokens,
+        max_tokens: effectiveOpenAiChatMaxTokens(config, request),
         temperature: request.temperature,
         response_format: request.responseFormat
       })
@@ -237,6 +237,21 @@ function modelHint(config: ChatCompletionProviderConfig, status: number): string
   }
 
   return "";
+}
+
+function effectiveOpenAiChatMaxTokens(
+  config: ChatCompletionProviderConfig,
+  request: ChatCompletionRequest
+): number {
+  if (isDeepSeekV4Chat(config)) {
+    return Math.max(request.maxTokens, request.responseFormat?.type === "json_object" ? 4000 : 1500);
+  }
+
+  return request.maxTokens;
+}
+
+function isDeepSeekV4Chat(config: ChatCompletionProviderConfig): boolean {
+  return sanitizeBaseUrl(config.baseUrl).includes("api.deepseek.com") && config.model.startsWith("deepseek-v4");
 }
 
 function splitSystemMessages(messages: ChatMessage[]): { system: string | undefined; messages: AnthropicMessage[] } {

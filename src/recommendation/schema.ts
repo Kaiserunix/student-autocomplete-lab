@@ -54,6 +54,8 @@ export interface RecommendationResult {
   targetSkill: string;
   difficultyChange: RecommendationDifficultyChange;
   transferEvidenceStatus: RecommendationTransferEvidenceStatus;
+  whyNotHarder: string;
+  whyNotRepeat: string;
 }
 
 export interface ProblemRecommendation {

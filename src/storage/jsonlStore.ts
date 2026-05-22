@@ -27,10 +27,14 @@ export async function readJsonlRecords<T>(path: string): Promise<T[]> {
     throw error;
   }
 
-  return content
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0)
-    .map((line) => JSON.parse(line) as T);
+  const records: T[] = [];
+  content.split(/\r?\n/).forEach((rawLine, index) => {
+    const line = normalizeJsonlLine(rawLine, index);
+    if (line.length > 0) {
+      records.push(JSON.parse(line) as T);
+    }
+  });
+  return records;
 }
 
 export async function readJsonlRecordsLenient<T>(path: string): Promise<LenientJsonlReadResult<T>> {
@@ -51,7 +55,7 @@ export async function readJsonlRecordsLenient<T>(path: string): Promise<LenientJ
   const lines = content.split(/\r?\n/);
 
   lines.forEach((rawLine, index) => {
-    const line = rawLine.trim();
+    const line = normalizeJsonlLine(rawLine, index);
     if (!line) {
       return;
     }
@@ -89,4 +93,9 @@ export async function writeJsonlRecords<T>(path: string, records: T[]): Promise<
   await mkdir(dirname(path), { recursive: true });
   const next = records.map((item) => JSON.stringify(item)).join("\n");
   await writeFile(path, `${next}\n`, "utf8");
+}
+
+function normalizeJsonlLine(rawLine: string, index: number): string {
+  const line = index === 0 ? rawLine.replace(/^\uFEFF/, "") : rawLine;
+  return line.trim();
 }

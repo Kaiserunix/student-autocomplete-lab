@@ -2,9 +2,10 @@ import type { AiProviderMode } from "../config/modelEnv";
 import type { InternalTestSummary } from "../internalTesting/internalTestRecorder";
 import type { ProviderModelInfo } from "../models/providerModelsClient";
 import type { ProblemSearchResult, ProblemSetSearchResult } from "../problemBank/types";
-import type { ProblemBankStateView } from "./stateView";
+import type { AiHealthCheckResult, ProblemBankStateView } from "./stateView";
 
 export const hostEventTypeNames = [
+  "aiHealthCheckResult",
   "aiModelResults",
   "autocompletePreview",
   "coachFollowUp",
@@ -49,6 +50,12 @@ export interface AiModelResultsHostEvent {
   status: string;
 }
 
+export interface AiHealthCheckResultHostEvent {
+  type: "aiHealthCheckResult";
+  result: AiHealthCheckResult;
+  status: string;
+}
+
 export interface InternalTestSummaryHostEvent {
   type: "internalTestSummary";
   summary: InternalTestSummary;
@@ -69,5 +76,6 @@ export type HostEvent =
   | ProblemSearchResultsHostEvent
   | ProblemSetSearchResultsHostEvent
   | AiModelResultsHostEvent
+  | AiHealthCheckResultHostEvent
   | InternalTestSummaryHostEvent
   | LooseTypedHostEvent;

@@ -8,6 +8,7 @@ import { buildAutocompleteInputFromText, extractStudentCodeFromText } from "../a
 import { requestMimoAutocomplete } from "../autocomplete/mimoAutocomplete";
 import {
   type AiConfigView,
+  type AutocompleteProviderConfig,
   type AiProviderConfigUpdate,
   type AiProviderMode,
   type ModelEnv,
@@ -23,6 +24,8 @@ import {
   type InternalTestEventInput,
   type InternalTestRecorder
 } from "../internalTesting/internalTestRecorder";
+import { requestChatCompletionText } from "../models/chatCompletionsClient";
+import { requestCompletion } from "../models/completionsClient";
 import { listProviderModels } from "../models/providerModelsClient";
 import { routeAutocompleteModel, routeTeachingModel } from "../models/modelRouter";
 import { fetchLuoguProblem } from "../problemBank/luoguClient";
@@ -92,6 +95,8 @@ import {
 import { buildSidebarTeachingContext } from "./sidebarTeachingContext";
 import { createWebviewNonce } from "./html";
 import type {
+  AiHealthCheckResult,
+  AiHealthCheckStep,
   AiRuntimeStatus,
   ProblemBankStateView,
   SavedProblemRecord,
@@ -219,6 +224,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     if (message.command === "fetchAiModels") {
       return this.handleFetchAiModelsRequest(message.config);
+    }
+
+    if (message.command === "runAiHealthCheck") {
+      return this.handleRunAiHealthCheckRequest(message.config);
     }
 
     if (message.command === "saveUiLanguage") {
@@ -390,6 +399,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       })),
       aiStatus: await this.aiRuntimeStatus(),
       aiConfig: await this.aiConfigView(),
+      activeEditor: this.activeEditorState(),
       uiLanguage: this.readUiLanguage(),
       studentSkill: studentSkillState.studentSkill,
       studentSkillVersions: studentSkillState.versions,
@@ -424,6 +434,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     await saveAiConfigToVsCode(this.context, {
       mode: normalizeAiProviderMode(config.mode),
       baseUrl: config.baseUrl?.trim() ?? "",
+      autocompleteBaseUrl: config.autocompleteBaseUrl?.trim() ?? "",
       apiKey: config.apiKey,
       chatModel: config.chatModel?.trim() ?? "",
       autocompleteModel: config.autocompleteModel?.trim() ?? "",
@@ -480,6 +491,52 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       endpoint: result.endpoint,
       models: result.models,
       status: `已拉取 ${result.models.length} 个模型。`
+    };
+  }
+
+  private async handleRunAiHealthCheckRequest(config: AiProviderConfigUpdate): Promise<Record<string, unknown>> {
+    const mode = normalizeAiProviderMode(config.mode);
+    const baseEnv = await this.loadRuntimeModelEnv();
+    const env = applyAiConfigUpdateForHealthCheck(baseEnv, config);
+    const knownSecrets = collectKnownSecrets(baseEnv, env, config);
+    const checkedAt = new Date().toISOString();
+
+    const [models, chatSmoke, autocompleteSmoke] = await Promise.all([
+      runModelListHealthCheck(env, mode, config, knownSecrets),
+      runChatSmokeHealthCheck(env, config, knownSecrets),
+      runAutocompleteSmokeHealthCheck(env, config, knownSecrets)
+    ]);
+    const result: AiHealthCheckResult = {
+      checkedAt,
+      providerMode: mode,
+      models,
+      chatSmoke,
+      autocompleteSmoke
+    };
+    const allPassed = [models, chatSmoke, autocompleteSmoke].every((step) => step.status === "pass");
+
+    await this.recordInternalTestEvent({
+      kind: "state_loaded",
+      action: "ai_health_check",
+      outcome: allPassed ? "success" : "failure",
+      payload: {
+        mode,
+        models: models.status,
+        chatSmoke: chatSmoke.status,
+        autocompleteSmoke: autocompleteSmoke.status,
+        modelCount: models.count ?? 0,
+        chatModel: chatSmoke.model,
+        autocompleteModel: autocompleteSmoke.model,
+        autocompleteFormat: autocompleteSmoke.format
+      }
+    });
+
+    return {
+      type: "aiHealthCheckResult",
+      result,
+      status: allPassed
+        ? "Provider Health Check 通过：模型列表、AI 提示、自动补全都可达。"
+        : "Provider Health Check 完成：有项目未通过，请看卡片里的修复建议。"
     };
   }
 
@@ -773,6 +830,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       studentSkillVersions: await this.studentSkillVersionViews(),
       studentSkillSummary: studentSkillSummaryForTeaching(result.updatedStudentSkill),
       studentSkillMerge: result.studentSkillMerge,
+      workflowAudit: result.audit,
       teacherPack: teacherPack
         ? {
             generatedAt: teacherPack.generatedAt,
@@ -1436,6 +1494,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       ...input,
       habits: ["Prefer direct student code.", "Return only the immediate local continuation."]
     });
+    const contextAudit = autocompletePreviewAudit();
     await this.recordInternalTestEvent({
       kind: "autocomplete_event",
       action: "preview",
@@ -1443,7 +1502,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       payload: {
         language: editor.document.languageId,
         line: position.line + 1,
-        empty: !suggestion.trim()
+        empty: !suggestion.trim(),
+        contextAudit
       }
     });
 
@@ -1454,6 +1514,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       language: editor.document.languageId,
       filePath: editor.document.uri.fsPath,
       line: position.line + 1,
+      contextAudit,
       status: suggestion.trim()
         ? "AI 已生成一次补全预览。"
         : "AI 补全接口已调用，但这次返回为空。换到有上下文的代码行再试。"
@@ -1546,6 +1607,22 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
   private async aiConfigView(): Promise<AiConfigView> {
     return buildAiConfigViewFromVsCode(this.context, this.modelEnvPath());
+  }
+
+  private activeEditorState(): Record<string, string> | undefined {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      return undefined;
+    }
+
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
+    return {
+      fileName: path.basename(editor.document.uri.fsPath),
+      relativePath: workspaceFolder
+        ? path.relative(workspaceFolder.uri.fsPath, editor.document.uri.fsPath)
+        : editor.document.uri.fsPath,
+      language: editor.document.languageId
+    };
   }
 
   private readUiLanguage(): UiLanguage {
@@ -1681,7 +1758,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     for (const problem of problems) {
-      nextByKey.set(makeProblemKey(problem), problem);
+      const key = makeProblemKey(problem);
+      nextByKey.set(key, mergeSavedProblemRecord(nextByKey.get(key), problem));
     }
 
     await writeJsonlRecords(this.problemsPath(), [...nextByKey.values()]);
@@ -2617,6 +2695,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
             <button id="coachFollowUp" class="secondary" type="button">继续聊</button>
             <button id="coachGiveUp" class="secondary" type="button">我放弃了</button>
             <button id="coachCompleted" class="secondary" type="button">我已完成</button>
+            <button id="coachAutocomplete" class="secondary" type="button">测试补全</button>
           </div>
           <div id="aiStatusGrid" class="aiStatusGrid"></div>
           <div id="aiResponse" class="aiResponse">
@@ -2644,8 +2723,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
                   </select>
                 </div>
                 <div class="field wide">
-                  <label for="aiBaseUrl">接口地址 Base URL</label>
+                  <label for="aiBaseUrl">分析接口 Base URL</label>
                   <input id="aiBaseUrl" placeholder="https://token-plan-cn.xiaomimimo.com/v1">
+                </div>
+                <div class="field wide">
+                  <label for="aiAutocompleteBaseUrl">补全接口 Base URL</label>
+                  <input id="aiAutocompleteBaseUrl" placeholder="留空则跟随分析接口；DeepSeek FIM 用 https://api.deepseek.com/beta">
                 </div>
                 <div class="field wide">
                   <label for="aiApiKey">API Key / 密钥</label>
@@ -2663,6 +2746,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
               <div class="row">
                 <button id="saveAiConfig" class="secondary" type="button">保存 AI 配置</button>
                 <button id="fetchAiModels" class="secondary" type="button">拉取模型</button>
+                <button id="runAiHealthCheck" class="secondary" type="button">健康检查</button>
                 <span id="aiConfigSavedKey" class="mini">未检测</span>
               </div>
               <div id="aiModelResults" class="modelResults" hidden></div>
@@ -2717,6 +2801,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       completedProblems: [],
       selectedKey: "",
       filter: "",
+      activeEditor: undefined,
       aiStatus: undefined,
       aiConfig: undefined,
       internalTesting: undefined,
@@ -2759,6 +2844,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const aiConfigMode = document.getElementById("aiConfigMode");
     const aiAutocompleteFormat = document.getElementById("aiAutocompleteFormat");
     const aiBaseUrl = document.getElementById("aiBaseUrl");
+    const aiAutocompleteBaseUrl = document.getElementById("aiAutocompleteBaseUrl");
     const aiApiKey = document.getElementById("aiApiKey");
     const aiChatModel = document.getElementById("aiChatModel");
     const aiAutocompleteModel = document.getElementById("aiAutocompleteModel");
@@ -2806,6 +2892,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     aiConfigMode.addEventListener("change", () => updateAiConfigModeUi(true));
     document.getElementById("saveAiConfig").addEventListener("click", () => saveAiConfig());
     document.getElementById("fetchAiModels").addEventListener("click", () => fetchAiModels());
+    document.getElementById("runAiHealthCheck").addEventListener("click", () => runAiHealthCheck());
 
     document.getElementById("localFilter").addEventListener("input", (event) => {
       state.filter = event.target.value.trim().toLowerCase();
@@ -2868,6 +2955,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     document.getElementById("coachFollowUp").addEventListener("click", () => requestAiCoach("followUp"));
     document.getElementById("coachGiveUp").addEventListener("click", () => requestAiCoach("giveUp"));
     document.getElementById("coachCompleted").addEventListener("click", () => requestCompletionReview());
+    document.getElementById("coachAutocomplete").addEventListener("click", () => requestAutocompletePreview());
     document.getElementById("copyInternalTestSummary").addEventListener("click", () => {
       vscode.postMessage({ command: "copyInternalTestSummary" });
     });
@@ -2889,6 +2977,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         }
         state.aiStatus = data.aiStatus;
         state.aiConfig = data.aiConfig;
+        state.activeEditor = data.activeEditor || state.activeEditor;
         state.uiLanguage = data.uiLanguage === "en" ? "en" : "zh";
         state.internalTesting = data.internalTesting;
         state.studentSkill = data.studentSkill;
@@ -2921,6 +3010,15 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       if (data.type === "aiModelResults") {
         setStatus(data.status || "模型列表已拉取。");
         renderAiModelResults(data);
+      }
+      if (data.type === "aiHealthCheckResult") {
+        setStatus(data.status || "Provider Health Check 已完成。", healthCheckHasFailure(data.result) ? "error" : undefined);
+        state.aiStatus = {
+          ...(state.aiStatus || {}),
+          healthCheck: data.result
+        };
+        renderAiStatus();
+        renderAiHealthCheckResult(data);
       }
       if (data.type === "teachingDiagnosis") {
         setStatus(data.status || "AI 已返回分析。");
@@ -2997,6 +3095,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         followUp: "继续聊",
         giveUp: "我放弃了",
         completed: "我已完成",
+        autocompletePreview: "测试补全",
         waitingTitle: "等待 AI 交互",
         waitingHint: "选择题目，打开你的代码文件，然后点“给点提示”。题面只会进入提示分析，不会塞进自动补全提示词。",
         problemTabGuide: "Markdown 文件导入",
@@ -3029,6 +3128,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         followUp: "Continue",
         giveUp: "I Give Up",
         completed: "I Finished",
+        autocompletePreview: "Test Completion",
         waitingTitle: "Waiting for AI",
         waitingHint: "Choose a problem, open your code file, then ask for a hint. The problem statement is only used for coaching, not autocomplete.",
         problemTabGuide: "Markdown File Import",
@@ -3096,6 +3196,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       setElementText("coachFollowUp", copy.followUp);
       setElementText("coachGiveUp", copy.giveUp);
       setElementText("coachCompleted", copy.completed);
+      setElementText("coachAutocomplete", copy.autocompletePreview);
       setElementText("coachSendCustom", copy.send);
       setLabelText("coachQuestion", copy.coachQuestionLabel);
       setLabelText("practiceLanguage", copy.practiceLanguageLabel);
@@ -3172,6 +3273,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
       aiConfigMode.value = config.mode || "openai-compatible";
       aiBaseUrl.value = config.baseUrl || "";
+      aiAutocompleteBaseUrl.value = config.autocompleteBaseUrl || "";
       aiChatModel.value = config.chatModel || "";
       aiAutocompleteModel.value = config.autocompleteModel || "";
       aiAutocompleteFormat.value = config.autocompleteFormat || "openai-completions";
@@ -3187,6 +3289,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         aiAutocompleteFormat.value = "openai-chat";
         aiAutocompleteFormat.disabled = true;
         aiBaseUrl.placeholder = "https://api.openai.com/v1";
+        aiAutocompleteBaseUrl.placeholder = "OpenAI 官方模式下跟随分析接口";
+        aiAutocompleteBaseUrl.disabled = true;
+        aiAutocompleteBaseUrl.value = "";
         if (applyDefaults && !aiBaseUrl.value.trim()) {
           aiBaseUrl.value = "https://api.openai.com/v1";
         }
@@ -3194,12 +3299,17 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         aiAutocompleteFormat.value = "anthropic-messages";
         aiAutocompleteFormat.disabled = true;
         aiBaseUrl.placeholder = "https://api.anthropic.com/v1";
+        aiAutocompleteBaseUrl.placeholder = "Anthropic Native 模式下跟随分析接口";
+        aiAutocompleteBaseUrl.disabled = true;
+        aiAutocompleteBaseUrl.value = "";
         if (applyDefaults && !aiBaseUrl.value.trim()) {
           aiBaseUrl.value = "https://api.anthropic.com/v1";
         }
       } else {
         aiAutocompleteFormat.disabled = false;
+        aiAutocompleteBaseUrl.disabled = false;
         aiBaseUrl.placeholder = "https://token-plan-cn.xiaomimimo.com/v1";
+        aiAutocompleteBaseUrl.placeholder = "留空则跟随分析接口；DeepSeek FIM 用 https://api.deepseek.com/beta";
       }
     }
 
@@ -3290,6 +3400,19 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       });
     }
 
+    function runAiHealthCheck() {
+      aiResponse.innerHTML = "";
+      aiResponse.appendChild(textSpan("Provider Health Check", "aiResponseTitle"));
+      aiResponse.appendChild(
+        textSpan("正在检查模型列表、AI 提示和自动补全；只显示 key 是否存在，不显示明文。", "hint")
+      );
+      setStatus("正在运行 Provider Health Check...");
+      vscode.postMessage({
+        command: "runAiHealthCheck",
+        config: currentAiConfigUpdate()
+      });
+    }
+
     function currentAiConfigUpdate() {
       const mode = aiConfigMode.value || "openai-compatible";
       const format = mode === "openai"
@@ -3300,6 +3423,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       return {
         mode,
         baseUrl: aiBaseUrl.value.trim(),
+        autocompleteBaseUrl: mode === "openai-compatible" ? aiAutocompleteBaseUrl.value.trim() : "",
         apiKey: aiApiKey.value.trim(),
         chatModel: aiChatModel.value.trim(),
         autocompleteModel: aiAutocompleteModel.value.trim(),
@@ -3352,6 +3476,65 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       });
     }
 
+    function renderAiHealthCheckResult(data) {
+      const result = data.result || {};
+      aiResponse.innerHTML = "";
+      aiResponse.appendChild(textSpan("Provider Health Check", "aiResponseTitle"));
+      aiResponse.appendChild(
+        textSpan(
+          "检查时间 " + (result.checkedAt || "?") + " · " + providerModeLabel(result.providerMode),
+          "mini"
+        )
+      );
+      aiResponse.appendChild(responseBlock("模型列表", healthCheckStepText(result.models, "models")));
+      aiResponse.appendChild(responseBlock("AI 提示", healthCheckStepText(result.chatSmoke, "chat")));
+      aiResponse.appendChild(responseBlock("自动补全", healthCheckStepText(result.autocompleteSmoke, "autocomplete")));
+      aiResponse.appendChild(textSpan("Key 状态只显示 provided / saved / missing，不显示明文。", "mini"));
+    }
+
+    function healthCheckStepText(step, kind) {
+      const item = step || {};
+      const lines = [
+        "状态：" + (item.status === "pass" ? "通过" : "未通过"),
+        item.endpoint ? "Endpoint：" + item.endpoint : "",
+        item.model ? "Model：" + item.model : "",
+        item.format ? "Format：" + item.format : "",
+        item.keyState ? "Key：" + healthCheckKeyLabel(item.keyState) : "",
+        typeof item.count === "number" ? "模型数：" + item.count : "",
+        typeof item.latencyMs === "number" ? "耗时：" + item.latencyMs + "ms" : "",
+        item.error ? "错误：" + item.error : "",
+        item.errorHint ? "修复建议：" + item.errorHint : healthCheckDefaultHint(kind, item)
+      ].filter(Boolean);
+      return lines.join("\\n");
+    }
+
+    function healthCheckKeyLabel(value) {
+      if (value === "provided") {
+        return "本次输入";
+      }
+      if (value === "saved") {
+        return "已保存";
+      }
+      return "未检测到";
+    }
+
+    function healthCheckDefaultHint(kind, step) {
+      if (!step || step.status !== "pass") {
+        return "修复建议：证据不足，请检查 endpoint、模型名和协议。";
+      }
+      if (kind === "models") {
+        return "结论：/models 可达，可以从模型列表选择分析/补全模型。";
+      }
+      if (kind === "chat") {
+        return "结论：AI 教练提示路由可达。";
+      }
+      return "结论：自动补全路由可达。";
+    }
+
+    function healthCheckHasFailure(result) {
+      return [result?.models, result?.chatSmoke, result?.autocompleteSmoke].some((step) => step?.status === "fail");
+    }
+
     function modelHint(model) {
       if (model.isAudioModel) {
         return "音频/TTS 模型，已标记为不适合分析或补全";
@@ -3383,12 +3566,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       }
 
       coachSelection.appendChild(textSpan(problem.id + " · " + problem.title, "aiResponseTitle"));
+      const activeEditor = state.activeEditor || {};
       const line = [
         isArchivedCoachProblem ? "复盘归档题" : "当前练习题",
+        "当前文件 " + (activeEditor.relativePath || activeEditor.fileName || "未检测到"),
+        "session " + coachThread(keyOf(problem)).length + " 轮",
         problem.statement ? "完整题面已就绪" : "题单摘要，点“下载完整题面”后提示更准",
         "补全不读题面",
-        "提示才读题面和代码",
-        "本题上下文 " + coachThread(keyOf(problem)).length + " 轮"
+        "提示才读题面和代码"
       ].join(" · ");
       coachSelection.appendChild(textSpan(line, "mini"));
       setCoachBusy(false);
@@ -3435,6 +3620,21 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         row.appendChild(textSpan(item.data?.configured ? item.readyText : item.data?.error || "未配置", "hint"));
         aiStatusGrid.appendChild(row);
       });
+
+      const health = statusData.healthCheck;
+      if (health) {
+        [
+          { label: "模型列表", step: health.models },
+          { label: "AI 提示", step: health.chatSmoke },
+          { label: "自动补全", step: health.autocompleteSmoke }
+        ].forEach((item) => {
+          const row = document.createElement("div");
+          row.className = "aiStatusItem" + (item.step?.status === "pass" ? " ready" : "");
+          row.appendChild(textSpan("健康检查 · " + item.label + "：" + (item.step?.status === "pass" ? "通过" : "未通过"), "mini"));
+          row.appendChild(textSpan(item.step?.errorHint || item.step?.endpoint || "证据不足", "hint"));
+          aiStatusGrid.appendChild(row);
+        });
+      }
     }
 
     function sendCustomFollowUp() {
@@ -3608,7 +3808,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       setCoachBusy(true);
       aiResponse.innerHTML = "";
       aiResponse.appendChild(textSpan("AI 补全测试中", "aiResponseTitle"));
-      aiResponse.appendChild(textSpan("这会读取当前编辑器光标之前的代码，并把结果直接显示在这里。", "hint"));
+      aiResponse.appendChild(textSpan("这只读取当前编辑器光标附近的代码、语言和安全习惯；不会读取题面、Teacher Pack 或标准答案。", "hint"));
       vscode.postMessage({ command: "requestAutocompletePreview" });
     }
 
@@ -4064,19 +4264,21 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           block.appendChild(painRow);
         }
 
-        if (stable.difficultyChange || stable.transferEvidenceStatus || stable.source) {
-          block.appendChild(
-            textSpan(
-              "来源 " +
-                (stable.source || problem.platform || "?") +
-                " · 难度变化 " +
-                (stable.difficultyChange || "?") +
-                " · 迁移状态 " +
-                (stable.transferEvidenceStatus || "?"),
-              "mini"
-            )
-          );
-        }
+        block.appendChild(
+          responseBlock(
+            "课程调度解释",
+            [
+              "为什么是这题：" + evidenceText(stable.reason || (item.reasons || []).join("；")),
+              "为什么不是更难：" + evidenceText(stable.whyNotHarder),
+              "为什么不是重复上一题：" + evidenceText(stable.whyNotRepeat),
+              "针对痛点：" + evidenceText((item.matchedPainPoints || []).join(" / ")),
+              "目标 Skill：" + evidenceText(stable.targetSkill),
+              "难度变化：" + difficultyChangeLabel(stable.difficultyChange),
+              "迁移证据：" + transferEvidenceLabel(stable.transferEvidenceStatus),
+              "来源：" + evidenceText(stable.source || problem.platform)
+            ].join("\\n")
+          )
+        );
 
         (item.reasons || []).slice(0, 4).forEach((reason) => {
           block.appendChild(textSpan(reason, "mini"));
@@ -4111,6 +4313,39 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       });
     }
 
+    function evidenceText(value) {
+      return value && String(value).trim() ? String(value).trim() : "证据不足";
+    }
+
+    function difficultyChangeLabel(value) {
+      if (value === "up") {
+        return "更难";
+      }
+      if (value === "down") {
+        return "更低";
+      }
+      if (value === "same") {
+        return "同难度";
+      }
+      return "证据不足";
+    }
+
+    function transferEvidenceLabel(value) {
+      if (value === "passed") {
+        return "迁移已通过";
+      }
+      if (value === "probe") {
+        return "迁移待验证";
+      }
+      if (value === "failed") {
+        return "迁移失败或已禁用";
+      }
+      if (value === "not_tested") {
+        return "暂无迁移证据";
+      }
+      return "证据不足";
+    }
+
     function renderCoachFollowUp(data) {
       const report = data.report || {};
       aiResponse.innerHTML = "";
@@ -4138,6 +4373,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       quickActions.appendChild(simplerButton);
       aiResponse.appendChild(quickActions);
       aiResponse.appendChild(textSpan("继续在上方写一句话，问算法或吐槽都可以，按 Ctrl+Enter 或点“发送”。", "mini"));
+      appendContextAudit(data.workflowAudit || coachContextAudit("follow_up"));
       appendCoachFollowUpTurn(data.problemKey || state.selectedKey, data, report);
       renderCoach();
     }
@@ -4220,6 +4456,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           aiResponse.appendChild(textSpan("本地痛点记录：" + counts, "mini"));
         }
       }
+      appendContextAudit(data.workflowAudit);
     }
 
     function renderAutocompletePreview(data) {
@@ -4237,6 +4474,79 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       } else {
         aiResponse.appendChild(responseBlock("没有生成内容", "接口被调用了，但模型返回空。把光标放在函数体、循环体或半行代码后再试。"));
       }
+      appendContextAudit(data.contextAudit);
+    }
+
+    function coachContextAudit(action) {
+      return {
+        action,
+        included: ["problem_statement", "student_code", "recent_hints", "student_profile", "teacher_pack_reference"],
+        excluded: ["standard_answer", "autocomplete_prompt", "raw_internal_test_records"]
+      };
+    }
+
+    function lessonReportContextAudit(report) {
+      return {
+        action: "lesson_report",
+        included: ["problem_statement", "student_code", "student_profile", "teacher_pack_reference"],
+        excluded: [
+          report?.referenceSolution?.code ? "standard_answer_auto_reveal" : "standard_answer",
+          "autocomplete_prompt",
+          "raw_internal_test_records"
+        ]
+      };
+    }
+
+    function appendContextAudit(audit) {
+      if (!audit) {
+        return;
+      }
+
+      const included = Array.isArray(audit.included) ? audit.included : [];
+      const excluded = Array.isArray(audit.excluded) ? audit.excluded : [];
+      if (!included.length && !excluded.length) {
+        return;
+      }
+
+      aiResponse.appendChild(
+        responseBlock(
+          "上下文边界",
+          [
+            included.length ? "已使用：" + included.map(contextAuditLabel).join("、") : "",
+            excluded.length ? "未使用：" + excluded.map(contextAuditLabel).join("、") : ""
+          ]
+            .filter(Boolean)
+            .join("\\n")
+        )
+      );
+    }
+
+    function contextAuditLabel(value) {
+      const labels = {
+        action: "动作",
+        autocomplete_prompt: "补全提示词",
+        coach_thread: "教练对话历史",
+        code_habits: "安全代码习惯",
+        file_path: "文件路径",
+        full_teacher_pack: "完整 Teacher Pack",
+        language: "语言",
+        lesson_report: "讲解报告",
+        local_evidence: "本地证据",
+        problem: "题目",
+        "problem.summary": "题目摘要",
+        problem_statement: "完整题面",
+        raw_internal_test_records: "原始内测记录",
+        recent_hints: "最近提示",
+        standard_answer: "标准答案",
+        standard_answer_auto_reveal: "标准答案默认展示",
+        student_code: "学生代码",
+        student_code_prefix_suffix: "光标附近代码",
+        student_profile: "学习画像",
+        teacher_pack: "Teacher Pack",
+        teacher_pack_reference: "Teacher Pack 参考",
+        oj_verdict: "OJ 状态"
+      };
+      return labels[value] || String(value || "").replace(/_/g, " ");
     }
 
     function renderSubmissionJudge(data) {
@@ -4278,6 +4588,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       if (report.nextAction) {
         aiResponse.appendChild(responseBlock("下一步", report.nextAction));
       }
+      appendContextAudit(data.workflowAudit || coachContextAudit("submission_judge"));
     }
 
     function renderLessonReport(data) {
@@ -4322,6 +4633,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         details.appendChild(codeBlock(report.referenceSolution.code));
         aiResponse.appendChild(details);
       }
+      appendContextAudit(data.workflowAudit || lessonReportContextAudit(report));
     }
 
     function renderSolutionScore(data) {
@@ -4371,6 +4683,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       if (report.recommendation?.problemId) {
         aiResponse.appendChild(responseBlock("推荐题目", report.recommendation.problemId + "\\n" + report.recommendation.reason));
       }
+      appendContextAudit(data.workflowAudit || coachContextAudit("solution_score"));
     }
 
     function renderOptimizationReport(data) {
@@ -4400,6 +4713,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       if (report.nextStep) {
         aiResponse.appendChild(responseBlock("下一步", report.nextStep));
       }
+      appendContextAudit(data?.workflowAudit || coachContextAudit("optimization_review"));
     }
 
     function renderCreatedFile(file) {
@@ -5516,6 +5830,41 @@ function makeProblemKey(problem: Pick<ProblemRecord, "platform" | "id">): string
   return `${problem.platform}:${problem.id}`;
 }
 
+function mergeSavedProblemRecord(
+  existing: SavedProblemRecord | undefined,
+  incoming: SavedProblemRecord
+): SavedProblemRecord {
+  if (!existing) {
+    return incoming;
+  }
+
+  return {
+    ...existing,
+    ...incoming,
+    statement: incoming.statement.trim() ? incoming.statement : existing.statement,
+    inputFormat: incoming.inputFormat.trim() ? incoming.inputFormat : existing.inputFormat,
+    outputFormat: incoming.outputFormat.trim() ? incoming.outputFormat : existing.outputFormat,
+    samples: incoming.samples.length > 0 ? incoming.samples : existing.samples,
+    hint: incoming.hint?.trim() ? incoming.hint : existing.hint,
+    savedAt: incoming.savedAt
+  };
+}
+
+function autocompletePreviewAudit() {
+  return {
+    action: "autocomplete_preview",
+    included: ["student_code_prefix_suffix", "language", "file_path", "code_habits"],
+    excluded: [
+      "problem_statement",
+      "teacher_pack",
+      "standard_answer",
+      "coach_thread",
+      "lesson_report",
+      "raw_internal_test_records"
+    ]
+  };
+}
+
 function hasProblemDetailsForTeacherPack(problem: ProblemRecord): boolean {
   return Boolean(
     problem.statement.trim() ||
@@ -5601,7 +5950,7 @@ function savedBaseUrlForMode(env: ModelEnv, mode: AiProviderMode): string {
     return env.AI_ANTHROPIC_BASE_URL || "https://api.anthropic.com/v1";
   }
 
-  return env.AI_OPENAI_COMPAT_BASE_URL || env.MIMO_OPENAI_BASE_URL || "";
+  return env.AI_OPENAI_COMPAT_BASE_URL || env.MIMO_OPENAI_BASE_URL || env.DEEPSEEK_BASE_URL || "";
 }
 
 function savedApiKeyForMode(env: ModelEnv, mode: AiProviderMode): string {
@@ -5612,7 +5961,7 @@ function savedApiKeyForMode(env: ModelEnv, mode: AiProviderMode): string {
     return env.AI_ANTHROPIC_API_KEY || "";
   }
 
-  return env.AI_OPENAI_COMPAT_API_KEY || env.MIMO_API_KEY || "";
+  return env.AI_OPENAI_COMPAT_API_KEY || env.MIMO_API_KEY || env.DEEPSEEK_API_KEY || "";
 }
 
 function normalizeAutocompleteFormat(value: string | undefined): AiProviderConfigUpdate["autocompleteFormat"] {
@@ -5621,6 +5970,348 @@ function normalizeAutocompleteFormat(value: string | undefined): AiProviderConfi
   }
 
   return "openai-completions";
+}
+
+function applyAiConfigUpdateForHealthCheck(env: ModelEnv, update: AiProviderConfigUpdate): ModelEnv {
+  const next: ModelEnv = { ...env };
+  const mode = normalizeAiProviderMode(update.mode);
+  next.AI_PROVIDER_MODE = mode;
+
+  if (mode === "openai") {
+    if (update.baseUrl?.trim()) {
+      next.AI_OPENAI_BASE_URL = update.baseUrl.trim();
+    }
+    if (update.apiKey?.trim()) {
+      next.AI_OPENAI_API_KEY = update.apiKey.trim();
+    }
+    next.AI_OPENAI_CHAT_MODEL = update.chatModel?.trim() ?? "";
+    next.AI_OPENAI_AUTOCOMPLETE_MODEL = update.autocompleteModel?.trim() ?? "";
+    return next;
+  }
+
+  if (mode === "anthropic-native") {
+    if (update.baseUrl?.trim()) {
+      next.AI_ANTHROPIC_BASE_URL = update.baseUrl.trim();
+    }
+    if (update.apiKey?.trim()) {
+      next.AI_ANTHROPIC_API_KEY = update.apiKey.trim();
+    }
+    next.AI_ANTHROPIC_CHAT_MODEL = update.chatModel?.trim() ?? "";
+    next.AI_ANTHROPIC_AUTOCOMPLETE_MODEL = update.autocompleteModel?.trim() ?? "";
+    return next;
+  }
+
+  if (update.baseUrl?.trim()) {
+    next.AI_OPENAI_COMPAT_BASE_URL = update.baseUrl.trim();
+  }
+  if (update.autocompleteBaseUrl?.trim()) {
+    next.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL = update.autocompleteBaseUrl.trim();
+  } else {
+    delete next.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL;
+  }
+  if (update.apiKey?.trim()) {
+    next.AI_OPENAI_COMPAT_API_KEY = update.apiKey.trim();
+  }
+  next.AI_OPENAI_COMPAT_CHAT_MODEL = update.chatModel?.trim() ?? "";
+  next.AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL = update.autocompleteModel?.trim() ?? "";
+  next.AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT = normalizeAutocompleteFormat(update.autocompleteFormat);
+  return next;
+}
+
+async function runModelListHealthCheck(
+  env: ModelEnv,
+  mode: AiProviderMode,
+  config: AiProviderConfigUpdate,
+  knownSecrets: string[]
+): Promise<AiHealthCheckStep> {
+  const startedAt = Date.now();
+  const endpointBase = savedBaseUrlForMode(env, mode);
+  const apiKey = savedApiKeyForMode(env, mode);
+  const keyState = keyStateForApiKey(apiKey, config.apiKey);
+
+  if (!endpointBase) {
+    return failHealthCheckStep({
+      keyState,
+      latencyMs: elapsedSince(startedAt),
+      error: "模型列表缺少 Base URL。",
+      errorHint: "先填写分析接口 Base URL；补全专用 Base URL 不用于 /models。"
+    });
+  }
+  if (!apiKey) {
+    return failHealthCheckStep({
+      endpoint: `${endpointBase.replace(/\/+$/, "")}/models`,
+      keyState,
+      latencyMs: elapsedSince(startedAt),
+      error: "模型列表缺少 API Key。",
+      errorHint: "填写 API Key 后点保存，或在本次检查里临时输入 key；界面不会显示明文。"
+    });
+  }
+
+  try {
+    const result = await listProviderModels({
+      mode,
+      baseUrl: endpointBase,
+      apiKey,
+      anthropicVersion: "2023-06-01"
+    });
+    return {
+      status: "pass",
+      endpoint: result.endpoint,
+      keyState,
+      count: result.models.length,
+      latencyMs: elapsedSince(startedAt)
+    };
+  } catch (error) {
+    const message = redactKnownSecrets(errorMessage(error), knownSecrets);
+    return failHealthCheckStep({
+      endpoint: `${endpointBase.replace(/\/+$/, "")}/models`,
+      keyState,
+      latencyMs: elapsedSince(startedAt),
+      error: message,
+      errorHint: healthCheckErrorHint(message, "models")
+    });
+  }
+}
+
+async function runChatSmokeHealthCheck(
+  env: ModelEnv,
+  config: AiProviderConfigUpdate,
+  knownSecrets: string[]
+): Promise<AiHealthCheckStep> {
+  const startedAt = Date.now();
+  try {
+    const route = routeTeachingModel(env);
+    const text = await requestChatCompletionText(
+      route.config,
+      {
+        messages: [
+          {
+            role: "system",
+            content: "Return OK only. Do not include explanations."
+          },
+          {
+            role: "user",
+            content: "health check"
+          }
+        ],
+        maxTokens: 16,
+        temperature: 0,
+        usageLogPath: false
+      }
+    );
+    if (!text.trim()) {
+      throw new Error("Chat smoke 返回为空。");
+    }
+    return {
+      status: "pass",
+      endpoint: route.endpoint,
+      model: route.model,
+      format: route.format,
+      keyState: keyStateForApiKey(route.config.apiKey, config.apiKey),
+      latencyMs: elapsedSince(startedAt)
+    };
+  } catch (error) {
+    const message = redactKnownSecrets(errorMessage(error), knownSecrets);
+    const routeInfo = safeTeachingRouteInfo(env);
+    return failHealthCheckStep({
+      ...routeInfo,
+      keyState: keyStateForApiKey(routeInfo.apiKey, config.apiKey),
+      latencyMs: elapsedSince(startedAt),
+      error: message,
+      errorHint: healthCheckErrorHint(message, "chat")
+    });
+  }
+}
+
+async function runAutocompleteSmokeHealthCheck(
+  env: ModelEnv,
+  config: AiProviderConfigUpdate,
+  knownSecrets: string[]
+): Promise<AiHealthCheckStep> {
+  const startedAt = Date.now();
+  try {
+    const route = routeAutocompleteModel(env);
+    const deepSeekHint = deepSeekFimEndpointHint(route.config);
+    if (deepSeekHint) {
+      return failHealthCheckStep({
+        endpoint: route.endpoint,
+        model: route.model,
+        format: route.format,
+        keyState: keyStateForApiKey(route.config.apiKey, config.apiKey),
+        latencyMs: elapsedSince(startedAt),
+        error: "DeepSeek FIM 补全端点不是 /beta。",
+        errorHint: deepSeekHint
+      });
+    }
+    const text = await requestCompletion(
+      route.config,
+      {
+        prompt: "def add(a, b):\n    ",
+        suffix: "\nprint(add(1, 2))",
+        maxTokens: 24,
+        temperature: 0,
+        stop: ["\n\n"]
+      }
+    );
+    if (!text.trim()) {
+      throw new Error("Autocomplete smoke 返回为空。");
+    }
+    return {
+      status: "pass",
+      endpoint: route.endpoint,
+      model: route.model,
+      format: route.format,
+      keyState: keyStateForApiKey(route.config.apiKey, config.apiKey),
+      latencyMs: elapsedSince(startedAt)
+    };
+  } catch (error) {
+    const message = redactKnownSecrets(errorMessage(error), knownSecrets);
+    const routeInfo = safeAutocompleteRouteInfo(env);
+    return failHealthCheckStep({
+      ...routeInfo,
+      keyState: keyStateForApiKey(routeInfo.apiKey, config.apiKey),
+      latencyMs: elapsedSince(startedAt),
+      error: message,
+      errorHint: healthCheckErrorHint(message, "autocomplete")
+    });
+  }
+}
+
+function failHealthCheckStep(step: Omit<AiHealthCheckStep, "status">): AiHealthCheckStep {
+  return {
+    status: "fail",
+    ...step
+  };
+}
+
+function safeTeachingRouteInfo(env: ModelEnv): {
+  endpoint?: string;
+  model?: string;
+  format?: string;
+  apiKey?: string;
+} {
+  try {
+    const route = routeTeachingModel(env);
+    return {
+      endpoint: route.endpoint,
+      model: route.model,
+      format: route.format,
+      apiKey: route.config.apiKey
+    };
+  } catch {
+    return {};
+  }
+}
+
+function safeAutocompleteRouteInfo(env: ModelEnv): {
+  endpoint?: string;
+  model?: string;
+  format?: string;
+  apiKey?: string;
+} {
+  try {
+    const route = routeAutocompleteModel(env);
+    return {
+      endpoint: route.endpoint,
+      model: route.model,
+      format: route.format,
+      apiKey: route.config.apiKey
+    };
+  } catch {
+    return {};
+  }
+}
+
+function deepSeekFimEndpointHint(config: AutocompleteProviderConfig): string | undefined {
+  if (
+    config.format === "openai-completions" &&
+    sanitizeBaseUrlForDisplay(config.baseUrl).includes("api.deepseek.com") &&
+    !sanitizeBaseUrlForDisplay(config.baseUrl).includes("/beta")
+  ) {
+    return "DeepSeek FIM 补全需要把补全接口 Base URL 设置为 https://api.deepseek.com/beta；分析接口仍可保留 /v1。";
+  }
+
+  return undefined;
+}
+
+function healthCheckErrorHint(message: string, scope: "models" | "chat" | "autocomplete"): string {
+  if (/api key|key|401|403/i.test(message)) {
+    return "API Key 缺失、无效或没有该模型权限；请重新保存 key，并确认当前角色使用的是同一个 endpoint。";
+  }
+  if (/base url/i.test(message)) {
+    return "Base URL 缺失或不完整；OpenAI 兼容服务通常形如 https://example.com/v1。";
+  }
+  if (/chat model|autocomplete model|model/i.test(message) && /missing|缺少/i.test(message)) {
+    return scope === "autocomplete" ? "请填写补全模型名。" : "请填写提示/评分模型名。";
+  }
+  if (/DeepSeek FIM|\/beta|deepseek/i.test(message)) {
+    return "DeepSeek FIM 补全需要把补全接口 Base URL 设置为 https://api.deepseek.com/beta。";
+  }
+  if (/\/models|模型列表|404/i.test(message) && scope === "models") {
+    return "当前服务可能不支持 /models；这不一定影响 chat/补全，请继续看另外两张卡。";
+  }
+  if (/fetch failed|network|ENOTFOUND|ECONNRESET|before HTTP response/i.test(message)) {
+    return "检查网络、代理或 Base URL；如果在国内网络，优先用当前可访问的兼容端点。";
+  }
+  if (/response did not include|响应缺少|返回为空|empty/i.test(message)) {
+    return "接口已连通，但返回格式不符合当前协议；请确认补全协议和模型类型是否匹配。";
+  }
+
+  return "请核对 endpoint、模型名和协议是否属于同一家 provider。";
+}
+
+function keyStateForApiKey(apiKey: string | undefined, providedApiKey: string | undefined): AiHealthCheckStep["keyState"] {
+  if (providedApiKey?.trim()) {
+    return "provided";
+  }
+  if (apiKey?.trim()) {
+    return "saved";
+  }
+  return "missing";
+}
+
+function collectKnownSecrets(...sources: Array<ModelEnv | AiProviderConfigUpdate>): string[] {
+  const values: string[] = [];
+  for (const source of sources) {
+    const record = source as Record<string, string | undefined>;
+    values.push(
+      record.AI_OPENAI_API_KEY ?? "",
+      record.AI_OPENAI_COMPAT_API_KEY ?? "",
+      record.AI_ANTHROPIC_API_KEY ?? "",
+      record.MIMO_API_KEY ?? "",
+      record.DEEPSEEK_API_KEY ?? "",
+      record.apiKey ?? ""
+    );
+  }
+
+  return Array.from(new Set(values.map((value) => value.trim()).filter((value) => value.length >= 4)));
+}
+
+function redactKnownSecrets(message: string, secrets: string[]): string {
+  let redacted = message;
+  for (const secret of secrets) {
+    redacted = redacted.split(secret).join("[redacted]");
+  }
+  return redacted
+    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+    .replace(/x-api-key[=:]\s*[A-Za-z0-9._~+/=-]+/gi, "x-api-key=[redacted]");
+}
+
+function elapsedSince(startedAt: number): number {
+  return Date.now() - startedAt;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function sanitizeBaseUrlForDisplay(baseUrl: string): string {
+  try {
+    const parsed = new URL(baseUrl);
+    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return baseUrl.replace(/[?&]key=[^&]+/gi, "");
+  }
 }
 
 function normalizeCompletionReason(value: string | undefined): CompletionReason {

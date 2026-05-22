@@ -28,6 +28,27 @@ describe("model router", () => {
     });
   });
 
+  test("routes OpenAI-compatible autocomplete through a dedicated base URL", () => {
+    const env = {
+      AI_PROVIDER_MODE: "openai-compatible",
+      AI_OPENAI_COMPAT_BASE_URL: "https://api.deepseek.com/v1",
+      AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL: "https://api.deepseek.com/beta",
+      AI_OPENAI_COMPAT_API_KEY: "key",
+      AI_OPENAI_COMPAT_CHAT_MODEL: "deepseek-v4-pro",
+      AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL: "deepseek-v4-flash",
+      AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT: "openai-completions"
+    };
+
+    expect(routeTeachingModel(env)).toMatchObject({
+      model: "deepseek-v4-pro",
+      endpoint: "https://api.deepseek.com/v1/chat/completions"
+    });
+    expect(routeAutocompleteModel(env)).toMatchObject({
+      model: "deepseek-v4-flash",
+      endpoint: "https://api.deepseek.com/beta/completions"
+    });
+  });
+
   test("routes Anthropic-native requests to the messages endpoint", () => {
     const env = {
       AI_PROVIDER_MODE: "anthropic-native",

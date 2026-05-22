@@ -96,6 +96,11 @@
           "default": "",
           "description": "OpenAI-compatible API Base URL，例如 DeepSeek、MiMo 或自建兼容服务。"
         },
+        "studentAutocomplete.ai.openaiCompatible.autocompleteBaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI-compatible 自动补全专用 Base URL。留空则跟随 Base URL；DeepSeek FIM 可填 https://api.deepseek.com/beta。"
+        },
         "studentAutocomplete.ai.openaiCompatible.apiKey": {
           "type": "string",
           "default": "",

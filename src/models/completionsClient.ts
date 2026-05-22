@@ -9,6 +9,7 @@ export interface CompletionProviderConfig {
 
 export interface CompletionRequest {
   prompt: string;
+  suffix?: string;
   maxTokens: number;
   temperature: number;
   stop?: string[];
@@ -85,6 +86,7 @@ export async function requestCompletion(
       body: JSON.stringify({
         model: config.model,
         prompt: request.prompt,
+        ...(shouldSendFimSuffix(config, request) ? { suffix: request.suffix } : {}),
         max_tokens: request.maxTokens,
         temperature: request.temperature,
         stop: request.stop
@@ -244,6 +246,15 @@ function previewText(text: string): string | undefined {
 
 function modelHint(config: CompletionProviderConfig, status: number): string {
   if (
+    status === 400 &&
+    sanitizeBaseUrl(config.baseUrl).includes("api.deepseek.com") &&
+    config.format === "openai-completions" &&
+    !sanitizeBaseUrl(config.baseUrl).includes("/beta")
+  ) {
+    return " DeepSeek FIM 补全需要把补全 Base URL 设置为 https://api.deepseek.com/beta。";
+  }
+
+  if (
     status >= 500 &&
     sanitizeBaseUrl(config.baseUrl).includes("xiaomimimo.com") &&
     config.model === "mimo-v2.5"
@@ -261,6 +272,16 @@ function sanitizeBaseUrl(baseUrl: string): string {
   } catch {
     return baseUrl.replace(/[?&]key=[^&]+/gi, "");
   }
+}
+
+function shouldSendFimSuffix(config: CompletionProviderConfig, request: CompletionRequest): boolean {
+  return Boolean(
+    request.suffix &&
+      config.format !== "openai-chat" &&
+      config.format !== "anthropic-messages" &&
+      sanitizeBaseUrl(config.baseUrl).includes("api.deepseek.com") &&
+      sanitizeBaseUrl(config.baseUrl).includes("/beta")
+  );
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {

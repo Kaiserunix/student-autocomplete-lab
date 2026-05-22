@@ -30,6 +30,30 @@ describe("autocomplete context extraction", () => {
     expect(input.suffix).toBe("");
   });
 
+  test("keeps common Python OJ unpacking assignments as real code", () => {
+    const text = "n, m = map(int, input().split())\n";
+    const input = buildAutocompleteInputFromText({
+      text,
+      offset: text.length,
+      language: "python",
+      filePath: "practice/luogu/P1001.py"
+    });
+
+    expect(input.prefix).toBe(text);
+  });
+
+  test("keeps common Python setup calls as real code", () => {
+    const text = "sys.setrecursionlimit(10 ** 6)\n";
+    const input = buildAutocompleteInputFromText({
+      text,
+      offset: text.length,
+      language: "python",
+      filePath: "practice/luogu/P4913.py"
+    });
+
+    expect(input.prefix).toBe(text);
+  });
+
   test("limits autocomplete context to the student code section when markers exist", () => {
     const text = [
       "# 题目：P5730 显示屏",

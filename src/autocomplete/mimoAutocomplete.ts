@@ -20,6 +20,7 @@ export async function requestMimoAutocomplete(
     config,
     {
       prompt,
+      suffix: input.suffix,
       maxTokens: 64,
       temperature: 0.1
     },

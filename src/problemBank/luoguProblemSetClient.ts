@@ -1,6 +1,17 @@
 import type { ProblemSetProblemSummary, ProblemSetRecord } from "./types";
 
 interface LuoguProblemSetPayload {
+  [key: string]: unknown;
+  data?: {
+    training?: {
+      id?: unknown;
+      title?: unknown;
+      name?: unknown;
+      description?: unknown;
+      problemCount?: unknown;
+      problems?: unknown;
+    };
+  };
   currentData?: {
     training?: {
       id?: unknown;
@@ -32,7 +43,10 @@ function normalizeProblemSummaries(value: unknown): ProblemSetProblemSummary[] {
 
   return value
     .map((item): ProblemSetProblemSummary | undefined => {
-      const problem = item && typeof item === "object" ? (item as Record<string, unknown>).problem : undefined;
+      const problem =
+        item && typeof item === "object" && "problem" in item
+          ? (item as Record<string, unknown>).problem
+          : item;
       if (!problem || typeof problem !== "object") {
         return undefined;
       }
@@ -59,7 +73,7 @@ function normalizeProblemSummaries(value: unknown): ProblemSetProblemSummary[] {
 }
 
 export function normalizeLuoguProblemSetResponse(payload: LuoguProblemSetPayload, idHint: string): ProblemSetRecord {
-  const training = payload.currentData?.training;
+  const training = payload.data?.training ?? payload.currentData?.training;
 
   if (!training) {
     throw new Error("Luogu response did not include a usable problem set payload.");
@@ -87,7 +101,7 @@ export async function fetchLuoguProblemSet(
   const response = await fetchImpl(`https://www.luogu.com.cn/training/${encodeURIComponent(id)}?_contentOnly=1`, {
     headers: {
       "user-agent": "student-autocomplete-lab/0.1",
-      "x-luogu-type": "content-only"
+      "x-lentille-request": "content-only"
     }
   });
 

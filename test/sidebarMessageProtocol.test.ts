@@ -26,6 +26,7 @@ describe("sidebar message protocol", () => {
 
   test("keeps host event type inventory explicit", () => {
     expect([...hostEventTypeNames].sort()).toEqual([
+      "aiHealthCheckResult",
       "aiModelResults",
       "autocompletePreview",
       "coachFollowUp",

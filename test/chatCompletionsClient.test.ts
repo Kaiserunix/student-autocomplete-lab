@@ -59,6 +59,39 @@ describe("OpenAI-compatible chat completions client", () => {
     ]);
   });
 
+  test("raises DeepSeek v4 JSON requests above the visible-answer budget floor", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fakeFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ choices: [{ message: { content: "{\"ok\":true}" } }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    };
+
+    await requestChatCompletionText(
+      {
+        baseUrl: "https://api.deepseek.com/v1",
+        apiKey: "secret",
+        model: "deepseek-v4-pro"
+      },
+      {
+        messages: [{ role: "user", content: "Return JSON." }],
+        maxTokens: 1000,
+        temperature: 0.2,
+        responseFormat: { type: "json_object" },
+        usageLogPath: false
+      },
+      fakeFetch as typeof fetch
+    );
+
+    expect(JSON.parse(String(calls[0].init?.body))).toMatchObject({
+      model: "deepseek-v4-pro",
+      max_tokens: 4000,
+      response_format: { type: "json_object" }
+    });
+  });
+
   test("posts an Anthropic Native messages request and returns the first text block", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const usageEvents: unknown[] = [];

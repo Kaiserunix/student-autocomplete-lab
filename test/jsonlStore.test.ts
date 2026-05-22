@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
@@ -45,5 +45,16 @@ describe("jsonl store", () => {
     await writeJsonlRecords<TestRecord>(path, [{ id: "b", value: 2 }]);
 
     await expect(readJsonlRecords<TestRecord>(path)).resolves.toEqual([{ id: "b", value: 2 }]);
+  });
+
+  test("reads files with a UTF-8 BOM on the first line", async () => {
+    const path = join(tempDir, "events.jsonl");
+
+    await writeFile(path, `\uFEFF{"id":"a","value":1}\n{"id":"b","value":2}\n`, "utf8");
+
+    await expect(readJsonlRecords<TestRecord>(path)).resolves.toEqual([
+      { id: "a", value: 1 },
+      { id: "b", value: 2 }
+    ]);
   });
 });

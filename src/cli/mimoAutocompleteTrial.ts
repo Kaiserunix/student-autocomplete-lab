@@ -20,7 +20,7 @@ async function main(): Promise<void> {
     filePath: "trial.py",
     habits: ["Prefer direct Python OJ style.", "Return only the immediate local continuation."]
   });
-  console.log(JSON.stringify({ provider: "mimo", model: config.model, filtered }, null, 2));
+  console.log(JSON.stringify({ provider: "ai-autocomplete", model: config.model, filtered }, null, 2));
 }
 
 main().catch((error) => {

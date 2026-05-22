@@ -398,6 +398,10 @@ function applySkillEntryPatch(
     lastSeen: patch.occurredAt
   };
   const incomingStatus = skillPatch.status ?? "candidate";
+  const nextEvidenceCount = previous.evidenceCount + 1;
+  const nextScore = previous.score + (skillPatch.confidence ?? 0);
+  const hasPromotionEvidence =
+    nextEvidenceCount >= ACTIVE_EVIDENCE_COUNT || (nextEvidenceCount >= 2 && nextScore >= ACTIVE_SCORE);
 
   let status = previous.status;
   const hasWrongCorrection = skill.correctionLog.some(
@@ -414,21 +418,18 @@ function applySkillEntryPatch(
     status = "disabled";
   } else if (previous.status === "mastered") {
     status = "mastered";
-  } else if (hasWrongCorrection && incomingStatus === "active") {
+  } else if (hasWrongCorrection) {
     status = "candidate";
-    conflicts.push({
-      field: `skills.${skillPatch.name}.status`,
-      existing: previous.status,
-      incoming: incomingStatus,
-      resolution: "kept candidate after wrong-diagnosis correction"
-    });
-  } else if (
-    incomingStatus === "active" ||
-    incomingStatus === "mastered" ||
-    previous.evidenceCount + 1 >= ACTIVE_EVIDENCE_COUNT ||
-    previous.score + (skillPatch.confidence ?? 0) >= ACTIVE_SCORE
-  ) {
-    status = incomingStatus === "mastered" ? "mastered" : "active";
+    if (incomingStatus === "active" || incomingStatus === "mastered" || hasPromotionEvidence) {
+      conflicts.push({
+        field: `skills.${skillPatch.name}.status`,
+        existing: previous.status,
+        incoming: incomingStatus,
+        resolution: "kept candidate after wrong-diagnosis correction"
+      });
+    }
+  } else if (hasPromotionEvidence) {
+    status = "active";
   } else {
     status = isStudentSkillTeachingActive(previous.status) ? previous.status : "candidate";
   }
@@ -439,8 +440,8 @@ function applySkillEntryPatch(
     reason: skillPatch.reason || previous.reason,
     rules: unique([...previous.rules, ...skillPatch.rules]),
     sourcePainPoints: unique([...previous.sourcePainPoints, ...skillPatch.sourcePainPoints]),
-    evidenceCount: previous.evidenceCount + 1,
-    score: roundScore(previous.score + (skillPatch.confidence ?? 0)),
+    evidenceCount: nextEvidenceCount,
+    score: roundScore(nextScore),
     examples: appendEvidence(previous.examples, makeEvidenceExample(patch, skillPatch.reason)),
     lastSeen: patch.occurredAt
   };

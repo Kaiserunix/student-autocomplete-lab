@@ -85,7 +85,13 @@ function isStrongCodeLine(line: string, language: string): boolean {
 
   const code = trimmed;
   if (language === "python") {
-    return /^(import|from|def|class|if\s+__name__|for|while|if|elif|else:|try:|except|with|return|print\(|input\(|[A-Za-z_]\w*\s*=)/.test(code);
+    return (
+      /^(import|from|def|class|if\s+__name__|for|while|if|elif|else:|try:|except|with|return|print\(|input\(|[A-Za-z_][\w.]*\()/.test(code) ||
+      /^[A-Za-z_]\w*\s*=/.test(code) ||
+      /^[A-Za-z_]\w*(\s*,\s*[A-Za-z_]\w*)+\s*=/.test(code) ||
+      /^\([A-Za-z_,\s]+\)\s*=/.test(code) ||
+      /^\[[A-Za-z_,\s]+\]\s*=/.test(code)
+    );
   }
 
   if (language === "cpp" || language === "c" || language === "c++") {

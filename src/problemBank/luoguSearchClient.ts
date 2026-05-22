@@ -10,6 +10,12 @@ interface LuoguProblemSearchPayload {
 }
 
 interface LuoguProblemSetSearchPayload {
+  data?: {
+    trainings?: {
+      count?: unknown;
+      result?: unknown;
+    };
+  };
   currentData?: {
     trainings?: {
       count?: unknown;
@@ -71,7 +77,8 @@ export function normalizeLuoguProblemSearchResponse(
 export function normalizeLuoguProblemSetSearchResponse(
   payload: LuoguProblemSetSearchPayload
 ): SearchResults<ProblemSetSearchResult> {
-  const rawItems = payload.currentData?.trainings?.result;
+  const trainings = payload.data?.trainings ?? payload.currentData?.trainings;
+  const rawItems = trainings?.result;
   const items = Array.isArray(rawItems)
     ? rawItems
         .map((item): ProblemSetSearchResult | undefined => {
@@ -98,7 +105,7 @@ export function normalizeLuoguProblemSetSearchResponse(
     : [];
 
   return {
-    total: asCount(payload.currentData?.trainings?.count, items.length),
+    total: asCount(trainings?.count, items.length),
     items
   };
 }
@@ -137,7 +144,7 @@ export async function searchLuoguProblemSets(
   const response = await fetchImpl(`https://www.luogu.com.cn/training/list?${params.toString()}`, {
     headers: {
       "user-agent": "student-autocomplete-lab/0.1",
-      "x-luogu-type": "content-only"
+      "x-lentille-request": "content-only"
     }
   });
 

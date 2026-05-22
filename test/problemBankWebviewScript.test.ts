@@ -80,7 +80,7 @@ describe("problem bank webview script", () => {
     expect(source).not.toContain('id="coachRecommend"');
     expect(source).not.toContain('id="coachSolved"');
     expect(source).not.toContain('id="coachSubmitCheck"');
-    expect(source).not.toContain('id="coachAutocomplete"');
+    expect(source).toContain('id="coachAutocomplete"');
     expect(source).toContain('class="coachQuestionActions"');
     expect(source).toContain("追问 / 闲聊");
     expect(source).toContain("吐槽两句都可以");
@@ -98,7 +98,8 @@ describe("problem bank webview script", () => {
     expect(source).not.toContain('document.getElementById("coachRecommend").addEventListener');
     expect(source).not.toContain('document.getElementById("coachSolved").addEventListener');
     expect(source).not.toContain('document.getElementById("coachSubmitCheck").addEventListener');
-    expect(source).not.toContain('document.getElementById("coachAutocomplete").addEventListener');
+    expect(source).toContain('document.getElementById("coachAutocomplete").addEventListener("click", () => requestAutocompletePreview())');
+    expect(source).toContain('command: "requestAutocompletePreview"');
     expect(source).toContain("event.ctrlKey && event.key === \"Enter\"");
     expect(source).toContain('type: "coachFollowUp"');
     expect(source).toContain("renderCoachFollowUp(data)");
@@ -108,14 +109,20 @@ describe("problem bank webview script", () => {
     expect(source).toContain("<summary>AI 接口配置</summary>");
     expect(source.indexOf('<div class="field coachAskBox">')).toBeLessThan(source.indexOf('<details class="aiConfigBox">'));
     expect(source.indexOf('<div id="aiResponse" class="aiResponse">')).toBeLessThan(source.indexOf('<details class="aiConfigBox">'));
-    expect(source).toContain('label for="aiBaseUrl">接口地址 Base URL</label>');
+    expect(source).toContain('label for="aiBaseUrl">分析接口 Base URL</label>');
+    expect(source).toContain('label for="aiAutocompleteBaseUrl">补全接口 Base URL</label>');
     expect(source).toContain('label for="aiApiKey">API Key / 密钥</label>');
     expect(source).toContain('id="aiConfigMode"');
     expect(source).toContain('id="aiAutocompleteFormat"');
     expect(source).toContain('command: "saveAiConfig"');
     expect(source).toContain('id="fetchAiModels"');
+    expect(source).toContain('id="runAiHealthCheck"');
     expect(source).toContain('id="aiModelResults"');
     expect(source).toContain('command: "fetchAiModels"');
+    expect(source).toContain('command: "runAiHealthCheck"');
+    expect(source).toContain("Provider Health Check");
+    expect(source).toContain('type: "aiHealthCheckResult"');
+    expect(source).toContain("renderAiHealthCheckResult(data)");
     expect(source).toContain('renderAiModelResults(data)');
     expect(source).toContain("设为分析");
     expect(source).toContain("设为补全");
@@ -124,6 +131,9 @@ describe("problem bank webview script", () => {
     expect(source).toContain("buildLuoguMcpRecommendationCandidates");
     expect(source).toContain("Luogu MCP：搜索 ");
     expect(source).toContain("luoguMcpQueryCount");
+    expect(source).toContain("课程调度解释");
+    expect(source).toContain("为什么不是更难");
+    expect(source).toContain("为什么不是重复上一题");
     expect(source).toContain("requestSubmissionJudge(keyOf(problem))");
     expect(source).toContain("找错复盘");
     expect(source).toContain("requestSolutionScore(keyOf(problem))");
@@ -136,7 +146,27 @@ describe("problem bank webview script", () => {
     expect(source).toContain("coachThreads: {}");
     expect(source).toContain("previousCoachTurn: summarizeCoachThreadForPrompt(keyOf(problem))");
     expect(source).toContain("appendCoachTurn(problemKey, data, report, localized)");
+    expect(source).toContain("workflowAudit: result.audit");
+    expect(source).toContain("appendContextAudit(data.workflowAudit)");
+    expect(source).toContain("上下文边界");
     expect(source).not.toContain('command: "requestSolutionScore",\n        problemKey: keyOf(problem),\n        studentRequest: coachQuestion.value.trim(),\n        ojVerdict: {\n          status: "AC"\n        }');
+  });
+
+  test("shows context boundary audits for AI diagnosis and autocomplete preview", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain("function autocompletePreviewAudit()");
+    expect(source).toContain('included: ["student_code_prefix_suffix", "language", "file_path", "code_habits"]');
+    expect(source).toContain('"problem_statement"');
+    expect(source).toContain('"teacher_pack"');
+    expect(source).toContain('"standard_answer"');
+    expect(source).toContain("contextAudit");
+    expect(source).toContain("appendContextAudit(data.contextAudit)");
+    expect(source).toContain('included: ["problem_statement", "student_code", "recent_hints", "student_profile", "teacher_pack_reference"]');
+    expect(source).toContain("lessonReportContextAudit(report)");
+    expect(source).toContain("已使用：");
+    expect(source).toContain("未使用：");
+    expect(source).toContain("不会读取题面、Teacher Pack 或标准答案");
   });
 
   test("exposes beta English UI and AI-output switches", async () => {

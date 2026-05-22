@@ -24,6 +24,29 @@ describe("student skill", () => {
     });
   });
 
+  test("keeps a single model diagnosis as candidate even when the model asks for active", () => {
+    const skill = applyStudentSkillPatch(createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z"), {
+      source: "mimo-v2.5",
+      occurredAt: "2026-05-01T00:01:00.000Z",
+      problemId: "P1427",
+      skills: [
+        {
+          name: "python-loop-boundary-check",
+          status: "active",
+          reason: "The model is confident after one observation.",
+          rules: ["Write first and last valid indexes before coding the loop."],
+          sourcePainPoints: ["loop_boundary"],
+          confidence: 5
+        }
+      ]
+    }).skill;
+
+    expect(skill.skills["python-loop-boundary-check"]).toMatchObject({
+      status: "candidate",
+      evidenceCount: 1
+    });
+  });
+
   test("turns repeated diagnosis patches into an active inspectable skill", () => {
     let skill = createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z");
 

@@ -155,6 +155,7 @@ describe("recommendation engine", () => {
     expect(result.strategy.targetDifficulty).toBe(1);
     expect(result.recommendations[0].problem.id).toBe("P1161");
     expect(result.recommendations[0].difficultySignal).toContain("目标难度 1");
+    expect(result.recommendations.map((item) => item.recommendation.difficultyChange)).not.toContain("up");
   });
 
   test("does not immediately recommend archived or abandoned problems again", () => {
@@ -228,7 +229,9 @@ describe("recommendation engine", () => {
       source: "synthetic",
       targetSkill: "sentinel-input-output-order",
       difficultyChange: "down",
-      transferEvidenceStatus: "not_tested"
+      transferEvidenceStatus: "not_tested",
+      whyNotHarder: "候选难度更低，用来修补基础痛点，而不是提前加压。",
+      whyNotRepeat: "当前没有近期完成/放弃/删除记录；推荐会避开当前题。"
     });
     expect(result.recommendations[0].recommendation).toEqual(result.results[0]);
   });

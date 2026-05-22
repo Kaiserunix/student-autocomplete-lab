@@ -20,9 +20,32 @@ export interface StarterPreset {
   painPoints: string[];
 }
 
+export type AiHealthCheckStepStatus = "pass" | "fail";
+
+export interface AiHealthCheckStep {
+  status: AiHealthCheckStepStatus;
+  endpoint?: string;
+  model?: string;
+  format?: string;
+  keyState?: "provided" | "saved" | "missing";
+  count?: number;
+  error?: string;
+  errorHint?: string;
+  latencyMs?: number;
+}
+
+export interface AiHealthCheckResult {
+  checkedAt: string;
+  providerMode?: string;
+  models: AiHealthCheckStep;
+  chatSmoke: AiHealthCheckStep;
+  autocompleteSmoke: AiHealthCheckStep;
+}
+
 export interface AiRuntimeStatus {
   envPath: string;
   providerMode?: string;
+  healthCheck?: AiHealthCheckResult;
   autocomplete: {
     configured: boolean;
     model?: string;

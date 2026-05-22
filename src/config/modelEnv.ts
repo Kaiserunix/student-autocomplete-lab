@@ -13,6 +13,7 @@ export interface ModelEnv {
   AI_OPENAI_CHAT_MODEL?: string;
   AI_OPENAI_AUTOCOMPLETE_MODEL?: string;
   AI_OPENAI_COMPAT_BASE_URL?: string;
+  AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL?: string;
   AI_OPENAI_COMPAT_API_KEY?: string;
   AI_OPENAI_COMPAT_CHAT_MODEL?: string;
   AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL?: string;
@@ -33,6 +34,7 @@ export interface ModelEnv {
 export interface AiProviderConfigUpdate {
   mode: AiProviderMode;
   baseUrl: string;
+  autocompleteBaseUrl?: string;
   apiKey?: string;
   chatModel: string;
   autocompleteModel: string;
@@ -41,6 +43,7 @@ export interface AiProviderConfigUpdate {
 
 export interface AiProviderSettings {
   baseUrl?: string;
+  autocompleteBaseUrl?: string;
   apiKey?: string;
   chatModel?: string;
   autocompleteModel?: string;
@@ -63,6 +66,7 @@ export interface AiSecretSnapshot {
 export interface AiConfigView {
   mode: AiProviderMode;
   baseUrl: string;
+  autocompleteBaseUrl: string;
   hasApiKey: boolean;
   apiKeyPreview: string;
   chatModel: string;
@@ -140,17 +144,16 @@ export function requireTeachingConfig(env: ModelEnv): TeachingProviderConfig {
     };
   }
 
+  const baseUrl = requireValue(
+    env.AI_OPENAI_COMPAT_BASE_URL || env.MIMO_OPENAI_BASE_URL || env.DEEPSEEK_BASE_URL,
+    "Missing OpenAI-compatible base URL in secrets/models.env."
+  );
+
   return {
     mode: "openai-compatible",
     format: "openai-chat",
-    baseUrl: requireValue(
-      env.AI_OPENAI_COMPAT_BASE_URL || env.MIMO_OPENAI_BASE_URL,
-      "Missing OpenAI-compatible base URL in secrets/models.env."
-    ),
-    apiKey: requireValue(
-      env.AI_OPENAI_COMPAT_API_KEY || env.MIMO_API_KEY,
-      "Missing OpenAI-compatible API key in secrets/models.env."
-    ),
+    baseUrl,
+    apiKey: requireValue(openAiCompatibleApiKey(env, baseUrl), "Missing OpenAI-compatible API key in secrets/models.env."),
     model: env.AI_OPENAI_COMPAT_CHAT_MODEL || env.MIMO_CHAT_MODEL || "mimo-v2.5"
   };
 }
@@ -187,18 +190,20 @@ export function requireAutocompleteConfig(env: ModelEnv): AutocompleteProviderCo
     };
   }
 
+  const baseUrl = requireValue(
+    env.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL ||
+      env.AI_OPENAI_COMPAT_BASE_URL ||
+      env.MIMO_OPENAI_BASE_URL ||
+      env.DEEPSEEK_BASE_URL,
+    "Missing OpenAI-compatible base URL in secrets/models.env."
+  );
+
   return {
     mode: "openai-compatible",
     format: normalizeAutocompleteFormat(env.AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT, "openai-completions"),
-    baseUrl: requireValue(
-      env.AI_OPENAI_COMPAT_BASE_URL || env.MIMO_OPENAI_BASE_URL,
-      "Missing OpenAI-compatible base URL in secrets/models.env."
-    ),
-    apiKey: requireValue(
-      env.AI_OPENAI_COMPAT_API_KEY || env.MIMO_API_KEY,
-      "Missing OpenAI-compatible API key in secrets/models.env."
-    ),
-    model: env.AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL || env.MIMO_AUTOCOMPLETE_MODEL || "mimo-v2.5"
+    baseUrl,
+    apiKey: requireValue(openAiCompatibleApiKey(env, baseUrl), "Missing OpenAI-compatible API key in secrets/models.env."),
+    model: openAiCompatibleAutocompleteModel(env, baseUrl)
   };
 }
 
@@ -245,6 +250,7 @@ export function buildAiConfigView(env: ModelEnv): AiConfigView {
     return {
       mode,
       baseUrl: env.AI_OPENAI_BASE_URL || "https://api.openai.com/v1",
+      autocompleteBaseUrl: "",
       hasApiKey: Boolean(env.AI_OPENAI_API_KEY),
       apiKeyPreview: env.AI_OPENAI_API_KEY ? "已保存" : "",
       chatModel: env.AI_OPENAI_CHAT_MODEL || "",
@@ -257,6 +263,7 @@ export function buildAiConfigView(env: ModelEnv): AiConfigView {
     return {
       mode,
       baseUrl: env.AI_ANTHROPIC_BASE_URL || "https://api.anthropic.com/v1",
+      autocompleteBaseUrl: "",
       hasApiKey: Boolean(env.AI_ANTHROPIC_API_KEY),
       apiKeyPreview: env.AI_ANTHROPIC_API_KEY ? "已保存" : "",
       chatModel: env.AI_ANTHROPIC_CHAT_MODEL || "",
@@ -265,13 +272,18 @@ export function buildAiConfigView(env: ModelEnv): AiConfigView {
     };
   }
 
+  const baseUrl = env.AI_OPENAI_COMPAT_BASE_URL || env.MIMO_OPENAI_BASE_URL || env.DEEPSEEK_BASE_URL || "";
+  const autocompleteBaseUrl = env.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL || "";
+  const apiKey = openAiCompatibleApiKey(env, autocompleteBaseUrl || baseUrl);
+
   return {
     mode: "openai-compatible",
-    baseUrl: env.AI_OPENAI_COMPAT_BASE_URL || env.MIMO_OPENAI_BASE_URL || "",
-    hasApiKey: Boolean(env.AI_OPENAI_COMPAT_API_KEY || env.MIMO_API_KEY),
-    apiKeyPreview: env.AI_OPENAI_COMPAT_API_KEY || env.MIMO_API_KEY ? "已保存" : "",
+    baseUrl,
+    autocompleteBaseUrl,
+    hasApiKey: Boolean(apiKey),
+    apiKeyPreview: apiKey ? "已保存" : "",
     chatModel: env.AI_OPENAI_COMPAT_CHAT_MODEL || env.MIMO_CHAT_MODEL || "mimo-v2.5",
-    autocompleteModel: env.AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL || env.MIMO_AUTOCOMPLETE_MODEL || "mimo-v2.5",
+    autocompleteModel: openAiCompatibleAutocompleteModel(env, autocompleteBaseUrl || baseUrl),
     autocompleteFormat: normalizeAutocompleteFormat(env.AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT, "openai-completions")
   };
 }
@@ -296,6 +308,11 @@ export function applyAiConfigUpdateToEnvText(existingText: string, update: AiPro
     env.AI_ANTHROPIC_AUTOCOMPLETE_MODEL = update.autocompleteModel.trim();
   } else {
     env.AI_OPENAI_COMPAT_BASE_URL = update.baseUrl.trim();
+    if (update.autocompleteBaseUrl?.trim()) {
+      env.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL = update.autocompleteBaseUrl.trim();
+    } else {
+      delete env.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL;
+    }
     if (update.apiKey?.trim()) {
       env.AI_OPENAI_COMPAT_API_KEY = update.apiKey.trim();
     }
@@ -348,6 +365,9 @@ function applyOpenAiCompatibleSettings(
 
   if (settings?.baseUrl?.trim()) {
     env.AI_OPENAI_COMPAT_BASE_URL = settings.baseUrl.trim();
+  }
+  if (settings?.autocompleteBaseUrl?.trim()) {
+    env.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL = settings.autocompleteBaseUrl.trim();
   }
   if (secretApiKey?.trim() || settings?.apiKey?.trim()) {
     env.AI_OPENAI_COMPAT_API_KEY = (secretApiKey || settings?.apiKey || "").trim();
@@ -403,6 +423,34 @@ function requireValue(value: string | undefined, message: string): string {
   }
 
   return value.trim();
+}
+
+function openAiCompatibleApiKey(env: ModelEnv, baseUrl: string): string | undefined {
+  if (env.AI_OPENAI_COMPAT_API_KEY?.trim()) {
+    return env.AI_OPENAI_COMPAT_API_KEY.trim();
+  }
+
+  const normalizedBaseUrl = baseUrl.toLowerCase();
+  if (normalizedBaseUrl.includes("deepseek") && env.DEEPSEEK_API_KEY?.trim()) {
+    return env.DEEPSEEK_API_KEY.trim();
+  }
+  if (normalizedBaseUrl.includes("xiaomi") && env.MIMO_API_KEY?.trim()) {
+    return env.MIMO_API_KEY.trim();
+  }
+
+  return env.MIMO_API_KEY?.trim() || env.DEEPSEEK_API_KEY?.trim();
+}
+
+function openAiCompatibleAutocompleteModel(env: ModelEnv, baseUrl: string): string {
+  if (env.AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL?.trim()) {
+    return env.AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL.trim();
+  }
+
+  if (baseUrl.toLowerCase().includes("deepseek") && env.DEEPSEEK_AUTOCOMPLETE_MODEL?.trim()) {
+    return env.DEEPSEEK_AUTOCOMPLETE_MODEL.trim();
+  }
+
+  return env.MIMO_AUTOCOMPLETE_MODEL?.trim() || env.DEEPSEEK_AUTOCOMPLETE_MODEL?.trim() || "mimo-v2.5";
 }
 
 function serializeModelEnv(env: ModelEnv): string {

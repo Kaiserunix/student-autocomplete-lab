@@ -29,6 +29,8 @@ export function buildStableRecommendationResult(input: {
   targetSkill: string;
   difficultyChange: RecommendationDifficultyChange;
   transferEvidenceStatus: RecommendationTransferEvidenceStatus;
+  whyNotHarder: string;
+  whyNotRepeat: string;
 }): RecommendationResult {
   return {
     problemId: input.problem.id,
@@ -37,7 +39,9 @@ export function buildStableRecommendationResult(input: {
     reason: input.reasons.join("；"),
     targetSkill: input.targetSkill,
     difficultyChange: input.difficultyChange,
-    transferEvidenceStatus: input.transferEvidenceStatus
+    transferEvidenceStatus: input.transferEvidenceStatus,
+    whyNotHarder: input.whyNotHarder,
+    whyNotRepeat: input.whyNotRepeat
   };
 }
 

@@ -51,13 +51,13 @@ describe("Luogu search normalization", () => {
 
   test("normalizes problem-set search results", () => {
     const results = normalizeLuoguProblemSetSearchResponse({
-      currentData: {
+      data: {
         trainings: {
           count: 1,
           result: [
             {
               id: 100,
-              title: "【入门1】顺序结构",
+              name: "【入门1】顺序结构",
               problemCount: 15,
               markCount: 35742
             }
@@ -110,6 +110,6 @@ describe("Luogu search normalization", () => {
     expect(calls[0].url).toContain("https://www.luogu.com.cn/training/list?");
     expect(calls[0].url).toContain("keyword=%E5%85%A5%E9%97%A8");
     expect(calls[0].url).toContain("_contentOnly=1");
-    expect((calls[0].init?.headers as Record<string, string>)["x-luogu-type"]).toBe("content-only");
+    expect((calls[0].init?.headers as Record<string, string>)["x-lentille-request"]).toBe("content-only");
   });
 });

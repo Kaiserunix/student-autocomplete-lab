@@ -76,6 +76,7 @@ function readConfiguredAiSettings(): AiSettingsSnapshot {
 function readProviderSettings(configuration: vscode.WorkspaceConfiguration, prefix: string): AiProviderSettings | undefined {
   const settings: AiProviderSettings = {
     baseUrl: configuredString(configuration, `${prefix}.baseUrl`),
+    autocompleteBaseUrl: configuredString(configuration, `${prefix}.autocompleteBaseUrl`),
     apiKey: configuredString(configuration, `${prefix}.apiKey`),
     chatModel: configuredString(configuration, `${prefix}.chatModel`),
     autocompleteModel: configuredString(configuration, `${prefix}.autocompleteModel`),
@@ -103,6 +104,9 @@ async function updateProviderSettings(
   update: AiProviderConfigUpdate
 ): Promise<void> {
   await configuration.update(`${prefix}.baseUrl`, update.baseUrl, target);
+  if (prefix === "openaiCompatible") {
+    await configuration.update(`${prefix}.autocompleteBaseUrl`, update.autocompleteBaseUrl?.trim() || "", target);
+  }
   await configuration.update(`${prefix}.chatModel`, update.chatModel, target);
   await configuration.update(`${prefix}.autocompleteModel`, update.autocompleteModel, target);
 }
