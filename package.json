@@ -11,7 +11,7 @@
     "url": "https://github.com/kaiserunix/student-autocomplete-lab.git"
   },
   "engines": {
-    "vscode": "^1.95.0"
+    "vscode": "^1.125.0"
   },
   "categories": [
     "Education",
@@ -19,6 +19,8 @@
   ],
   "activationEvents": [
     "onStartupFinished",
+    "onView:studentAutocomplete.problemLibrary",
+    "onView:studentAutocomplete.currentSession",
     "onView:studentAutocomplete.problemBankWebview",
     "onCommand:studentAutocomplete.saveProblem",
     "onCommand:studentAutocomplete.giveHint",
@@ -53,6 +55,20 @@
       {
         "command": "studentAutocomplete.triggerInlineCompletion",
         "title": "AI 做题陪练：触发自动补全"
+      },
+      {
+        "command": "studentAutocomplete.openSettings",
+        "title": "AI 做题陪练：设置",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "studentAutocomplete.refreshProblemLibrary",
+        "title": "AI 做题陪练：刷新题目",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "studentAutocomplete.selectProblem",
+        "title": "AI 做题陪练：打开学习会话"
       }
     ],
     "configurationDefaults": {
@@ -76,11 +92,6 @@
           "default": "https://api.openai.com/v1",
           "description": "OpenAI 官方 API Base URL。"
         },
-        "studentAutocomplete.ai.openai.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "OpenAI API Key。建议通过侧栏 AI 配置保存到 SecretStorage。"
-        },
         "studentAutocomplete.ai.openai.chatModel": {
           "type": "string",
           "default": "",
@@ -100,11 +111,6 @@
           "type": "string",
           "default": "",
           "description": "OpenAI-compatible 自动补全专用 Base URL。留空则跟随 Base URL；DeepSeek FIM 可填 https://api.deepseek.com/beta。"
-        },
-        "studentAutocomplete.ai.openaiCompatible.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "OpenAI-compatible API Key。建议通过侧栏 AI 配置保存到 SecretStorage。"
         },
         "studentAutocomplete.ai.openaiCompatible.chatModel": {
           "type": "string",
@@ -130,11 +136,6 @@
           "type": "string",
           "default": "https://api.anthropic.com/v1",
           "description": "Anthropic Messages API Base URL。"
-        },
-        "studentAutocomplete.ai.anthropic.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Anthropic API Key。建议通过侧栏 AI 配置保存到 SecretStorage。"
         },
         "studentAutocomplete.ai.anthropic.chatModel": {
           "type": "string",
@@ -169,15 +170,48 @@
     "views": {
       "studentAutocomplete": [
         {
-          "id": "studentAutocomplete.problemBankWebview",
-          "name": "做题陪练",
+          "id": "studentAutocomplete.currentSession",
+          "name": "当前学习",
           "type": "webview"
+        },
+        {
+          "id": "studentAutocomplete.problemLibrary",
+          "name": "题目",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "studentAutocomplete.problemBankWebview",
+          "name": "工具与诊断",
+          "type": "webview",
+          "visibility": "collapsed"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "studentAutocomplete.problemLibrary",
+        "contents": "还没有题目。\\n[导入题目](command:studentAutocomplete.saveProblem)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "studentAutocomplete.refreshProblemLibrary",
+          "when": "view == studentAutocomplete.problemLibrary",
+          "group": "navigation"
+        },
+        {
+          "command": "studentAutocomplete.openSettings",
+          "when": "view == studentAutocomplete.currentSession",
+          "group": "navigation"
         }
       ]
     }
   },
   "scripts": {
-    "compile": "tsc -p .",
+    "compile": "npm run compile:host && npm run build:webview",
+    "compile:host": "tsc -p .",
+    "build:webview": "vite build --config vite.current-session.config.ts",
     "trial:binary-tree": "npm run compile && node dist/src/cli/codexPracticeTrial.js --fixture fixtures/practice/P4913.codex.json --fixture fixtures/practice/P1030.codex.json --fixture fixtures/practice/P1364.codex.json",
     "trial:codex-practice": "npm run compile && node dist/src/cli/codexPracticeTrial.js",
     "trial:gpt-practice": "npm run compile && node dist/src/cli/gptPracticeTrial.js",
@@ -192,20 +226,30 @@
     "package:beta-release": "npm run compile:release && node scripts/packageBetaReleaseVsix.js",
     "package:internal": "npm run compile && node scripts/packageInternalVsix.js",
     "check:hygiene": "node scripts/checkProjectHygiene.js",
-    "compile:release": "tsc -p tsconfig.release.json",
+    "compile:release": "tsc -p tsconfig.release.json && npm run build:webview",
     "internal:test-report": "npm run compile && node dist/src/cli/internalTestReport.js",
     "test": "vitest run",
     "watch": "tsc -w -p ."
   },
   "devDependencies": {
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
     "@types/node": "^22.15.3",
-    "@types/vscode": "^1.95.0",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@types/vscode": "1.125.0",
+    "@vitejs/plugin-react": "6.0.3",
+    "jsdom": "29.1.1",
     "playwright": "^1.59.1",
     "typescript": "^5.8.3",
-    "vitest": "^3.1.2"
+    "vite": "8.1.4",
+    "vitest": "4.1.10"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "lucide-react": "1.24.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "zod": "^4.3.6"
   }
 }

@@ -2,6 +2,8 @@ import * as vscode from "vscode";
 import { createMimoInlineCompletionProvider } from "./autocomplete/inlineProvider";
 import { createInternalTestRecorder } from "./internalTesting/internalTestRecorder";
 import { ProblemBankViewProvider } from "./sidebar/ProblemBankViewProvider";
+import { CurrentSessionViewProvider } from "./ui/host/CurrentSessionViewProvider";
+import { ProblemLibraryTreeProvider } from "./ui/host/ProblemLibraryTreeProvider";
 
 export function activate(context: vscode.ExtensionContext): void {
   const internalRecorder = createInternalTestRecorder({
@@ -12,6 +14,8 @@ export function activate(context: vscode.ExtensionContext): void {
     workspaceFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
   });
   const provider = new ProblemBankViewProvider(context);
+  const problemLibrary = new ProblemLibraryTreeProvider(() => provider.loadProblemLibrary());
+  const currentSession = new CurrentSessionViewProvider(context, provider, () => problemLibrary.refresh());
   const output = vscode.window.createOutputChannel("AI 做题陪练");
   const autocompleteStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
   autocompleteStatus.name = "AI 做题陪练补全";
@@ -55,6 +59,10 @@ export function activate(context: vscode.ExtensionContext): void {
         }
       })
     ),
+    problemLibrary,
+    currentSession,
+    vscode.window.registerTreeDataProvider(ProblemLibraryTreeProvider.viewType, problemLibrary),
+    vscode.window.registerWebviewViewProvider(CurrentSessionViewProvider.viewType, currentSession),
     vscode.window.registerWebviewViewProvider(ProblemBankViewProvider.viewType, provider),
     vscode.commands.registerCommand("studentAutocomplete.saveProblem", () => {
       vscode.commands.executeCommand(`${ProblemBankViewProvider.viewType}.focus`);
@@ -70,6 +78,20 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand("studentAutocomplete.recommendNext", () => {
       focusCoachView("推荐下一题");
+    }),
+    vscode.commands.registerCommand("studentAutocomplete.openSettings", () => {
+      return vscode.commands.executeCommand("workbench.action.openSettings", `@ext:${context.extension.id}`);
+    }),
+    vscode.commands.registerCommand("studentAutocomplete.refreshProblemLibrary", async () => {
+      problemLibrary.refresh();
+      await currentSession.refresh();
+    }),
+    vscode.commands.registerCommand("studentAutocomplete.selectProblem", async (problemKey: unknown) => {
+      if (typeof problemKey !== "string" || problemKey.length === 0) {
+        return;
+      }
+      await currentSession.selectProblem(problemKey);
+      await vscode.commands.executeCommand(`${CurrentSessionViewProvider.viewType}.focus`);
     }),
     vscode.commands.registerCommand("studentAutocomplete.triggerInlineCompletion", async () => {
       const editor = vscode.window.activeTextEditor;
@@ -87,7 +109,7 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 function focusCoachView(actionName: string): void {
-  void vscode.commands.executeCommand(`${ProblemBankViewProvider.viewType}.focus`);
+  void vscode.commands.executeCommand(`${CurrentSessionViewProvider.viewType}.focus`);
   void vscode.window.showInformationMessage(`请在左侧 AI 教练中点击「${actionName}」继续。`);
 }
 

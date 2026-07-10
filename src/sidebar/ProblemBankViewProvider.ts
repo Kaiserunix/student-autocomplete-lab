@@ -94,6 +94,7 @@ import {
 } from "./practiceFile";
 import { buildSidebarTeachingContext } from "./sidebarTeachingContext";
 import { createWebviewNonce } from "./html";
+import { loadProblemBankStateData } from "./problemBankStateLoader";
 import type {
   AiHealthCheckResult,
   AiHealthCheckStep,
@@ -105,6 +106,12 @@ import type {
   UiLanguage
 } from "./stateView";
 import { normalizeUiLanguage as normalizeSidebarUiLanguage } from "./webview/i18n";
+import {
+  projectCurrentSession,
+  type CurrentSessionProjectionInput
+} from "../ui/application/currentSessionProjection";
+import { projectProblemLibrary, type ProblemLibraryGroupView } from "../ui/application/problemLibraryProjection";
+import type { CurrentSessionViewModel } from "../ui/webview/currentSession/types";
 
 const starterPresets: StarterPreset[] = [
   {
@@ -164,6 +171,61 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         });
       }
     });
+  }
+
+  public executeMessage(message: WebviewMessage): Promise<HostEvent | Record<string, unknown> | void> {
+    return this.handleMessage(message);
+  }
+
+  public async loadProblemLibrary(): Promise<ProblemLibraryGroupView[]> {
+    const [active, completed] = await Promise.all([this.loadSavedProblems(), this.loadCompletedProblems()]);
+    return projectProblemLibrary({
+      active: active.map((problem) => ({
+        problemKey: makeProblemKey(problem),
+        id: problem.id,
+        title: problem.title,
+        platform: problem.platform,
+        savedAt: problem.savedAt
+      })),
+      completed: completed.map((problem) => ({
+        problemKey: problem.problemKey,
+        id: problem.id,
+        title: problem.title,
+        platform: problem.platform,
+        archivedAt: problem.completedAt
+      }))
+    });
+  }
+
+  public async loadCurrentSession(
+    selectedKey?: string,
+    statusMessage?: string
+  ): Promise<CurrentSessionViewModel> {
+    const [active, completed, sessions, aiStatus] = await Promise.all([
+      this.loadSavedProblems(),
+      this.loadCompletedProblems(),
+      this.loadAttemptSessions(),
+      this.aiRuntimeStatus()
+    ]);
+    const projection: CurrentSessionProjectionInput = {
+      selectedKey,
+      statusMessage,
+      teachingAvailable: aiStatus.teaching.configured && !aiStatus.teaching.error,
+      active: active.map((problem) => ({
+        key: makeProblemKey(problem),
+        title: problem.title,
+        platform: problem.platform,
+        savedAt: problem.savedAt
+      })),
+      completed: completed.map((problem) => ({
+        key: problem.problemKey,
+        title: problem.title,
+        platform: problem.platform,
+        archivedAt: problem.completedAt
+      })),
+      sessions
+    };
+    return projectCurrentSession(projection);
   }
 
   private async handleMessage(message: WebviewMessage): Promise<HostEvent | Record<string, unknown> | void> {
@@ -386,10 +448,24 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     status?: string,
     extra: Record<string, unknown> = {}
   ): Promise<ProblemBankStateView> {
-    const problems = await this.loadSavedProblems();
-    const completedProblems = await this.loadCompletedProblems();
-    const studentSkillState = await this.loadStudentSkillState();
-    const attemptSessions = await this.loadAttemptSessions();
+    const {
+      problems,
+      completed: completedProblems,
+      studentSkill: studentSkillState,
+      attemptSessions,
+      aiStatus,
+      aiConfig,
+      internalTesting
+    } = await loadProblemBankStateData({
+      problems: () => this.loadSavedProblems(),
+      completed: () => this.loadCompletedProblems(),
+      studentSkill: () => this.loadStudentSkillState(),
+      attemptSessions: () => this.loadAttemptSessions(),
+      aiStatus: () => this.aiRuntimeStatus(),
+      aiConfig: () => this.aiConfigView(),
+      internalTesting: () => this.internalRecorder.summary()
+    });
+
     return {
       type: "problemBankState",
       problems,
@@ -397,14 +473,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         ...record,
         painSummary: summarizePainSnapshot(record.painSnapshot)
       })),
-      aiStatus: await this.aiRuntimeStatus(),
-      aiConfig: await this.aiConfigView(),
+      aiStatus,
+      aiConfig,
       activeEditor: this.activeEditorState(),
       uiLanguage: this.readUiLanguage(),
       studentSkill: studentSkillState.studentSkill,
       studentSkillVersions: studentSkillState.versions,
       attemptSessions,
-      internalTesting: await this.internalRecorder.summary(),
+      internalTesting,
       selectedKey:
         selectedKey ??
         (problems[0] ? makeProblemKey(problems[0]) : completedProblems[0] ? makeProblemKey(completedProblems[0]) : ""),
@@ -986,9 +1062,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       limit: 5
     });
     const occurredAt = new Date().toISOString();
-    await this.appendAttemptEvent(
-      currentProblem,
-      buildAttemptEvent({
+    const recommendationEvent = buildAttemptEvent({
         problemKey,
         problemId: currentProblem.id,
         platform: currentProblem.platform,
@@ -996,8 +1070,21 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         occurredAt,
         painPoints: recommendation.strategy.topPainPoints.map((painPoint) => painPoint.label),
         note: `rule-engine targetDifficulty=${recommendation.strategy.targetDifficulty}`
-      })
-    );
+      });
+    const recommendationSummary = recommendation.results.length > 0
+      ? recommendation.results
+          .slice(0, 5)
+          .map((item) => `${item.problemId} · ${item.title}：${item.reason}`)
+          .join("\n")
+      : "当前没有满足硬约束的新候选题。";
+    await this.appendAttemptEvent(currentProblem, recommendationEvent, [
+      {
+        role: "system",
+        kind: recommendationEvent.kind,
+        text: recommendationSummary,
+        occurredAt
+      }
+    ]);
     await this.recordInternalTestEvent({
       kind: "recommendation",
       problemKey,
@@ -1537,6 +1624,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       throw new Error("先打开你的代码文件，再做 AI 找错复盘。");
     }
 
+    const occurredAt = new Date().toISOString();
     const config = routeTeachingModel(await this.loadRuntimeModelEnv()).config;
     const profile = await loadStudentProfile(this.profilePath());
     const teachingContext = buildSidebarTeachingContext({
@@ -1555,6 +1643,36 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       studentCode: teachingContext.studentCode,
       studentProfile: teachingContext.studentProfile
     });
+    const judgeEvent = buildAttemptEvent({
+      problemKey,
+      problemId: problem.id,
+      platform: problem.platform,
+      kind: "submission_judged",
+      outcome: isArchivedReview ? "completed" : "active",
+      occurredAt,
+      painPoints: report.issues.map((issue) => issue.label),
+      model: config.model,
+      note: report.verdict
+    });
+    await this.appendAttemptEvent(problem, judgeEvent, [
+      {
+        role: "student",
+        kind: judgeEvent.kind,
+        text: isArchivedReview ? "请做完成后的找错复盘。" : "请做提交前自检。",
+        occurredAt
+      },
+      {
+        role: "assistant",
+        kind: judgeEvent.kind,
+        text: compactMultiline([
+          report.summary,
+          ...report.issues.map((issue) => `${issue.label}：${issue.fixHint}`),
+          report.nextAction
+        ]),
+        occurredAt,
+        model: config.model
+      }
+    ]);
     await this.recordInternalTestEvent({
       kind: "submission_judge",
       problemKey,

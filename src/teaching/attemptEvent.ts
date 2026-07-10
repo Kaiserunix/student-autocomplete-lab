@@ -8,6 +8,7 @@ export type AttemptEventKind =
   | "lesson_reported"
   | "solution_scored"
   | "optimization_reviewed"
+  | "submission_judged"
   | "archived";
 
 export type AttemptOutcome = "active" | "abandoned" | "revealed" | "ac" | "completed" | "removed";

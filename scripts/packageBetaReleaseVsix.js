@@ -24,7 +24,8 @@ const allowedTopLevelRuntime = [
   "recommendation",
   "release",
   "sidebar",
-  "storage"
+  "storage",
+  "ui"
 ];
 
 const allowedTeachingFiles = [
@@ -119,6 +120,12 @@ async function copyReleaseRuntime() {
   for (const file of allowedTeachingFiles) {
     await cp(path.join(releaseDist, "teaching", file), path.join(stagingRoot, "dist", "src", "teaching", file));
   }
+  await cp(
+    path.join(releaseDist, "teaching", "workflow"),
+    path.join(stagingRoot, "dist", "src", "teaching", "workflow"),
+    { recursive: true }
+  );
+  await cp(path.join(root, "dist", "webview"), path.join(stagingRoot, "dist", "webview"), { recursive: true });
   for (const relativePath of blockedCompiledReleaseFiles) {
     await rm(path.join(stagingRoot, "dist", "src", relativePath), { force: true });
   }
@@ -149,9 +156,10 @@ async function writeReleasePackageJson() {
     [releaseViewPrefix]: packageJson.contributes.views.studentAutocomplete.map((view) => ({
       ...view,
       id: renameContributionId(view.id),
-      name: "做题陪练 Release"
+      name: view.name
     }))
   };
+  renameContributionReferences(packageJson.contributes);
   packageJson.contributes.configuration = renameConfigurationProperties(
     packageJson.contributes.configuration,
     "AI 做题陪练 Release",
@@ -249,6 +257,24 @@ function listFiles(dir) {
 
 function renameContributionId(value) {
   return String(value).replaceAll("studentAutocomplete", releaseViewPrefix);
+}
+
+function renameContributionReferences(contributes) {
+  contributes.viewsWelcome = (contributes.viewsWelcome ?? []).map((welcome) => ({
+    ...welcome,
+    view: renameContributionId(welcome.view),
+    contents: renameContributionId(welcome.contents)
+  }));
+  contributes.menus = Object.fromEntries(
+    Object.entries(contributes.menus ?? {}).map(([location, items]) => [
+      location,
+      items.map((item) => ({
+        ...item,
+        command: renameContributionId(item.command),
+        when: item.when ? renameContributionId(item.when) : item.when
+      }))
+    ])
+  );
 }
 
 function renameConfigurationProperties(configuration, title, expectedPrefix) {
