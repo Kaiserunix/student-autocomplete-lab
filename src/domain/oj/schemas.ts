@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { ojProviderManifestSchema } from "./providerManifest";
-import { ojCapabilityNameSchema, ojOperationRiskSchema, ojPlatformIdSchema } from "./schemaPrimitives";
+import { ojProviderManifestSchema } from "./providerManifest.js";
+import { ojCapabilityNameSchema, ojOperationRiskSchema, ojPlatformIdSchema } from "./schemaPrimitives.js";
 
-export { ojCapabilityNameSchema, ojOperationRiskSchema, ojPlatformIdSchema, ojProviderToolNameSchema } from "./schemaPrimitives";
+export { ojCapabilityNameSchema, ojOperationRiskSchema, ojPlatformIdSchema, ojProviderToolNameSchema } from "./schemaPrimitives.js";
 
 export const ojSourceRefSchema = z
   .object({

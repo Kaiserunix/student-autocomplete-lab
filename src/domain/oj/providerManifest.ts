@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ojOperationRiskSchema, ojPlatformIdSchema, ojProviderToolNameSchema } from "./schemaPrimitives";
+import { ojOperationRiskSchema, ojPlatformIdSchema, ojProviderToolNameSchema } from "./schemaPrimitives.js";
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/i, "Expected a SHA-256 hex digest.");
 const secretLikeArgument = /(cookie|token|password|api[-_]?key)/i;
