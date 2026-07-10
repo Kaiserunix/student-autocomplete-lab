@@ -2,7 +2,7 @@ import { z } from "zod";
 import { ojProviderManifestSchema } from "./providerManifest";
 import { ojCapabilityNameSchema, ojOperationRiskSchema, ojPlatformIdSchema } from "./schemaPrimitives";
 
-export { ojCapabilityNameSchema, ojOperationRiskSchema, ojPlatformIdSchema } from "./schemaPrimitives";
+export { ojCapabilityNameSchema, ojOperationRiskSchema, ojPlatformIdSchema, ojProviderToolNameSchema } from "./schemaPrimitives";
 
 export const ojSourceRefSchema = z
   .object({

@@ -13,6 +13,7 @@ export const ojCapabilityNameSchema = z.enum([
   "commitSubmission",
   "pollSubmission"
 ]);
+export const ojProviderToolNameSchema = z.union([z.enum(["capabilities", "health"]), ojCapabilityNameSchema]);
 export const ojOperationRiskSchema = z.enum([
   "R0_public_read",
   "R1_private_read",

@@ -12,6 +12,8 @@ export type OjCapabilityName =
   | "commitSubmission"
   | "pollSubmission";
 
+export type OjProviderToolName = "capabilities" | "health" | OjCapabilityName;
+
 export type OjCapabilityStatus = "available" | "auth_required" | "unsupported" | "disabled_by_policy" | "degraded";
 export type OjOperationRisk = "R0_public_read" | "R1_private_read" | "R2_local_execute" | "R3_prepare_write" | "R4_real_submit";
 
@@ -361,7 +363,7 @@ export interface OjProviderEntrypointV1 {
   args?: string[];
   url?: string;
   expectedTools: Array<{
-    canonical: OjCapabilityName;
+    canonical: OjProviderToolName;
     upstream: string;
     schemaSha256: string;
     risk: OjOperationRisk;

@@ -194,19 +194,30 @@
               "additionalProperties": false,
               "properties": {
                 "canonical": {
-                  "enum": [
-                    "searchProblems",
-                    "fetchProblem",
-                    "importProblem",
-                    "fetchProfile",
-                    "listSubmissions",
-                    "localRun",
-                    "platformRun",
-                    "prepareSubmission",
-                    "commitSubmission",
-                    "pollSubmission"
-                  ],
-                  "type": "string"
+                  "anyOf": [
+                    {
+                      "enum": [
+                        "capabilities",
+                        "health"
+                      ],
+                      "type": "string"
+                    },
+                    {
+                      "enum": [
+                        "searchProblems",
+                        "fetchProblem",
+                        "importProblem",
+                        "fetchProfile",
+                        "listSubmissions",
+                        "localRun",
+                        "platformRun",
+                        "prepareSubmission",
+                        "commitSubmission",
+                        "pollSubmission"
+                      ],
+                      "type": "string"
+                    }
+                  ]
                 },
                 "risk": {
                   "enum": [

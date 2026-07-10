@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { ojCapabilityNameSchema, ojOperationRiskSchema, ojPlatformIdSchema } from "./schemaPrimitives";
+import { ojOperationRiskSchema, ojPlatformIdSchema, ojProviderToolNameSchema } from "./schemaPrimitives";
 
 const sha256Schema = z.string().regex(/^[a-f0-9]{64}$/i, "Expected a SHA-256 hex digest.");
 const secretLikeArgument = /(cookie|token|password|api[-_]?key)/i;
@@ -31,7 +31,7 @@ export const ojProviderEntrypointSchema = z
     expectedTools: z.array(
       z
         .object({
-          canonical: ojCapabilityNameSchema,
+          canonical: ojProviderToolNameSchema,
           upstream: z.string().min(1),
           schemaSha256: sha256Schema,
           risk: ojOperationRiskSchema

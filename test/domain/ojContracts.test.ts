@@ -352,6 +352,26 @@ describe("OJ contract v1", () => {
     expect(ojProviderManifestSchema.safeParse(unsafeAgent).success).toBe(false);
     expect(ojProviderManifestSchema.parse(manifest)).toEqual(manifest);
   });
+
+  test("allows provider control tools in manifest entrypoints", () => {
+    const manifest = codeforcesManifest() as any;
+    manifest.entrypoints[0].expectedTools.unshift(
+      {
+        canonical: "capabilities",
+        upstream: "oj_capabilities",
+        schemaSha256: "e".repeat(64),
+        risk: "R0_public_read"
+      },
+      {
+        canonical: "health",
+        upstream: "oj_health",
+        schemaSha256: "f".repeat(64),
+        risk: "R0_public_read"
+      }
+    );
+
+    expect(ojProviderManifestSchema.parse(manifest)).toEqual(manifest);
+  });
 });
 
 function codeforcesManifest(): OjProviderManifestV1 {
