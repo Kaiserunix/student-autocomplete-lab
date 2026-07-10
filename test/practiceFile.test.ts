@@ -15,20 +15,20 @@ describe("practice file helper", () => {
     expect(buildPracticeFileRelativePath(problem, "rust")).toBe("practice/luogu/P5730.rs");
   });
 
-  test("creates a Chinese header without leaking the full statement into starter code", () => {
+  test("creates a neutral header without leaking problem identity into starter code", () => {
     const content = buildPracticeFileContent(
       {
         platform: "luogu",
-        id: "P5730",
-        title: "显示屏",
-        sourceUrl: "https://www.luogu.com.cn/problem/P5730"
+        id: "P5730"
       },
       "python"
     );
 
-    expect(content).toContain("题目：P5730 显示屏");
-    expect(content).toContain("链接：https://www.luogu.com.cn/problem/P5730");
+    expect(content).toContain("提醒：题面在插件侧栏查看；自动补全只读取学生代码区。");
     expect(content).toContain("import sys");
+    expect(content).not.toContain("P5730");
+    expect(content).not.toContain("显示屏");
+    expect(content).not.toContain("https://www.luogu.com.cn/problem/P5730");
     expect(content).not.toContain("液晶屏上，每个阿拉伯数字");
   });
 });

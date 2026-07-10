@@ -1809,9 +1809,13 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     :root {
       --line: var(--vscode-sideBarSectionHeader-border, rgba(128, 128, 128, 0.28));
       --soft: color-mix(in srgb, var(--vscode-sideBar-background) 82%, var(--vscode-editor-foreground) 18%);
+      --surface: color-mix(in srgb, var(--vscode-editor-background) 84%, var(--vscode-sideBar-background));
+      --surfaceRaised: color-mix(in srgb, var(--vscode-list-hoverBackground) 52%, var(--vscode-sideBar-background));
       --accent: var(--vscode-textLink-foreground);
       --good: var(--vscode-testing-iconPassed, #4aa564);
       --warn: var(--vscode-editorWarning-foreground, #d7a542);
+      --danger: var(--vscode-errorForeground, #f14c4c);
+      --focusGlow: color-mix(in srgb, var(--vscode-focusBorder) 30%, transparent);
     }
 
     * {
@@ -1822,7 +1826,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       color: var(--vscode-foreground);
       font-family: var(--vscode-font-family);
       font-size: var(--vscode-font-size);
+      line-height: 1.45;
       margin: 0;
+      overflow-x: hidden;
       padding: 0;
     }
 
@@ -1838,8 +1844,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       border-radius: 6px;
       color: var(--vscode-button-foreground);
       cursor: pointer;
-      min-height: 28px;
+      font-weight: 600;
+      min-height: 30px;
       padding: 4px 9px;
+      transition: background 120ms ease, border-color 120ms ease, box-shadow 120ms ease, opacity 120ms ease;
     }
 
     button:hover {
@@ -1847,8 +1855,17 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     button:disabled {
-      cursor: wait;
+      cursor: not-allowed;
       opacity: 0.58;
+    }
+
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+      box-shadow: 0 0 0 2px var(--focusGlow);
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 1px;
     }
 
     button.secondary {
@@ -1861,7 +1878,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     button.danger {
-      color: var(--vscode-errorForeground);
+      color: var(--danger);
     }
 
     input,
@@ -1896,18 +1913,22 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     .app {
       display: grid;
-      gap: 10px;
-      padding: 10px;
+      gap: 11px;
+      padding: 10px 10px 14px;
     }
 
     .pageTabs {
       background: color-mix(in srgb, var(--vscode-sideBar-background) 86%, var(--vscode-editor-foreground) 14%);
       border: 1px solid var(--line);
       border-radius: 8px;
+      box-shadow: 0 1px 0 color-mix(in srgb, var(--vscode-editor-foreground) 8%, transparent);
       display: grid;
       gap: 4px;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       padding: 4px;
+      position: sticky;
+      top: 0;
+      z-index: 5;
     }
 
     .tabButton {
@@ -1915,6 +1936,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       border-color: transparent;
       color: var(--vscode-descriptionForeground);
       min-height: 30px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .tabButton.active {
@@ -2107,6 +2131,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     .panel {
+      background: color-mix(in srgb, var(--vscode-sideBar-background) 92%, var(--vscode-editor-background));
       border: 1px solid var(--line);
       border-radius: 8px;
       overflow: hidden;
@@ -2118,6 +2143,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       background: color-mix(in srgb, var(--vscode-sideBarSectionHeader-background) 88%, transparent);
       border-bottom: 1px solid var(--line);
       display: flex;
+      gap: 8px;
       justify-content: space-between;
       padding: 8px 9px;
     }
@@ -2129,22 +2155,61 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     .panelBody {
       display: grid;
-      gap: 8px;
+      gap: 9px;
       padding: 9px;
     }
 
     .coachPanel {
       border-color: color-mix(in srgb, var(--accent) 46%, var(--line));
+      box-shadow: inset 3px 0 0 color-mix(in srgb, var(--accent) 76%, transparent);
+    }
+
+    .coachPanel .panelBody {
+      gap: 11px;
     }
 
     .coachProblem {
-      background: color-mix(in srgb, var(--vscode-editor-background) 82%, transparent);
-      border: 1px solid var(--line);
+      background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--accent) 9%, var(--surface)),
+        var(--surface)
+      );
+      border: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
       border-radius: 8px;
       display: grid;
-      gap: 5px;
+      gap: 8px;
       line-height: 1.45;
-      padding: 9px;
+      padding: 10px;
+    }
+
+    .coachMetaGrid {
+      display: grid;
+      gap: 6px;
+      grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+    }
+
+    .coachMetaItem {
+      background: color-mix(in srgb, var(--vscode-list-hoverBackground) 42%, transparent);
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+      padding: 7px;
+    }
+
+    .coachMetaItem strong {
+      color: var(--vscode-foreground);
+      font-size: 11px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .coachMetaItem span {
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+      overflow-wrap: anywhere;
     }
 
     .coachActions {
@@ -2153,14 +2218,29 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       grid-template-columns: 1fr 1fr;
     }
 
+    .coachActions button {
+      min-height: 36px;
+    }
+
+    .coachActions button:first-child {
+      grid-column: 1 / -1;
+    }
+
     .coachOptions {
       display: grid;
       gap: 7px;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(auto-fit, minmax(126px, 1fr));
     }
 
     .coachQuestion {
-      min-height: 76px;
+      min-height: 88px;
+    }
+
+    .coachAskBox {
+      background: var(--surfaceRaised);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px;
     }
 
     .coachQuestionActions {
@@ -2168,6 +2248,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       gap: 7px;
       grid-template-columns: 1fr;
       margin-top: 7px;
+    }
+
+    .coachQuestionActions button {
+      min-height: 36px;
     }
 
     .aiConfigBox {
@@ -2208,35 +2292,52 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     .aiStatusGrid {
       display: grid;
       gap: 6px;
+      grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
     }
 
     .aiStatusItem {
+      background: var(--surfaceRaised);
+      border: 1px solid var(--line);
       border-left: 3px solid var(--line);
+      border-radius: 7px;
       display: grid;
-      gap: 2px;
+      gap: 3px;
       line-height: 1.35;
-      padding-left: 7px;
+      min-width: 0;
+      padding: 7px;
     }
 
     .aiStatusItem.ready {
       border-left-color: var(--good);
     }
 
+    .aiStatusItem .hint {
+      font-size: 11px;
+      overflow-wrap: anywhere;
+    }
+
     .aiResponse {
-      background: color-mix(in srgb, var(--vscode-editor-background) 84%, transparent);
+      background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--accent) 7%, var(--surface)),
+        var(--surface)
+      );
       border: 1px solid color-mix(in srgb, var(--accent) 46%, var(--line));
+      border-left: 3px solid var(--accent);
       border-radius: 8px;
       display: grid;
       gap: 10px;
       line-height: 1.5;
-      min-height: 86px;
-      padding: 10px;
+      min-height: 118px;
+      padding: 11px;
     }
 
     .aiResponseTitle {
       color: var(--accent);
-      font-size: 13px;
+      font-size: 14px;
       font-weight: 700;
+      line-height: 1.35;
+      overflow-wrap: anywhere;
     }
 
     .responseSectionTitle {
@@ -2247,10 +2348,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     .resultBlock {
       background: color-mix(in srgb, var(--accent) 10%, var(--vscode-editor-background));
       border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--line));
+      border-left: 3px solid color-mix(in srgb, var(--accent) 82%, var(--line));
       border-radius: 7px;
       display: grid;
       gap: 5px;
       padding: 8px;
+      overflow-wrap: anywhere;
     }
 
     .skillPanelBody {
@@ -2311,6 +2414,18 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       display: grid;
       gap: 5px;
       grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .skillActionRow,
+    .detailActions {
+      display: grid;
+      gap: 7px;
+      grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
+    }
+
+    .skillActionRow button,
+    .detailActions button {
+      min-height: 34px;
     }
 
     .skillRules {
@@ -2392,12 +2507,17 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       gap: 5px;
     }
 
+    .detailTitle .problemTitle {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
     .textBlock {
       background: color-mix(in srgb, var(--vscode-editor-background) 80%, transparent);
       border: 1px solid var(--line);
       border-radius: 8px;
       line-height: 1.55;
-      max-height: 420px;
+      max-height: 520px;
       overflow: auto;
       padding: 9px;
       white-space: pre-wrap;
@@ -2423,12 +2543,20 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     .manualImportHero {
-      background: color-mix(in srgb, var(--vscode-list-hoverBackground) 50%, transparent);
+      background: linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--accent) 8%, var(--surfaceRaised)),
+        var(--surfaceRaised)
+      );
       border: 1px solid var(--line);
       border-radius: 8px;
       display: grid;
       gap: 8px;
       padding: 10px;
+    }
+
+    .manualImportHero button {
+      min-height: 36px;
     }
 
     .formatGuideBody {
@@ -2461,6 +2589,24 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       overflow: auto;
       padding: 8px;
       white-space: pre;
+    }
+
+    @media (max-width: 360px) {
+      .app {
+        padding: 8px;
+      }
+
+      .topbarTools,
+      .aiConfigGrid,
+      .coachOptions {
+        grid-template-columns: 1fr;
+      }
+
+      .coachMetaGrid,
+      .aiStatusGrid,
+      .skillSummary {
+        grid-template-columns: 1fr;
+      }
     }
 
     .empty {
@@ -2657,6 +2803,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         </div>
         <div class="panelBody">
           <div id="coachSelection" class="coachProblem"></div>
+          <div id="aiResponse" class="aiResponse">
+            <span class="aiResponseTitle">等待 AI 交互</span>
+            <span class="hint">选择题目，打开你的代码文件，然后点“给点提示”。题面只会进入提示分析，不会塞进自动补全提示词。</span>
+          </div>
           <div class="field coachAskBox">
             <label for="coachQuestion">追问 / 闲聊</label>
             <textarea id="coachQuestion" class="coachQuestion" placeholder="问算法、让它讲简单点、吐槽两句都可以。按 Ctrl+Enter 发送。"></textarea>
@@ -2698,10 +2848,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
             <button id="coachAutocomplete" class="secondary" type="button">测试补全</button>
           </div>
           <div id="aiStatusGrid" class="aiStatusGrid"></div>
-          <div id="aiResponse" class="aiResponse">
-            <span class="aiResponseTitle">等待 AI 交互</span>
-            <span class="hint">选择题目，打开你的代码文件，然后点“给点提示”。题面只会进入提示分析，不会塞进自动补全提示词。</span>
-          </div>
           <details class="aiConfigBox">
             <summary>AI 接口配置</summary>
             <div class="panelBody">
@@ -3561,22 +3707,43 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       if (!problem) {
         coachSelection.appendChild(textSpan("还没有选择题目", "aiResponseTitle"));
         coachSelection.appendChild(textSpan("先导入初始诊断或输入洛谷题号；AI 提示会读取当前编辑器代码和当前选中题面。", "hint"));
+        const emptyMeta = document.createElement("div");
+        emptyMeta.className = "coachMetaGrid";
+        [
+          ["第一步", "题目页导入 / 搜索"],
+          ["第二步", "打开代码文件"],
+          ["安全边界", "补全不读题面"]
+        ].forEach(([label, value]) => emptyMeta.appendChild(coachMetaItem(label, value)));
+        coachSelection.appendChild(emptyMeta);
         setCoachBusy(false);
         return;
       }
 
       coachSelection.appendChild(textSpan(problem.id + " · " + problem.title, "aiResponseTitle"));
       const activeEditor = state.activeEditor || {};
-      const line = [
-        isArchivedCoachProblem ? "复盘归档题" : "当前练习题",
-        "当前文件 " + (activeEditor.relativePath || activeEditor.fileName || "未检测到"),
-        "session " + coachThread(keyOf(problem)).length + " 轮",
-        problem.statement ? "完整题面已就绪" : "题单摘要，点“下载完整题面”后提示更准",
-        "补全不读题面",
-        "提示才读题面和代码"
-      ].join(" · ");
-      coachSelection.appendChild(textSpan(line, "mini"));
+      const metaGrid = document.createElement("div");
+      metaGrid.className = "coachMetaGrid";
+      [
+        [isArchivedCoachProblem ? "复盘归档题" : "当前练习题", problem.statement ? "完整题面已就绪" : "题单摘要，先下载题面更准"],
+        ["当前文件", activeEditor.relativePath || activeEditor.fileName || "未检测到"],
+        ["会话", "session " + coachThread(keyOf(problem)).length + " 轮"],
+        ["自动补全", "补全不读题面"],
+        ["AI 提示", "提示才读题面和代码"]
+      ].forEach(([label, value]) => metaGrid.appendChild(coachMetaItem(label, value)));
+      coachSelection.appendChild(metaGrid);
       setCoachBusy(false);
+    }
+
+    function coachMetaItem(label, value) {
+      const item = document.createElement("div");
+      item.className = "coachMetaItem";
+      const strong = document.createElement("strong");
+      strong.textContent = label;
+      const span = document.createElement("span");
+      span.textContent = value;
+      item.appendChild(strong);
+      item.appendChild(span);
+      return item;
     }
 
     function renderAiStatus() {
@@ -4043,7 +4210,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
       if (entry.status !== "disabled") {
         const actions = document.createElement("div");
-        actions.className = "row";
+        actions.className = "skillActionRow";
         const wrongButton = document.createElement("button");
         wrongButton.className = "secondary";
         wrongButton.type = "button";
@@ -5137,6 +5304,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         problemDetail.appendChild(grid);
       }
 
+      const actions = document.createElement("div");
+      actions.className = "detailActions";
+
       const goCoachButton = document.createElement("button");
       goCoachButton.className = "secondary";
       goCoachButton.type = "button";
@@ -5147,7 +5317,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         coachQuestion.focus();
         setStatus("已切到 AI 教练。输入问题后点发送，或直接用下方教学按钮。");
       });
-      problemDetail.appendChild(goCoachButton);
+      actions.appendChild(goCoachButton);
 
       const deleteButton = document.createElement("button");
       deleteButton.className = "secondary danger";
@@ -5155,7 +5325,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       deleteButton.textContent = "直接删除";
       deleteButton.title = "只从题库删除，不归档，不写入已归档。";
       deleteButton.addEventListener("click", () => requestDeleteProblem(keyOf(problem), "active"));
-      problemDetail.appendChild(deleteButton);
+      actions.appendChild(deleteButton);
+      problemDetail.appendChild(actions);
     }
 
     function appendSection(titleText, bodyText) {
