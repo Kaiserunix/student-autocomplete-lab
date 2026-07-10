@@ -296,21 +296,35 @@ export function applyStudentSkillPatch(skill: StudentSkill, patch: StudentSkillP
 
 export function studentSkillSummaryForTeaching(skill: StudentSkill): TeachingStudentProfileSummary {
   const painPointCounts = Object.fromEntries(
-    Object.entries(skill.errorModel).map(([label, state]) => [label, state.count])
+    Object.entries(skill.errorModel)
+      .sort(([leftLabel, left], [rightLabel, right]) =>
+        right.count - left.count || right.lastSeen.localeCompare(left.lastSeen) || leftLabel.localeCompare(rightLabel)
+      )
+      .slice(0, 12)
+      .map(([label, state]) => [compactTeachingText(label, 80), state.count])
   );
   const activeSkills = Object.values(skill.skills)
     .filter((entry) => isStudentSkillTeachingActive(entry.status))
-    .map((entry) => entry.name)
+    .sort((left, right) =>
+      right.lastSeen.localeCompare(left.lastSeen) || right.evidenceCount - left.evidenceCount || left.name.localeCompare(right.name)
+    )
+    .slice(0, 12)
+    .map((entry) => compactTeachingText(entry.name, 80))
     .sort();
   const recentCorrections = [...skill.correctionLog]
-    .slice(-5)
+    .slice(-3)
     .map((entry) => ({
       type: entry.type,
-      target: entry.target,
-      note: entry.note
+      target: entry.target ? compactTeachingText(entry.target, 80) : undefined,
+      note: compactTeachingText(entry.note, 120)
     }));
 
   return { painPointCounts, activeSkills, recentCorrections };
+}
+
+function compactTeachingText(value: string, limit: number): string {
+  const compact = value.trim().replace(/\s+/g, " ");
+  return compact.length <= limit ? compact : `${compact.slice(0, limit - 1).trimEnd()}…`;
 }
 
 export function buildAutocompleteSkillContext(skill: StudentSkill, language: string): AutocompleteSkillContext {

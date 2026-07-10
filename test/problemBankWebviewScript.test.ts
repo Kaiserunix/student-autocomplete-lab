@@ -82,8 +82,11 @@ describe("problem bank webview script", () => {
     expect(source).not.toContain('id="coachSubmitCheck"');
     expect(source).toContain('id="coachAutocomplete"');
     expect(source).toContain('class="coachQuestionActions"');
-    expect(source).toContain("追问 / 闲聊");
-    expect(source).toContain("吐槽两句都可以");
+    expect(source).toContain('<label for="coachQuestion">追问</label>');
+    expect(source).toContain('placeholder="输入问题或补充思路"');
+    expect(source).not.toContain("吐槽两句都可以");
+    expect(source).not.toContain('id="aiStatusGrid"');
+    expect(source).not.toContain("编辑器 Ghost Text，触发");
     expect(source).toContain(">发送<");
     expect(source).toContain(">继续聊<");
     expect(source).toContain('function sendCustomFollowUp()');
@@ -223,7 +226,8 @@ describe("problem bank webview script", () => {
     expect(source).toContain('id="studentSkillPanel"');
     expect(source).toContain('id="studentSkillVersions"');
     expect(source).toContain("这条不准");
-    expect(source).toContain("查看证据");
+    expect(source).not.toContain("查看证据");
+    expect(source).toContain("skillEvidenceSummary");
     expect(source).toContain('command: "recordStudentSkillFeedback"');
     expect(source).toContain("handleStudentSkillFeedbackRequest");
     expect(source).toContain("renderStudentSkill()");
@@ -240,7 +244,7 @@ describe("problem bank webview script", () => {
     expect(source).not.toContain("prompt(");
     expect(source).not.toContain("confirm(");
     expect(source).not.toContain("alert(");
-    expect(source).toContain("renderEvidenceDetails");
+    expect(source).not.toContain("renderEvidenceDetails");
     expect(source).toContain("defaultSkillFeedbackNoteForWebview");
   });
 

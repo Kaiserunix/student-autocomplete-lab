@@ -2923,11 +2923,11 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           <div id="coachSelection" class="coachProblem"></div>
           <div id="aiResponse" class="aiResponse">
             <span class="aiResponseTitle">等待 AI 交互</span>
-            <span class="hint">选择题目，打开你的代码文件，然后点“给点提示”。题面只会进入提示分析，不会塞进自动补全提示词。</span>
+            <span class="hint">选择题目并打开代码文件。</span>
           </div>
           <div class="field coachAskBox">
-            <label for="coachQuestion">追问 / 闲聊</label>
-            <textarea id="coachQuestion" class="coachQuestion" placeholder="问算法、让它讲简单点、吐槽两句都可以。按 Ctrl+Enter 发送。"></textarea>
+            <label for="coachQuestion">追问</label>
+            <textarea id="coachQuestion" class="coachQuestion" placeholder="输入问题或补充思路"></textarea>
             <div class="coachQuestionActions">
               <button id="coachSendCustom" class="secondary" type="button">发送</button>
             </div>
@@ -2965,7 +2965,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
             <button id="coachCompleted" class="secondary" type="button">我已完成</button>
             <button id="coachAutocomplete" class="secondary" type="button">测试补全</button>
           </div>
-          <div id="aiStatusGrid" class="aiStatusGrid"></div>
           <details class="aiConfigBox">
             <summary>AI 接口配置</summary>
             <div class="panelBody">
@@ -3099,7 +3098,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const studentSkillVersions = document.getElementById("studentSkillVersions");
     const aiProvider = document.getElementById("aiProvider");
     const coachSelection = document.getElementById("coachSelection");
-    const aiStatusGrid = document.getElementById("aiStatusGrid");
     const aiResponse = document.getElementById("aiResponse");
     const coachQuestion = document.getElementById("coachQuestion");
     const practiceLanguage = document.getElementById("practiceLanguage");
@@ -3345,8 +3343,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         tabProblem: "题目",
         tabSkill: "学习画像",
         coachPanelTitle: "核心交互",
-        coachQuestionLabel: "追问 / 闲聊",
-        coachQuestionPlaceholder: "问算法、让它讲简单点、吐槽两句都可以。按 Ctrl+Enter 发送。",
+        coachQuestionLabel: "追问",
+        coachQuestionPlaceholder: "输入问题或补充思路",
         send: "发送",
         practiceLanguageLabel: "建文件语言",
         responseLanguageLabel: "AI 输出",
@@ -3361,7 +3359,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         completed: "我已完成",
         autocompletePreview: "测试补全",
         waitingTitle: "等待 AI 交互",
-        waitingHint: "选择题目，打开你的代码文件，然后点“给点提示”。题面只会进入提示分析，不会塞进自动补全提示词。",
+        waitingHint: "选择题目并打开代码文件。",
         problemTabGuide: "Markdown 文件导入",
         manualImportTitle: "手动导入 .md 题目",
         manualImportButton: "选择 .md 文件导入",
@@ -3378,8 +3376,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         tabProblem: "Problems",
         tabSkill: "Learning Profile",
         coachPanelTitle: "Core Coaching",
-        coachQuestionLabel: "Ask / Follow Up",
-        coachQuestionPlaceholder: "Ask about the algorithm, request a simpler explanation, or vent a little. Ctrl+Enter to send.",
+        coachQuestionLabel: "Follow Up",
+        coachQuestionPlaceholder: "Add a question or thought",
         send: "Send",
         practiceLanguageLabel: "Starter File",
         responseLanguageLabel: "AI Output",
@@ -3394,7 +3392,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         completed: "I Finished",
         autocompletePreview: "Test Completion",
         waitingTitle: "Waiting for AI",
-        waitingHint: "Choose a problem, open your code file, then ask for a hint. The problem statement is only used for coaching, not autocomplete.",
+        waitingHint: "Choose a problem and open your code file.",
         problemTabGuide: "Markdown File Import",
         manualImportTitle: "Import a .md Problem",
         manualImportButton: "Choose .md File",
@@ -3824,15 +3822,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
       if (!problem) {
         coachSelection.appendChild(textSpan("还没有选择题目", "aiResponseTitle"));
-        coachSelection.appendChild(textSpan("先导入初始诊断或输入洛谷题号；AI 提示会读取当前编辑器代码和当前选中题面。", "hint"));
-        const emptyMeta = document.createElement("div");
-        emptyMeta.className = "coachMetaGrid";
-        [
-          ["第一步", "题目页导入 / 搜索"],
-          ["第二步", "打开代码文件"],
-          ["安全边界", "补全不读题面"]
-        ].forEach(([label, value]) => emptyMeta.appendChild(coachMetaItem(label, value)));
-        coachSelection.appendChild(emptyMeta);
+        coachSelection.appendChild(textSpan("请先导入或选择一道题。", "hint"));
         setCoachBusy(false);
         return;
       }
@@ -3844,9 +3834,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       [
         [isArchivedCoachProblem ? "复盘归档题" : "当前练习题", problem.statement ? "完整题面已就绪" : "题单摘要，先下载题面更准"],
         ["当前文件", activeEditor.relativePath || activeEditor.fileName || "未检测到"],
-        ["会话", "session " + coachThread(keyOf(problem)).length + " 轮"],
-        ["自动补全", "补全不读题面"],
-        ["AI 提示", "提示才读题面和代码"]
+        ["会话", coachThread(keyOf(problem)).length + " 轮"]
       ].forEach(([label, value]) => metaGrid.appendChild(coachMetaItem(label, value)));
       coachSelection.appendChild(metaGrid);
       setCoachBusy(false);
@@ -3865,7 +3853,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     function renderAiStatus() {
-      aiStatusGrid.innerHTML = "";
       const statusData = state.aiStatus;
       if (!statusData) {
         aiProvider.textContent = "正在检测 API";
@@ -3874,52 +3861,11 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
       const teaching = statusData.teaching || {};
       const autocomplete = statusData.autocomplete || {};
-      aiProvider.textContent = teaching.configured || autocomplete.configured
-        ? [
-            providerModeLabel(statusData.providerMode),
-            "补全 " + (autocomplete.model || "未配置"),
-            "分析 " + (teaching.model || "未配置"),
-            "协议 " + [autocomplete.format, teaching.format].filter(Boolean).join(" / ")
-          ].join(" · ")
-        : "AI 未配置";
-      [
-        {
-          label: "自动补全",
-          data: statusData.autocomplete,
-          readyText: "编辑器 Ghost Text，触发 " + endpointText(statusData.autocomplete)
-        },
-        {
-          label: "AI 提示",
-          data: statusData.teaching,
-          readyText: "侧栏按钮，触发 " + endpointText(statusData.teaching)
-        },
-        {
-          label: "配置文件",
-          data: { configured: Boolean(statusData.envPath) },
-          readyText: statusData.envPath || "未找到工作区"
-        }
-      ].forEach((item) => {
-        const row = document.createElement("div");
-        row.className = "aiStatusItem" + (item.data?.configured ? " ready" : "");
-        row.appendChild(textSpan(item.label + (item.data?.configured ? "：可用" : "：不可用"), "mini"));
-        row.appendChild(textSpan(item.data?.configured ? item.readyText : item.data?.error || "未配置", "hint"));
-        aiStatusGrid.appendChild(row);
-      });
-
-      const health = statusData.healthCheck;
-      if (health) {
-        [
-          { label: "模型列表", step: health.models },
-          { label: "AI 提示", step: health.chatSmoke },
-          { label: "自动补全", step: health.autocompleteSmoke }
-        ].forEach((item) => {
-          const row = document.createElement("div");
-          row.className = "aiStatusItem" + (item.step?.status === "pass" ? " ready" : "");
-          row.appendChild(textSpan("健康检查 · " + item.label + "：" + (item.step?.status === "pass" ? "通过" : "未通过"), "mini"));
-          row.appendChild(textSpan(item.step?.errorHint || item.step?.endpoint || "证据不足", "hint"));
-          aiStatusGrid.appendChild(row);
-        });
-      }
+      aiProvider.textContent = teaching.configured
+        ? "AI 已就绪"
+        : autocomplete.configured
+          ? "自动补全已就绪"
+          : "AI 未配置";
     }
 
     function sendCustomFollowUp() {
@@ -3958,16 +3904,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       );
       aiResponse.innerHTML = "";
       aiResponse.appendChild(textSpan(isRecommendation ? "规则推荐中" : "AI 正在分析", "aiResponseTitle"));
-      aiResponse.appendChild(
-        textSpan(
-          isRecommendation
-            ? "会读取本地痛点、Student Skill、迁移证据和当前题库，不需要调用大模型。"
-            : action === "followUp"
-              ? "会带上上一轮 AI 回复摘要、你的追问、当前代码和当前题面一起分析。"
-              : "会读取当前 VS Code 活动编辑器的代码、当前题面和本地痛点记录。",
-          "hint"
-        )
-      );
       vscode.postMessage({
         command: "requestAiCoach",
         action,
@@ -3998,7 +3934,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       setCoachBusy(true);
       aiResponse.innerHTML = "";
       aiResponse.appendChild(textSpan("规则推荐中", "aiResponseTitle"));
-      aiResponse.appendChild(textSpan("会读取本地痛点、Student Skill、迁移证据和当前题库，不需要调用大模型。", "hint"));
       vscode.postMessage({
         command: "requestAiCoach",
         action: "recommend",
@@ -4020,7 +3955,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       setCoachBusy(true);
       aiResponse.innerHTML = "";
       aiResponse.appendChild(textSpan("AI 正在评分", "aiResponseTitle"));
-      aiResponse.appendChild(textSpan("OJ 结果来自你在下拉框里的选择；默认未提交/不确定，不会假装 AC。", "hint"));
       const completedOjStatus =
         problemKey && state.completedProblems.some((item) => keyOf(item) === problemKey && item.completionReason === "completed")
           ? "AC"
@@ -4318,12 +4252,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
       const latestExample = latestSkillExample(entry);
       if (latestExample) {
-        card.appendChild(responseBlock("最近证据", latestExample.evidence || ""));
-      }
-      const evidenceDetails = latestExample ? renderEvidenceDetails(latestExample) : undefined;
-      if (evidenceDetails) {
-        evidenceDetails.hidden = true;
-        card.appendChild(evidenceDetails);
+        card.appendChild(textSpan(skillEvidenceSummary(latestExample), "mini"));
       }
 
       if (entry.status !== "disabled") {
@@ -4343,22 +4272,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         helpfulButton.addEventListener("click", () => requestStudentSkillFeedback(entry.name, "diagnosis_helpful"));
         actions.appendChild(helpfulButton);
 
-        if (latestExample) {
-          const evidenceButton = document.createElement("button");
-          evidenceButton.className = "secondary";
-          evidenceButton.type = "button";
-          evidenceButton.textContent = "查看证据";
-          evidenceButton.addEventListener("click", () => {
-            if (!evidenceDetails) {
-              return;
-            }
-            evidenceDetails.hidden = !evidenceDetails.hidden;
-            evidenceButton.textContent = evidenceDetails.hidden ? "查看证据" : "收起证据";
-            setStatus(evidenceDetails.hidden ? "已收起证据。" : "已展开证据。");
-          });
-          actions.appendChild(evidenceButton);
-        }
-
         const disableButton = document.createElement("button");
         disableButton.className = "secondary";
         disableButton.type = "button";
@@ -4371,26 +4284,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       return card;
     }
 
-    function renderEvidenceDetails(example) {
-      const details = document.createElement("div");
-      details.className = "resultBlock";
-      details.appendChild(textSpan("证据详情", "responseSectionTitle"));
-      details.appendChild(
-        markdownBlock(
-          [
-            example.problemId ? "题目：" + example.problemId : "",
-            example.topic ? "主题：" + example.topic : "",
-            "来源：" + (example.source || "unknown"),
-            "时间：" + formatDateTime(example.occurredAt),
-            "",
-            example.evidence || "暂无证据文本。"
-          ]
-            .filter(Boolean)
-            .join("\\n"),
-          "hint"
-        )
-      );
-      return details;
+    function skillEvidenceSummary(example) {
+      return ["最近记录", example.problemId, example.topic, formatDateTime(example.occurredAt)]
+        .filter(Boolean)
+        .join(" · ");
     }
 
     function renderStudentSkillVersions() {
@@ -4657,7 +4554,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       );
       quickActions.appendChild(simplerButton);
       aiResponse.appendChild(quickActions);
-      aiResponse.appendChild(textSpan("继续在上方写一句话，问算法或吐槽都可以，按 Ctrl+Enter 或点“发送”。", "mini"));
       appendContextAudit(data.workflowAudit || coachContextAudit("follow_up"));
       appendCoachFollowUpTurn(data.problemKey || state.selectedKey, data, report);
       renderCoach();
@@ -4710,7 +4606,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       );
       quickActions.appendChild(simplerButton);
       aiResponse.appendChild(quickActions);
-      aiResponse.appendChild(textSpan("还卡住？在上方写一句话，问算法或吐槽都可以，按 Ctrl+Enter 或点“继续聊”。", "mini"));
       appendCoachTurn(data.problemKey || state.selectedKey, data, report, localized);
       renderCoach();
       const painPoints = localized.painPoints || report.painPoints || [];
@@ -5127,13 +5022,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       ]
         .filter(Boolean)
         .join("\\n");
-    }
-
-    function endpointText(item) {
-      if (!item?.configured) {
-        return "未配置";
-      }
-      return item.model + " · " + (item.format || "unknown") + " · " + item.endpoint;
     }
 
     function providerModeLabel(mode) {
