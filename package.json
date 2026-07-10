@@ -211,6 +211,7 @@
   "scripts": {
     "compile": "npm run compile:host && npm run build:webview",
     "compile:host": "tsc -p .",
+    "generate:oj-contracts": "npm run compile:host && node scripts/exportOjSchemas.js",
     "build:webview": "vite build --config vite.current-session.config.ts",
     "trial:binary-tree": "npm run compile && node dist/src/cli/codexPracticeTrial.js --fixture fixtures/practice/P4913.codex.json --fixture fixtures/practice/P1030.codex.json --fixture fixtures/practice/P1364.codex.json",
     "trial:codex-practice": "npm run compile && node dist/src/cli/codexPracticeTrial.js",
