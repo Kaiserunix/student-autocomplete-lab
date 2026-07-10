@@ -2518,6 +2518,28 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       background: color-mix(in srgb, var(--vscode-list-hoverBackground) 46%, transparent);
       border: 1px solid var(--line);
       border-radius: 8px;
+    }
+
+    .versionItem {
+      display: grid;
+      gap: 6px;
+      padding: 8px;
+    }
+
+    .skillCard {
+      overflow: hidden;
+    }
+
+    .skillCard > summary {
+      cursor: pointer;
+      padding: 8px;
+    }
+
+    .skillCard[open] > summary {
+      border-bottom: 1px solid var(--line);
+    }
+
+    .skillCardBody {
       display: grid;
       gap: 6px;
       padding: 8px;
@@ -2528,10 +2550,16 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     .skillTop {
-      align-items: start;
+      align-items: center;
       display: grid;
       gap: 5px;
       grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .skillTopMeta {
+      align-items: center;
+      display: inline-flex;
+      gap: 5px;
     }
 
     .skillActionRow,
@@ -4174,16 +4202,21 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       });
       studentSkillPanel.appendChild(summary);
 
-      studentSkillPanel.appendChild(
-        responseBlock(
-          "硬规则",
-          [
-            "补全不读题面：" + booleanLabel(!skill.hardRules?.autocompleteMayReadProblemStatement),
-            "补全不直接给完整答案：" + booleanLabel(!skill.hardRules?.allowFullSolutionAutocomplete),
-            "已禁用：" + ((skill.hardRules?.disabledSkills || []).join(" · ") || "暂无")
-          ].join("\\n")
-        )
-      );
+      const hardRules = document.createElement("details");
+      hardRules.className = "skillGroup hardRules";
+      hardRules.open = false;
+      const hardRulesSummary = document.createElement("summary");
+      hardRulesSummary.textContent = "硬规则";
+      hardRules.appendChild(hardRulesSummary);
+      const hardRulesBody = document.createElement("div");
+      hardRulesBody.className = "skillList";
+      [
+        "补全不读题面：" + booleanLabel(!skill.hardRules?.autocompleteMayReadProblemStatement),
+        "补全不直接给完整答案：" + booleanLabel(!skill.hardRules?.allowFullSolutionAutocomplete),
+        "已禁用：" + ((skill.hardRules?.disabledSkills || []).join(" · ") || "暂无")
+      ].forEach((rule) => hardRulesBody.appendChild(textSpan(rule, "mini")));
+      hardRules.appendChild(hardRulesBody);
+      studentSkillPanel.appendChild(hardRules);
 
       appendSkillGroup("已启用 Skill", entries.filter((entry) => entry.status === "active"), "active");
       appendSkillGroup("候选 Skill", entries.filter((entry) => entry.status === "candidate"), "candidate");
@@ -4215,17 +4248,27 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     function renderSkillEntry(entry) {
-      const card = document.createElement("div");
+      const card = document.createElement("details");
       card.className = "skillCard " + (entry.status || "candidate");
+      card.open = false;
 
+      const cardSummary = document.createElement("summary");
       const top = document.createElement("div");
       top.className = "skillTop";
       top.appendChild(textSpan(entry.name || "unnamed-skill", "problemTitle"));
-      top.appendChild(textSpan(skillStatusLabel(entry.status), "tag"));
-      card.appendChild(top);
+      const summaryMeta = document.createElement("div");
+      summaryMeta.className = "skillTopMeta";
+      summaryMeta.appendChild(textSpan("证据 " + (entry.evidenceCount || 0), "mini"));
+      summaryMeta.appendChild(textSpan(skillStatusLabel(entry.status), "tag"));
+      top.appendChild(summaryMeta);
+      cardSummary.appendChild(top);
+      card.appendChild(cardSummary);
 
-      card.appendChild(textSpan(entry.reason || "暂无形成理由。", "hint"));
-      card.appendChild(
+      const body = document.createElement("div");
+      body.className = "skillCardBody";
+
+      body.appendChild(textSpan(entry.reason || "暂无形成理由。", "hint"));
+      body.appendChild(
         textSpan(
           "证据 " + (entry.evidenceCount || 0) + " · 分数 " + (entry.score ?? 0) + " · 最近 " + formatDateTime(entry.lastSeen),
           "mini"
@@ -4233,26 +4276,26 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       );
 
       if (entry.disabledReason) {
-        card.appendChild(responseBlock("禁用原因", entry.disabledReason));
+        body.appendChild(responseBlock("禁用原因", entry.disabledReason));
       }
 
       if (entry.sourcePainPoints?.length) {
         const painRow = document.createElement("div");
         painRow.className = "tagRow";
         entry.sourcePainPoints.slice(0, 6).forEach((painPoint) => painRow.appendChild(textSpan(painPoint, "tag")));
-        card.appendChild(painRow);
+        body.appendChild(painRow);
       }
 
       if (entry.rules?.length) {
         const rules = document.createElement("div");
         rules.className = "skillRules";
         entry.rules.slice(0, 4).forEach((rule) => rules.appendChild(textSpan("· " + rule, "mini")));
-        card.appendChild(rules);
+        body.appendChild(rules);
       }
 
       const latestExample = latestSkillExample(entry);
       if (latestExample) {
-        card.appendChild(textSpan(skillEvidenceSummary(latestExample), "mini"));
+        body.appendChild(textSpan(skillEvidenceSummary(latestExample), "mini"));
       }
 
       if (entry.status !== "disabled") {
@@ -4278,9 +4321,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         disableButton.textContent = "禁用";
         disableButton.addEventListener("click", () => requestDisableStudentSkill(entry.name));
         actions.appendChild(disableButton);
-        card.appendChild(actions);
+        body.appendChild(actions);
       }
 
+      card.appendChild(body);
       return card;
     }
 

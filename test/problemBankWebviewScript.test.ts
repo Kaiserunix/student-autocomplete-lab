@@ -228,6 +228,11 @@ describe("problem bank webview script", () => {
     expect(source).toContain("这条不准");
     expect(source).not.toContain("查看证据");
     expect(source).toContain("skillEvidenceSummary");
+    expect(source).toContain('hardRules.className = "skillGroup hardRules"');
+    expect(source).toContain("hardRules.open = false");
+    expect(source).not.toContain('responseBlock(\n          "硬规则"');
+    expect(source).toContain('const card = document.createElement("details")');
+    expect(source).toContain('body.className = "skillCardBody"');
     expect(source).toContain('command: "recordStudentSkillFeedback"');
     expect(source).toContain("handleStudentSkillFeedbackRequest");
     expect(source).toContain("renderStudentSkill()");
