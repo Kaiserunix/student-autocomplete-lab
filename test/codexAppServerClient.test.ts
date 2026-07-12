@@ -126,6 +126,39 @@ describe("Codex app-server client", () => {
     await client.dispose();
   });
 
+  test("forwards server requests and can reject them explicitly", async () => {
+    const fake = new FakeAppServerProcess();
+    const requests: Array<{ id: string | number; method: string }> = [];
+    const client = new CodexAppServerClient({
+      executablePath: "codex",
+      codexHome: "C:/tmp/codex-home",
+      runtimeCwd: "C:/tmp/codex-runtime",
+      clientVersion: "0.1.0-beta.1",
+      ensureDirectory: async () => undefined,
+      spawnProcess: () => fake
+    });
+    client.onRequest((message) => requests.push({ id: message.id, method: message.method }));
+
+    await client.start();
+    fake.emitJson({
+      id: 91,
+      method: "item/commandExecution/requestApproval",
+      params: { threadId: "thread-1", turnId: "turn-1" }
+    });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    client.respondError(91, -32600, "Tool activity is disabled.");
+
+    expect(requests).toEqual([{
+      id: 91,
+      method: "item/commandExecution/requestApproval"
+    }]);
+    expect(fake.sent()).toContainEqual({
+      id: 91,
+      error: { code: -32600, message: "Tool activity is disabled." }
+    });
+    await client.dispose();
+  });
+
   test("rejects timed-out and in-flight requests after a process crash", async () => {
     const fake = new FakeAppServerProcess();
     const client = new CodexAppServerClient({

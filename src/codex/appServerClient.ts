@@ -5,6 +5,7 @@ import type { Readable, Writable } from "node:stream";
 import {
   parseAppServerMessage,
   type AppServerNotification,
+  type AppServerRequest,
   type AppServerRequestId,
   type AppServerResponse
 } from "./appServerProtocol";
@@ -54,6 +55,7 @@ export class CodexAppServerClient {
   private readonly options: CodexAppServerClientOptions;
   private readonly pending = new Map<AppServerRequestId, PendingRequest>();
   private readonly notificationListeners = new Set<(message: AppServerNotification) => void>();
+  private readonly requestListeners = new Set<(message: AppServerRequest) => void>();
   private process?: AppServerProcess;
   private stdoutLines?: ReadLineInterface;
   private stderrLines?: ReadLineInterface;
@@ -95,6 +97,17 @@ export class CodexAppServerClient {
     return {
       dispose: () => this.notificationListeners.delete(listener)
     };
+  }
+
+  onRequest(listener: (message: AppServerRequest) => void): Disposable {
+    this.requestListeners.add(listener);
+    return {
+      dispose: () => this.requestListeners.delete(listener)
+    };
+  }
+
+  respondError(id: AppServerRequestId, code: number, message: string): void {
+    this.write({ id, error: { code, message } });
   }
 
   async dispose(): Promise<void> {
@@ -192,7 +205,13 @@ export class CodexAppServerClient {
       }
       return;
     }
-    this.options.onLog?.({ level: "error", event: "unsupported-server-request", message: message.method });
+    if (this.requestListeners.size === 0) {
+      this.options.onLog?.({ level: "error", event: "unsupported-server-request", message: message.method });
+      return;
+    }
+    for (const listener of this.requestListeners) {
+      listener(message);
+    }
   }
 
   private settleResponse(response: AppServerResponse): void {

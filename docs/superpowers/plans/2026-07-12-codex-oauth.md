@@ -549,7 +549,7 @@ git commit -m "feat: discover Codex OAuth models"
 - Create: `src/codex/codexTextClient.ts`
 - Create: `test/codexTextClient.test.ts`
 
-- [ ] **Step 1: Write the successful text-generation tracer test**
+- [x] **Step 1: Write the successful text-generation tracer test**
 
 ```ts
 const pending = transport.generate({
@@ -577,7 +577,7 @@ await expect(pending).resolves.toBe("return a + b");
 expect(fake.callsFor("thread/delete")).toEqual([{ threadId: "thread-1" }]);
 ```
 
-- [ ] **Step 2: Run the text-client test and confirm RED**
+- [x] **Step 2: Run the text-client test and confirm RED**
 
 ```powershell
 npm test -- --run test/codexTextClient.test.ts
@@ -585,7 +585,7 @@ npm test -- --run test/codexTextClient.test.ts
 
 Expected: import failure.
 
-- [ ] **Step 3: Implement one-shot generation**
+- [x] **Step 3: Implement one-shot generation**
 
 Create the runtime directory before use. Start the thread with the selected
 model, runtime cwd, read-only sandbox, and no approval escalation using the
@@ -602,7 +602,7 @@ codex app-server generate-json-schema --out .runtime/codex-app-server-schema
 
 Do not commit `.runtime` output.
 
-- [ ] **Step 4: Add tool-rejection tests**
+- [x] **Step 4: Add tool-rejection tests**
 
 For every forbidden item type, notify the client and assert interrupt, rejection,
 and deletion:
@@ -620,13 +620,13 @@ for (const type of [
 }
 ```
 
-- [ ] **Step 5: Add cancellation, timeout, failed-turn, and cleanup tests**
+- [x] **Step 5: Add cancellation, timeout, failed-turn, and cleanup tests**
 
 Use an `AbortController`; verify `turn/interrupt` is sent and `thread/delete`
 runs in `finally`. Also prove delete failures do not replace the original
 generation error.
 
-- [ ] **Step 6: Run text tests and compile**
+- [x] **Step 6: Run text tests and compile**
 
 ```powershell
 npm test -- --run test/codexTextClient.test.ts
@@ -635,7 +635,7 @@ npm run compile
 
 Expected: pass.
 
-- [ ] **Step 7: Commit Task 5**
+- [x] **Step 7: Commit Task 5**
 
 ```powershell
 git add src/codex/codexTextClient.ts test/codexTextClient.test.ts
