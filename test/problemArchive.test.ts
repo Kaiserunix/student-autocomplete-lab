@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   buildCompletedProblemRecord,
+  removeProblemFromCompletedArchive,
   removeProblemFromActiveQueue,
   summarizePainSnapshot
 } from "../src/sidebar/problemArchive";
@@ -28,6 +29,23 @@ describe("problem archive", () => {
     const next = removeProblemFromActiveQueue([firstProblem, secondProblem], "luogu:P5730");
 
     expect(next).toEqual([secondProblem]);
+  });
+
+  test("deletes a problem from completed archive without creating another archive entry", () => {
+    const first = buildCompletedProblemRecord({
+      problem: firstProblem,
+      completedAt: "2026-04-30T11:00:00.000Z",
+      reason: "completed",
+      painSnapshot: { painPointCounts: {}, activeSkills: [] }
+    });
+    const second = buildCompletedProblemRecord({
+      problem: secondProblem,
+      completedAt: "2026-04-30T12:00:00.000Z",
+      reason: "completed",
+      painSnapshot: { painPointCounts: {}, activeSkills: [] }
+    });
+
+    expect(removeProblemFromCompletedArchive([first, second], "luogu:P5730")).toEqual([second]);
   });
 
   test("archives a completed problem with the current pain snapshot", () => {

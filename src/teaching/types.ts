@@ -53,6 +53,11 @@ export interface LocalEvidenceItem {
 export interface TeachingStudentProfileSummary {
   painPointCounts: Record<string, number>;
   activeSkills?: string[];
+  recentCorrections?: Array<{
+    type: string;
+    target?: string;
+    note: string;
+  }>;
 }
 
 export interface TeachingDiagnosisContext {
@@ -63,5 +68,5 @@ export interface TeachingDiagnosisContext {
   ojVerdict: OjVerdict;
   localEvidence: LocalEvidenceItem[];
   studentProfile: TeachingStudentProfileSummary;
-  responseLanguage?: "zh-CN" | "raw";
+  responseLanguage?: "zh-CN" | "en-US" | "raw";
 }

@@ -3,10 +3,12 @@ import type { OjVerdict } from "./types";
 export type AttemptEventKind =
   | "hint_requested"
   | "specific_hint_requested"
+  | "follow_up_requested"
   | "recommendation_requested"
   | "lesson_reported"
   | "solution_scored"
   | "optimization_reviewed"
+  | "submission_judged"
   | "archived";
 
 export type AttemptOutcome = "active" | "abandoned" | "revealed" | "ac" | "completed" | "removed";
@@ -66,8 +68,10 @@ export function summarizeAttemptEvents(events: AttemptEvent[], problemKey: strin
     .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt))[0];
 
   return {
-    hintCount: relevant.filter((event) => event.kind === "hint_requested" || event.kind === "specific_hint_requested")
-      .length,
+    hintCount: relevant.filter(
+      (event) =>
+        event.kind === "hint_requested" || event.kind === "specific_hint_requested" || event.kind === "follow_up_requested"
+    ).length,
     gaveUp: relevant.some((event) => event.outcome === "abandoned"),
     revealedAnswer: relevant.some((event) => event.outcome === "revealed"),
     latestOutcome: latest?.outcome,

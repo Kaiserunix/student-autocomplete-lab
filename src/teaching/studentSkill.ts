@@ -1,9 +1,10 @@
 import type { TeachingDiagnosisReport } from "./teachingReport";
 import type { StudentProfile } from "./studentProfile";
 import type { TeachingStudentProfileSummary } from "./types";
+import { isStudentSkillDisabled, isStudentSkillTeachingActive } from "./studentSkillLifecycle";
 
 export type StudentSkillSchemaVersion = "student-skill/v1";
-export type StudentSkillStatus = "candidate" | "active" | "disabled";
+export type StudentSkillStatus = "candidate" | "active" | "mastered" | "disabled";
 export type StudentSkillCorrectionType = "diagnosis_wrong" | "diagnosis_helpful" | "skill_disabled" | "manual_note";
 
 export interface StudentSkillEvidenceExample {
@@ -274,7 +275,7 @@ export function applyStudentSkillPatch(skill: StudentSkill, patch: StudentSkillP
   }
 
   for (const correction of patch.corrections ?? []) {
-    next.correctionLog.push(withCorrectionId(correction, next.correctionLog.length));
+    applyCorrection(next, patch, correction);
     changeSummary.push(`correction:${correction.type}`);
   }
 
@@ -295,14 +296,35 @@ export function applyStudentSkillPatch(skill: StudentSkill, patch: StudentSkillP
 
 export function studentSkillSummaryForTeaching(skill: StudentSkill): TeachingStudentProfileSummary {
   const painPointCounts = Object.fromEntries(
-    Object.entries(skill.errorModel).map(([label, state]) => [label, state.count])
+    Object.entries(skill.errorModel)
+      .sort(([leftLabel, left], [rightLabel, right]) =>
+        right.count - left.count || right.lastSeen.localeCompare(left.lastSeen) || leftLabel.localeCompare(rightLabel)
+      )
+      .slice(0, 12)
+      .map(([label, state]) => [compactTeachingText(label, 80), state.count])
   );
   const activeSkills = Object.values(skill.skills)
-    .filter((entry) => entry.status === "active")
-    .map((entry) => entry.name)
+    .filter((entry) => isStudentSkillTeachingActive(entry.status))
+    .sort((left, right) =>
+      right.lastSeen.localeCompare(left.lastSeen) || right.evidenceCount - left.evidenceCount || left.name.localeCompare(right.name)
+    )
+    .slice(0, 12)
+    .map((entry) => compactTeachingText(entry.name, 80))
     .sort();
+  const recentCorrections = [...skill.correctionLog]
+    .slice(-3)
+    .map((entry) => ({
+      type: entry.type,
+      target: entry.target ? compactTeachingText(entry.target, 80) : undefined,
+      note: compactTeachingText(entry.note, 120)
+    }));
 
-  return { painPointCounts, activeSkills };
+  return { painPointCounts, activeSkills, recentCorrections };
+}
+
+function compactTeachingText(value: string, limit: number): string {
+  const compact = value.trim().replace(/\s+/g, " ");
+  return compact.length <= limit ? compact : `${compact.slice(0, limit - 1).trimEnd()}…`;
 }
 
 export function buildAutocompleteSkillContext(skill: StudentSkill, language: string): AutocompleteSkillContext {
@@ -311,7 +333,7 @@ export function buildAutocompleteSkillContext(skill: StudentSkill, language: str
     autocompleteMayReadProblemStatement: skill.hardRules.autocompleteMayReadProblemStatement,
     disabledSkills: [...skill.hardRules.disabledSkills].sort(),
     activeSkillNames: Object.values(skill.skills)
-      .filter((entry) => entry.status === "active")
+      .filter((entry) => isStudentSkillTeachingActive(entry.status))
       .map((entry) => entry.name)
       .sort(),
     rules: unique([...skill.codeHabits.globalRules, ...(skill.codeHabits.languageRules[language] ?? [])])
@@ -390,9 +412,16 @@ function applySkillEntryPatch(
     lastSeen: patch.occurredAt
   };
   const incomingStatus = skillPatch.status ?? "candidate";
+  const nextEvidenceCount = previous.evidenceCount + 1;
+  const nextScore = previous.score + (skillPatch.confidence ?? 0);
+  const hasPromotionEvidence =
+    nextEvidenceCount >= ACTIVE_EVIDENCE_COUNT || (nextEvidenceCount >= 2 && nextScore >= ACTIVE_SCORE);
 
   let status = previous.status;
-  if (previous.status === "disabled" && incomingStatus !== "disabled") {
+  const hasWrongCorrection = skill.correctionLog.some(
+    (correction) => correction.type === "diagnosis_wrong" && correction.target === skillPatch.name
+  );
+  if (isStudentSkillDisabled(previous.status) && incomingStatus !== "disabled") {
     conflicts.push({
       field: `skills.${skillPatch.name}.status`,
       existing: previous.status,
@@ -401,14 +430,22 @@ function applySkillEntryPatch(
     });
   } else if (incomingStatus === "disabled") {
     status = "disabled";
-  } else if (
-    incomingStatus === "active" ||
-    previous.evidenceCount + 1 >= ACTIVE_EVIDENCE_COUNT ||
-    previous.score + (skillPatch.confidence ?? 0) >= ACTIVE_SCORE
-  ) {
+  } else if (previous.status === "mastered") {
+    status = "mastered";
+  } else if (hasWrongCorrection) {
+    status = "candidate";
+    if (incomingStatus === "active" || incomingStatus === "mastered" || hasPromotionEvidence) {
+      conflicts.push({
+        field: `skills.${skillPatch.name}.status`,
+        existing: previous.status,
+        incoming: incomingStatus,
+        resolution: "kept candidate after wrong-diagnosis correction"
+      });
+    }
+  } else if (hasPromotionEvidence) {
     status = "active";
   } else {
-    status = previous.status === "active" ? "active" : "candidate";
+    status = isStudentSkillTeachingActive(previous.status) ? previous.status : "candidate";
   }
 
   skill.skills[skillPatch.name] = {
@@ -417,8 +454,8 @@ function applySkillEntryPatch(
     reason: skillPatch.reason || previous.reason,
     rules: unique([...previous.rules, ...skillPatch.rules]),
     sourcePainPoints: unique([...previous.sourcePainPoints, ...skillPatch.sourcePainPoints]),
-    evidenceCount: previous.evidenceCount + 1,
-    score: roundScore(previous.score + (skillPatch.confidence ?? 0)),
+    evidenceCount: nextEvidenceCount,
+    score: roundScore(nextScore),
     examples: appendEvidence(previous.examples, makeEvidenceExample(patch, skillPatch.reason)),
     lastSeen: patch.occurredAt
   };
@@ -442,6 +479,89 @@ function applyTransferPatch(
     estimatedHintReduction: Math.max(previous.estimatedHintReduction, transferPatch.estimatedHintReduction ?? 0),
     lastSeen: patch.occurredAt
   };
+
+  const nextTransfer = skill.transferEvidence[transferPatch.skillName];
+  const entry = skill.skills[transferPatch.skillName];
+  if (entry && !isStudentSkillDisabled(entry.status) && nextTransfer.passed >= 2 && nextTransfer.estimatedHintReduction > 0) {
+    skill.skills[transferPatch.skillName] = {
+      ...entry,
+      status: "mastered",
+      lastSeen: patch.occurredAt
+    };
+  }
+}
+
+function applyCorrection(skill: StudentSkill, patch: StudentSkillPatch, correction: StudentSkillCorrection): void {
+  const recorded = withCorrectionId(correction, skill.correctionLog.length);
+  skill.correctionLog.push(recorded);
+
+  if (recorded.type === "diagnosis_wrong" && recorded.target) {
+    markSkillDiagnosisWrong(skill, patch, recorded.target, recorded.note, recorded.source);
+    return;
+  }
+
+  if (recorded.type === "diagnosis_helpful" && recorded.target) {
+    const previous = skill.skills[recorded.target];
+    if (!previous || previous.status === "disabled") {
+      return;
+    }
+
+    skill.skills[recorded.target] = {
+      ...previous,
+      score: roundScore(previous.score + 0.25),
+      examples: appendEvidence(previous.examples, {
+        problemId: patch.problemId,
+        topic: patch.topic,
+        evidence: recorded.note,
+        source: recorded.source,
+        occurredAt: recorded.occurredAt
+      }),
+      lastSeen: recorded.occurredAt
+    };
+  }
+}
+
+function markSkillDiagnosisWrong(
+  skill: StudentSkill,
+  patch: StudentSkillPatch,
+  target: string,
+  note: string,
+  source: string
+): void {
+  const previous = skill.skills[target];
+  if (!previous) {
+    return;
+  }
+
+  skill.skills[target] = {
+    ...previous,
+    status: "candidate",
+    disabledReason: undefined,
+    score: Math.max(0, roundScore(previous.score - 1)),
+    lastSeen: patch.occurredAt
+  };
+
+  for (const painPoint of previous.sourcePainPoints) {
+    const previousPainPoint = skill.errorModel[painPoint] ?? {
+      count: 0,
+      score: 0,
+      lastSeen: patch.occurredAt,
+      examples: [],
+      counterexamples: []
+    };
+
+    skill.errorModel[painPoint] = {
+      ...previousPainPoint,
+      lastSeen: patch.occurredAt,
+      counterexamples: appendEvidence(previousPainPoint.counterexamples, {
+        problemId: patch.problemId,
+        topic: patch.topic,
+        evidence: note,
+        source,
+        occurredAt: patch.occurredAt
+      })
+    };
+  }
 }
 
 function disableSkill(skill: StudentSkill, patch: StudentSkillPatch, name: string, reason: string): void {

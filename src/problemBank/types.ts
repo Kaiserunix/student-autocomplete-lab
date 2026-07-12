@@ -1,6 +1,6 @@
 export type ProblemPlatform = "luogu" | "leetcode" | "manual";
 
-export type SourcePolicyMode = "public-fetch" | "optional-adapter" | "manual-paste";
+export type SourcePolicyMode = "public-fetch" | "optional-adapter" | "manual-import";
 
 export interface SourcePolicy {
   platform: ProblemPlatform;

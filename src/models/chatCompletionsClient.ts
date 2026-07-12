@@ -1,3 +1,6 @@
+import { appendFile, mkdir } from "node:fs/promises";
+import * as path from "node:path";
+
 export interface ChatCompletionProviderConfig {
   baseUrl: string;
   apiKey: string;
@@ -18,6 +21,7 @@ export interface ChatCompletionRequest {
   temperature: number;
   responseFormat?: { type: "json_object" };
   onUsage?: ChatCompletionUsageSink;
+  usageLogPath?: string | false;
 }
 
 export interface ChatCompletionUsage {
@@ -59,6 +63,12 @@ interface AnthropicMessage {
   content: string;
 }
 
+interface JsonResponse<T> {
+  response: Response;
+  payload: T;
+  rawText: string;
+}
+
 function joinEndpoint(baseUrl: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
 }
@@ -76,28 +86,34 @@ export async function requestChatCompletionText(
     return requestAnthropicMessageText(config, request, fetchImpl);
   }
 
-  const response = await fetchImpl(joinEndpoint(config.baseUrl), {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "content-type": "application/json"
+  const endpoint = joinEndpoint(config.baseUrl);
+  const { payload } = await fetchJson<ChatCompletionResponse>(
+    endpoint,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model: config.model,
+        messages: request.messages,
+        max_tokens: effectiveOpenAiChatMaxTokens(config, request),
+        temperature: request.temperature,
+        response_format: request.responseFormat
+      })
     },
-    body: JSON.stringify({
-      model: config.model,
-      messages: request.messages,
-      max_tokens: request.maxTokens,
-      temperature: request.temperature,
-      response_format: request.responseFormat
-    })
-  });
-  const payload = (await response.json()) as ChatCompletionResponse;
+    fetchImpl,
+    {
+      operation: "Chat completion",
+      endpoint,
+      config
+    }
+  );
 
-  if (!response.ok) {
-    const message = typeof payload.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
-    throw new Error(`Chat completion request failed: ${message}`);
-  }
-
-  emitUsage(request.onUsage, normalizeOpenAiUsage(payload.usage));
+  const usage = normalizeOpenAiUsage(payload.usage);
+  emitUsage(request.onUsage, usage);
+  await persistRuntimeUsage(config, usage, request.usageLogPath);
 
   const text = payload.choices?.[0]?.message?.content;
   if (typeof text !== "string") {
@@ -113,29 +129,35 @@ async function requestAnthropicMessageText(
   fetchImpl: typeof fetch
 ): Promise<string> {
   const { system, messages } = splitSystemMessages(request.messages);
-  const response = await fetchImpl(joinAnthropicEndpoint(config.baseUrl), {
-    method: "POST",
-    headers: {
-      "x-api-key": config.apiKey,
-      "anthropic-version": config.anthropicVersion ?? "2023-06-01",
-      "content-type": "application/json"
+  const endpoint = joinAnthropicEndpoint(config.baseUrl);
+  const { payload } = await fetchJson<AnthropicMessagesResponse>(
+    endpoint,
+    {
+      method: "POST",
+      headers: {
+        "x-api-key": config.apiKey,
+        "anthropic-version": config.anthropicVersion ?? "2023-06-01",
+        "content-type": "application/json"
+      },
+      body: JSON.stringify({
+        model: config.model,
+        max_tokens: request.maxTokens,
+        temperature: request.temperature,
+        system,
+        messages
+      })
     },
-    body: JSON.stringify({
-      model: config.model,
-      max_tokens: request.maxTokens,
-      temperature: request.temperature,
-      system,
-      messages
-    })
-  });
-  const payload = (await response.json()) as AnthropicMessagesResponse;
+    fetchImpl,
+    {
+      operation: "Anthropic messages",
+      endpoint,
+      config
+    }
+  );
 
-  if (!response.ok) {
-    const message = typeof payload.error?.message === "string" ? payload.error.message : `HTTP ${response.status}`;
-    throw new Error(`Anthropic messages request failed: ${message}`);
-  }
-
-  emitUsage(request.onUsage, normalizeAnthropicUsage(payload.usage));
+  const usage = normalizeAnthropicUsage(payload.usage);
+  emitUsage(request.onUsage, usage);
+  await persistRuntimeUsage(config, usage, request.usageLogPath);
 
   const text = payload.content?.find((block) => block.type === "text" && typeof block.text === "string")?.text;
   if (typeof text !== "string") {
@@ -143,6 +165,93 @@ async function requestAnthropicMessageText(
   }
 
   return text;
+}
+
+async function fetchJson<T>(
+  endpoint: string,
+  init: RequestInit,
+  fetchImpl: typeof fetch,
+  context: { operation: string; endpoint: string; config: ChatCompletionProviderConfig }
+): Promise<JsonResponse<T>> {
+  let response: Response;
+  try {
+    response = await fetchImpl(endpoint, init);
+  } catch (error) {
+    throw new Error(
+      `${context.operation} request failed before HTTP response: ${requestContext(context)}; ${errorMessage(error)}`
+    );
+  }
+
+  const rawText = await response.text();
+  const payload = parseJsonObject(rawText) as T;
+  if (!response.ok) {
+    const upstream = errorFromPayload(payload) ?? previewText(rawText) ?? `HTTP ${response.status}`;
+    throw new Error(
+      `${context.operation} request failed: HTTP ${response.status}; ${requestContext(context)}; ${upstream}${modelHint(
+        context.config,
+        response.status
+      )}`
+    );
+  }
+
+  return { response, payload, rawText };
+}
+
+function parseJsonObject(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return {};
+  }
+}
+
+function errorFromPayload(payload: unknown): string | undefined {
+  const record = asRecord(payload);
+  const error = asRecord(record?.error);
+  return typeof error?.message === "string" ? error.message : undefined;
+}
+
+function requestContext(context: {
+  endpoint: string;
+  config: ChatCompletionProviderConfig;
+}): string {
+  return `endpoint=${context.endpoint}; model=${context.config.model}; format=${context.config.format ?? "openai-chat"}`;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function previewText(text: string): string | undefined {
+  const preview = text.replace(/\s+/g, " ").trim().slice(0, 240);
+  return preview || undefined;
+}
+
+function modelHint(config: ChatCompletionProviderConfig, status: number): string {
+  if (
+    status >= 500 &&
+    sanitizeBaseUrl(config.baseUrl).includes("xiaomimimo.com") &&
+    config.model === "mimo-v2.5"
+  ) {
+    return " 当前 MiMo 模型 mimo-v2.5 可能不可用，建议切换 mimo-v2.5-pro 后重试。";
+  }
+
+  return "";
+}
+
+function effectiveOpenAiChatMaxTokens(
+  config: ChatCompletionProviderConfig,
+  request: ChatCompletionRequest
+): number {
+  if (isDeepSeekV4Chat(config)) {
+    return Math.max(request.maxTokens, request.responseFormat?.type === "json_object" ? 4000 : 1500);
+  }
+
+  return request.maxTokens;
+}
+
+function isDeepSeekV4Chat(config: ChatCompletionProviderConfig): boolean {
+  return sanitizeBaseUrl(config.baseUrl).includes("api.deepseek.com") && config.model.startsWith("deepseek-v4");
 }
 
 function splitSystemMessages(messages: ChatMessage[]): { system: string | undefined; messages: AnthropicMessage[] } {
@@ -166,6 +275,43 @@ function splitSystemMessages(messages: ChatMessage[]): { system: string | undefi
 function emitUsage(onUsage: ChatCompletionUsageSink | undefined, usage: ChatCompletionUsage | undefined): void {
   if (onUsage && usage) {
     onUsage(usage);
+  }
+}
+
+async function persistRuntimeUsage(
+  config: ChatCompletionProviderConfig,
+  usage: ChatCompletionUsage | undefined,
+  usageLogPath: string | false | undefined
+): Promise<void> {
+  if (!usage || usageLogPath === false) {
+    return;
+  }
+
+  const filePath = path.resolve(process.cwd(), usageLogPath ?? path.join(".runtime", "chat-completions-usage.jsonl"));
+  const event = {
+    schemaVersion: 1,
+    occurredAt: new Date().toISOString(),
+    providerFormat: config.format ?? "openai-chat",
+    mode: config.mode,
+    model: config.model,
+    baseUrl: sanitizeBaseUrl(config.baseUrl),
+    usage
+  };
+
+  try {
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await appendFile(filePath, `${JSON.stringify(event)}\n`, "utf8");
+  } catch {
+    // Usage accounting should never turn a successful model response into a failed teaching request.
+  }
+}
+
+function sanitizeBaseUrl(baseUrl: string): string {
+  try {
+    const parsed = new URL(baseUrl);
+    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
+  } catch {
+    return baseUrl.replace(/[?&]key=[^&]+/gi, "");
   }
 }
 

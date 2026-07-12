@@ -19,7 +19,76 @@ describe("student skill", () => {
     expect(skill.teachingPreferences.responseLanguage).toBe("zh-CN");
     expect(studentSkillSummaryForTeaching(skill)).toEqual({
       painPointCounts: {},
-      activeSkills: []
+      activeSkills: [],
+      recentCorrections: []
+    });
+  });
+
+  test("bounds teaching profile context without carrying raw evidence", () => {
+    const skill = createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z");
+    for (let index = 0; index < 24; index += 1) {
+      skill.errorModel[`pain-${String(index).padStart(2, "0")}`] = {
+        count: index + 1,
+        score: index + 1,
+        lastSeen: `2026-05-${String((index % 20) + 1).padStart(2, "0")}T00:00:00.000Z`,
+        examples: [{
+          source: "fixture",
+          occurredAt: "2026-05-01T00:00:00.000Z",
+          evidence: "RAW_EVIDENCE_SHOULD_NOT_REACH_PROMPT ".repeat(40)
+        }],
+        counterexamples: []
+      };
+      skill.skills[`skill-${String(index).padStart(2, "0")}`] = {
+        name: `skill-${String(index).padStart(2, "0")}`,
+        status: "active",
+        reason: "long reason ".repeat(50),
+        rules: ["long rule ".repeat(50)],
+        sourcePainPoints: [],
+        score: index,
+        evidenceCount: index + 1,
+        lastSeen: `2026-05-${String((index % 20) + 1).padStart(2, "0")}T00:00:00.000Z`,
+        examples: []
+      };
+    }
+    skill.correctionLog = Array.from({ length: 8 }, (_, index) => ({
+      id: `correction-${index}`,
+      type: "diagnosis_wrong" as const,
+      target: `skill-${index}`,
+      note: `纠偏 ${index} ` + "很长的补充说明".repeat(80),
+      source: "user",
+      occurredAt: `2026-05-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`
+    }));
+
+    const summary = studentSkillSummaryForTeaching(skill);
+
+    expect(Object.keys(summary.painPointCounts)).toHaveLength(12);
+    expect(summary.activeSkills).toHaveLength(12);
+    expect(summary.recentCorrections).toHaveLength(3);
+    expect((summary.recentCorrections ?? []).every((item) => item.note.length <= 120)).toBe(true);
+    expect(JSON.stringify(summary)).not.toContain("RAW_EVIDENCE_SHOULD_NOT_REACH_PROMPT");
+    expect(JSON.stringify(summary).length).toBeLessThan(1_200);
+  });
+
+  test("keeps a single model diagnosis as candidate even when the model asks for active", () => {
+    const skill = applyStudentSkillPatch(createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z"), {
+      source: "mimo-v2.5",
+      occurredAt: "2026-05-01T00:01:00.000Z",
+      problemId: "P1427",
+      skills: [
+        {
+          name: "python-loop-boundary-check",
+          status: "active",
+          reason: "The model is confident after one observation.",
+          rules: ["Write first and last valid indexes before coding the loop."],
+          sourcePainPoints: ["loop_boundary"],
+          confidence: 5
+        }
+      ]
+    }).skill;
+
+    expect(skill.skills["python-loop-boundary-check"]).toMatchObject({
+      status: "candidate",
+      evidenceCount: 1
     });
   });
 
@@ -107,6 +176,107 @@ describe("student skill", () => {
         incoming: "active",
         resolution: "kept existing disabled skill"
       }
+    ]);
+  });
+
+  test("records a wrong-diagnosis correction without treating it as hard disable", () => {
+    let skill = createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z");
+    skill = applyStudentSkillPatch(skill, {
+      source: "mimo-v2.5",
+      occurredAt: "2026-05-01T00:01:00.000Z",
+      problemId: "P1427",
+      skills: [
+        {
+          name: "python-loop-boundary-check",
+          status: "active",
+          reason: "Repeated loop misses.",
+          rules: ["Write first and last valid indexes before coding the loop."],
+          sourcePainPoints: ["loop_boundary"],
+          confidence: 0.95
+        }
+      ]
+    }).skill;
+
+    const corrected = applyStudentSkillPatch(skill, {
+      source: "sidebar-user",
+      occurredAt: "2026-05-01T00:02:00.000Z",
+      corrections: [
+        {
+          type: "diagnosis_wrong",
+          target: "python-loop-boundary-check",
+          note: "这次不是循环边界，而是输出顺序。",
+          source: "sidebar-user",
+          occurredAt: "2026-05-01T00:02:00.000Z"
+        }
+      ]
+    }).skill;
+
+    expect(corrected.skills["python-loop-boundary-check"]).toMatchObject({
+      status: "candidate",
+      disabledReason: undefined
+    });
+    expect(corrected.hardRules.disabledSkills).not.toContain("python-loop-boundary-check");
+    expect(corrected.errorModel.loop_boundary.counterexamples[0]).toMatchObject({
+      evidence: "这次不是循环边界，而是输出顺序。",
+      source: "sidebar-user"
+    });
+    expect(corrected.correctionLog.at(-1)).toMatchObject({
+      type: "diagnosis_wrong",
+      target: "python-loop-boundary-check"
+    });
+
+    const reactivation = applyStudentSkillPatch(corrected, {
+      source: "mimo-v2.5",
+      occurredAt: "2026-05-01T00:03:00.000Z",
+      skills: [
+        {
+          name: "python-loop-boundary-check",
+          status: "active",
+          reason: "The model saw another loop issue.",
+          rules: ["Write bounds first."],
+          sourcePainPoints: ["loop_boundary"],
+          confidence: 0.9
+        }
+      ]
+    });
+
+    expect(reactivation.skill.skills["python-loop-boundary-check"].status).toBe("candidate");
+    expect(reactivation.conflicts[0]?.resolution).toBe("kept candidate after wrong-diagnosis correction");
+  });
+
+  test("marks a skill as mastered only after transfer evidence", () => {
+    let skill = applyStudentSkillPatch(createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z"), {
+      source: "mimo-v2.5",
+      occurredAt: "2026-05-01T00:01:00.000Z",
+      skills: [
+        {
+          name: "binary-tree-depth-numbered-children",
+          status: "active",
+          reason: "Depth recursion is stable on known cases.",
+          rules: ["Depth is one plus the deeper child depth."],
+          sourcePainPoints: ["recursion_base_case"],
+          confidence: 1
+        }
+      ]
+    }).skill;
+
+    skill = applyStudentSkillPatch(skill, {
+      source: "transfer-validator",
+      occurredAt: "2026-05-01T00:02:00.000Z",
+      transferEvidence: [
+        {
+          skillName: "binary-tree-depth-numbered-children",
+          probes: 2,
+          passed: 2,
+          estimatedHintReduction: 1
+        }
+      ]
+    }).skill;
+
+    expect(skill.skills["binary-tree-depth-numbered-children"].status).toBe("mastered");
+    expect(studentSkillSummaryForTeaching(skill).activeSkills).toEqual(["binary-tree-depth-numbered-children"]);
+    expect(buildAutocompleteSkillContext(skill, "python").activeSkillNames).toEqual([
+      "binary-tree-depth-numbered-children"
     ]);
   });
 

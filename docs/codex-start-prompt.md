@@ -1,8 +1,6 @@
 # Codex Start Prompt
 
-You are working in:
-
-`C:\Users\qwerf\Desktop\student-autocomplete-lab`
+You are working in the repository root for `student-autocomplete-lab`.
 
 Build a minimal prototype of a student-friendly code autocomplete system.
 

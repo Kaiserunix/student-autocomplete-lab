@@ -1,0 +1,81 @@
+import type { AiProviderMode } from "../config/modelEnv";
+import type { InternalTestSummary } from "../internalTesting/internalTestRecorder";
+import type { ProviderModelInfo } from "../models/providerModelsClient";
+import type { ProblemSearchResult, ProblemSetSearchResult } from "../problemBank/types";
+import type { AiHealthCheckResult, ProblemBankStateView } from "./stateView";
+
+export const hostEventTypeNames = [
+  "aiHealthCheckResult",
+  "aiModelResults",
+  "autocompletePreview",
+  "coachFollowUp",
+  "internalTestSummary",
+  "optimizationReport",
+  "problemBankState",
+  "problemRecommendation",
+  "problemSearchResults",
+  "problemSetSearchResults",
+  "status",
+  "submissionJudge",
+  "teachingDiagnosis"
+] as const;
+
+export type HostEventType = (typeof hostEventTypeNames)[number];
+
+export interface StatusHostEvent {
+  type: "status";
+  text: string;
+  tone?: string;
+}
+
+export interface ProblemSearchResultsHostEvent {
+  type: "problemSearchResults";
+  keyword: string;
+  total: number;
+  items: ProblemSearchResult[];
+}
+
+export interface ProblemSetSearchResultsHostEvent {
+  type: "problemSetSearchResults";
+  keyword: string;
+  total: number;
+  items: ProblemSetSearchResult[];
+}
+
+export interface AiModelResultsHostEvent {
+  type: "aiModelResults";
+  mode: AiProviderMode;
+  endpoint: string;
+  models: ProviderModelInfo[];
+  status: string;
+}
+
+export interface AiHealthCheckResultHostEvent {
+  type: "aiHealthCheckResult";
+  result: AiHealthCheckResult;
+  status: string;
+}
+
+export interface InternalTestSummaryHostEvent {
+  type: "internalTestSummary";
+  summary: InternalTestSummary;
+  status: string;
+}
+
+export type LooseTypedHostEvent =
+  | { type: "autocompletePreview"; [key: string]: unknown }
+  | { type: "coachFollowUp"; [key: string]: unknown }
+  | { type: "optimizationReport"; [key: string]: unknown }
+  | { type: "problemRecommendation"; [key: string]: unknown }
+  | { type: "submissionJudge"; [key: string]: unknown }
+  | { type: "teachingDiagnosis"; [key: string]: unknown };
+
+export type HostEvent =
+  | StatusHostEvent
+  | ProblemBankStateView
+  | ProblemSearchResultsHostEvent
+  | ProblemSetSearchResultsHostEvent
+  | AiModelResultsHostEvent
+  | AiHealthCheckResultHostEvent
+  | InternalTestSummaryHostEvent
+  | LooseTypedHostEvent;

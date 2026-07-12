@@ -15,7 +15,7 @@ describe("Luogu search normalization", () => {
           result: [
             {
               pid: "P1319",
-              title: "压缩技术",
+              name: "压缩技术",
               difficulty: 1,
               tags: [1, 2, 81]
             },
@@ -49,15 +49,46 @@ describe("Luogu search normalization", () => {
     ]);
   });
 
+  test("normalizes current Luogu problem search results that use name instead of title", () => {
+    const results = normalizeLuoguProblemSearchResponse({
+      data: {
+        problems: {
+          count: 1,
+          result: [
+            {
+              pid: "P1001",
+              name: "A+B Problem",
+              difficulty: 1,
+              tags: [1]
+            }
+          ]
+        }
+      }
+    });
+
+    expect(results).toEqual({
+      total: 1,
+      items: [
+        {
+          id: "P1001",
+          title: "A+B Problem",
+          difficulty: 1,
+          tags: ["1"],
+          sourceUrl: "https://www.luogu.com.cn/problem/P1001"
+        }
+      ]
+    });
+  });
+
   test("normalizes problem-set search results", () => {
     const results = normalizeLuoguProblemSetSearchResponse({
-      currentData: {
+      data: {
         trainings: {
           count: 1,
           result: [
             {
               id: 100,
-              title: "【入门1】顺序结构",
+              name: "【入门1】顺序结构",
               problemCount: 15,
               markCount: 35742
             }
@@ -110,6 +141,6 @@ describe("Luogu search normalization", () => {
     expect(calls[0].url).toContain("https://www.luogu.com.cn/training/list?");
     expect(calls[0].url).toContain("keyword=%E5%85%A5%E9%97%A8");
     expect(calls[0].url).toContain("_contentOnly=1");
-    expect((calls[0].init?.headers as Record<string, string>)["x-luogu-type"]).toBe("content-only");
+    expect((calls[0].init?.headers as Record<string, string>)["x-lentille-request"]).toBe("content-only");
   });
 });

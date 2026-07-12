@@ -1,8 +1,8 @@
 {
   "name": "student-autocomplete-lab",
   "displayName": "Student Autocomplete Lab",
-  "description": "A student-friendly VS Code autocomplete and problem-note prototype.",
-  "version": "0.0.1",
+  "description": "A Chinese-first VS Code algorithm coach with safe autocomplete and inspectable learning skills.",
+  "version": "0.1.0-beta.1",
   "publisher": "kaiserunix",
   "private": false,
   "license": "MIT",
@@ -11,7 +11,7 @@
     "url": "https://github.com/kaiserunix/student-autocomplete-lab.git"
   },
   "engines": {
-    "vscode": "^1.95.0"
+    "vscode": "^1.125.0"
   },
   "categories": [
     "Education",
@@ -19,6 +19,8 @@
   ],
   "activationEvents": [
     "onStartupFinished",
+    "onView:studentAutocomplete.problemLibrary",
+    "onView:studentAutocomplete.currentSession",
     "onView:studentAutocomplete.problemBankWebview",
     "onCommand:studentAutocomplete.saveProblem",
     "onCommand:studentAutocomplete.giveHint",
@@ -53,10 +55,108 @@
       {
         "command": "studentAutocomplete.triggerInlineCompletion",
         "title": "AI 做题陪练：触发自动补全"
+      },
+      {
+        "command": "studentAutocomplete.openSettings",
+        "title": "AI 做题陪练：设置",
+        "icon": "$(gear)"
+      },
+      {
+        "command": "studentAutocomplete.refreshProblemLibrary",
+        "title": "AI 做题陪练：刷新题目",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "studentAutocomplete.selectProblem",
+        "title": "AI 做题陪练：打开学习会话"
       }
     ],
     "configurationDefaults": {
       "editor.inlineSuggest.enabled": true
+    },
+    "configuration": {
+      "title": "AI 做题陪练",
+      "properties": {
+        "studentAutocomplete.ai.providerMode": {
+          "type": "string",
+          "enum": [
+            "openai-compatible",
+            "openai",
+            "anthropic-native"
+          ],
+          "default": "openai-compatible",
+          "description": "选择 AI Provider 配置模式。"
+        },
+        "studentAutocomplete.ai.openai.baseUrl": {
+          "type": "string",
+          "default": "https://api.openai.com/v1",
+          "description": "OpenAI 官方 API Base URL。"
+        },
+        "studentAutocomplete.ai.openai.chatModel": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI 提示、评分、优化模型。"
+        },
+        "studentAutocomplete.ai.openai.autocompleteModel": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI 自动补全模型。"
+        },
+        "studentAutocomplete.ai.openaiCompatible.baseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI-compatible API Base URL，例如 DeepSeek、MiMo 或自建兼容服务。"
+        },
+        "studentAutocomplete.ai.openaiCompatible.autocompleteBaseUrl": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI-compatible 自动补全专用 Base URL。留空则跟随 Base URL；DeepSeek FIM 可填 https://api.deepseek.com/beta。"
+        },
+        "studentAutocomplete.ai.openaiCompatible.chatModel": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI-compatible 提示、评分、优化模型。"
+        },
+        "studentAutocomplete.ai.openaiCompatible.autocompleteModel": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI-compatible 自动补全模型。"
+        },
+        "studentAutocomplete.ai.openaiCompatible.autocompleteFormat": {
+          "type": "string",
+          "enum": [
+            "openai-completions",
+            "openai-chat",
+            "anthropic-messages"
+          ],
+          "default": "openai-completions",
+          "description": "OpenAI-compatible 自动补全请求格式。"
+        },
+        "studentAutocomplete.ai.anthropic.baseUrl": {
+          "type": "string",
+          "default": "https://api.anthropic.com/v1",
+          "description": "Anthropic Messages API Base URL。"
+        },
+        "studentAutocomplete.ai.anthropic.chatModel": {
+          "type": "string",
+          "default": "",
+          "description": "Anthropic 提示、评分、优化模型。"
+        },
+        "studentAutocomplete.ai.anthropic.autocompleteModel": {
+          "type": "string",
+          "default": "",
+          "description": "Anthropic 自动补全模型。"
+        },
+        "studentAutocomplete.ui.language": {
+          "type": "string",
+          "enum": [
+            "zh",
+            "en"
+          ],
+          "default": "zh",
+          "description": "侧栏界面语言。当前为 beta 级适配：中文完整，英文覆盖主界面与核心操作。"
+        }
+      }
     },
     "viewsContainers": {
       "activitybar": [
@@ -70,15 +170,49 @@
     "views": {
       "studentAutocomplete": [
         {
-          "id": "studentAutocomplete.problemBankWebview",
-          "name": "做题陪练",
+          "id": "studentAutocomplete.currentSession",
+          "name": "当前学习",
           "type": "webview"
+        },
+        {
+          "id": "studentAutocomplete.problemLibrary",
+          "name": "题目",
+          "visibility": "collapsed"
+        },
+        {
+          "id": "studentAutocomplete.problemBankWebview",
+          "name": "工具与诊断",
+          "type": "webview",
+          "visibility": "collapsed"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "studentAutocomplete.problemLibrary",
+        "contents": "还没有题目。\\n[导入题目](command:studentAutocomplete.saveProblem)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "studentAutocomplete.refreshProblemLibrary",
+          "when": "view == studentAutocomplete.problemLibrary",
+          "group": "navigation"
+        },
+        {
+          "command": "studentAutocomplete.openSettings",
+          "when": "view == studentAutocomplete.currentSession",
+          "group": "navigation"
         }
       ]
     }
   },
   "scripts": {
-    "compile": "tsc -p .",
+    "compile": "npm run compile:host && npm run build:webview",
+    "compile:host": "tsc -p .",
+    "generate:oj-contracts": "npm run compile:host && node scripts/exportOjSchemas.js",
+    "build:webview": "vite build --config vite.current-session.config.ts",
     "trial:binary-tree": "npm run compile && node dist/src/cli/codexPracticeTrial.js --fixture fixtures/practice/P4913.codex.json --fixture fixtures/practice/P1030.codex.json --fixture fixtures/practice/P1364.codex.json",
     "trial:codex-practice": "npm run compile && node dist/src/cli/codexPracticeTrial.js",
     "trial:gpt-practice": "npm run compile && node dist/src/cli/gptPracticeTrial.js",
@@ -89,17 +223,34 @@
     "trial:mimo-journey": "npm run compile && node dist/src/cli/mimoJourneyTrial.js",
     "trial:mimo": "npm run compile && node dist/src/cli/mimoAutocompleteTrial.js",
     "mcp:problem-search": "node dist/src/mcp/problemSearchServer.js",
+    "package:beta": "npm run compile && npx --yes @vscode/vsce package --no-dependencies --out .runtime/student-autocomplete-lab-0.1.0-beta.1.vsix",
+    "package:beta-release": "npm run compile:release && node scripts/packageBetaReleaseVsix.js",
+    "package:internal": "npm run compile && node scripts/packageInternalVsix.js",
+    "check:hygiene": "node scripts/checkProjectHygiene.js",
+    "compile:release": "tsc -p tsconfig.release.json && npm run build:webview",
+    "internal:test-report": "npm run compile && node dist/src/cli/internalTestReport.js",
     "test": "vitest run",
     "watch": "tsc -w -p ."
   },
   "devDependencies": {
+    "@testing-library/react": "16.3.2",
+    "@testing-library/user-event": "14.6.1",
     "@types/node": "^22.15.3",
-    "@types/vscode": "^1.95.0",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@types/vscode": "1.125.0",
+    "@vitejs/plugin-react": "6.0.3",
+    "jsdom": "29.1.1",
+    "playwright": "^1.59.1",
     "typescript": "^5.8.3",
-    "vitest": "^3.1.2"
+    "vite": "8.1.4",
+    "vitest": "4.1.10"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "lucide-react": "1.24.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "zod": "^4.3.6"
   }
 }

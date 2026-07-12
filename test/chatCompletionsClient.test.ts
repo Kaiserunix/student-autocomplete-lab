@@ -1,3 +1,6 @@
+import { mkdtemp, readFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import * as path from "node:path";
 import { describe, expect, test } from "vitest";
 import { requestChatCompletionText } from "../src/models/chatCompletionsClient";
 
@@ -31,7 +34,8 @@ describe("OpenAI-compatible chat completions client", () => {
         maxTokens: 512,
         temperature: 0.2,
         responseFormat: { type: "json_object" },
-        onUsage: (usage) => usageEvents.push(usage)
+        onUsage: (usage) => usageEvents.push(usage),
+        usageLogPath: false
       },
       fakeFetch as typeof fetch
     );
@@ -53,6 +57,39 @@ describe("OpenAI-compatible chat completions client", () => {
         totalTokens: 17
       }
     ]);
+  });
+
+  test("raises DeepSeek v4 JSON requests above the visible-answer budget floor", async () => {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const fakeFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ choices: [{ message: { content: "{\"ok\":true}" } }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    };
+
+    await requestChatCompletionText(
+      {
+        baseUrl: "https://api.deepseek.com/v1",
+        apiKey: "secret",
+        model: "deepseek-v4-pro"
+      },
+      {
+        messages: [{ role: "user", content: "Return JSON." }],
+        maxTokens: 1000,
+        temperature: 0.2,
+        responseFormat: { type: "json_object" },
+        usageLogPath: false
+      },
+      fakeFetch as typeof fetch
+    );
+
+    expect(JSON.parse(String(calls[0].init?.body))).toMatchObject({
+      model: "deepseek-v4-pro",
+      max_tokens: 4000,
+      response_format: { type: "json_object" }
+    });
   });
 
   test("posts an Anthropic Native messages request and returns the first text block", async () => {
@@ -87,7 +124,8 @@ describe("OpenAI-compatible chat completions client", () => {
         maxTokens: 512,
         temperature: 0.2,
         responseFormat: { type: "json_object" },
-        onUsage: (usage) => usageEvents.push(usage)
+        onUsage: (usage) => usageEvents.push(usage),
+        usageLogPath: false
       },
       fakeFetch as typeof fetch
     );
@@ -116,5 +154,99 @@ describe("OpenAI-compatible chat completions client", () => {
         totalTokens: 13
       }
     ]);
+  });
+
+  test("writes provider token usage to a runtime JSONL log", async () => {
+    const tempDir = await mkdtemp(path.join(tmpdir(), "student-autocomplete-usage-"));
+    const usageLogPath = path.join(tempDir, "usage.jsonl");
+    const fakeFetch = async (): Promise<Response> =>
+      new Response(
+        JSON.stringify({
+          choices: [{ message: { content: "{\"ok\":true}" } }],
+          usage: {
+            prompt_tokens: "21",
+            completion_tokens: "8",
+            total_tokens: "29"
+          }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+
+    await requestChatCompletionText(
+      {
+        baseUrl: "https://token-plan-cn.xiaomi.com/v1",
+        apiKey: "secret",
+        model: "mimo-v2.5"
+      },
+      {
+        messages: [{ role: "user", content: "Return JSON." }],
+        maxTokens: 128,
+        temperature: 0.1,
+        responseFormat: { type: "json_object" },
+        usageLogPath
+      },
+      fakeFetch as typeof fetch
+    );
+
+    const [line] = (await readFile(usageLogPath, "utf8")).trim().split(/\r?\n/);
+    expect(JSON.parse(line)).toMatchObject({
+      schemaVersion: 1,
+      providerFormat: "openai-chat",
+      model: "mimo-v2.5",
+      baseUrl: "https://token-plan-cn.xiaomi.com/v1",
+      usage: {
+        source: "openai-chat",
+        promptTokens: 21,
+        completionTokens: 8,
+        totalTokens: 29
+      }
+    });
+  });
+
+  test("explains transient MiMo 5xx failures without leaking the API key", async () => {
+    const fakeFetch = async (): Promise<Response> =>
+      new Response(JSON.stringify({ error: { message: "<html>502 Bad Gateway</html>" } }), {
+        status: 500,
+        headers: { "content-type": "application/json" }
+      });
+
+    await expect(
+      requestChatCompletionText(
+        {
+          mode: "openai-compatible",
+          format: "openai-chat",
+          baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+          apiKey: "secret-key",
+          model: "mimo-v2.5"
+        },
+        {
+          messages: [{ role: "user", content: "Return JSON." }],
+          maxTokens: 64,
+          temperature: 0,
+          responseFormat: { type: "json_object" },
+          usageLogPath: false
+        },
+        fakeFetch as typeof fetch
+      )
+    ).rejects.toThrow(/mimo-v2\.5-pro/);
+
+    await expect(
+      requestChatCompletionText(
+        {
+          mode: "openai-compatible",
+          format: "openai-chat",
+          baseUrl: "https://token-plan-cn.xiaomimimo.com/v1",
+          apiKey: "secret-key",
+          model: "mimo-v2.5"
+        },
+        {
+          messages: [{ role: "user", content: "Return JSON." }],
+          maxTokens: 64,
+          temperature: 0,
+          usageLogPath: false
+        },
+        fakeFetch as typeof fetch
+      )
+    ).rejects.not.toThrow("secret-key");
   });
 });

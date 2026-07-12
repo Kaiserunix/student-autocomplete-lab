@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" role="img" aria-labelledby="title desc">
+  <title id="title">Evaluation and release lanes</title>
+  <desc id="desc">A diagram showing beta dev, beta internal, and beta release lanes with eval gates and package hygiene.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#243447"/>
+    </marker>
+    <style>
+      .bg { fill: #fbfcfe; }
+      .title { font: 700 22px "Segoe UI", Arial, sans-serif; fill: #17212f; }
+      .small { font: 12px "Segoe UI", Arial, sans-serif; fill: #596677; }
+      .label { font: 600 15px "Segoe UI", Arial, sans-serif; fill: #243447; }
+      .lane { fill: #ffffff; stroke: #d8dee9; stroke-width: 2; rx: 18; }
+      .dev { fill: #eaf4ff; stroke: #5b8fd6; }
+      .internal { fill: #fff3d8; stroke: #d08a00; }
+      .release { fill: #edf8f0; stroke: #4f9a67; }
+      .gate { fill: #ffffff; stroke: #7f8a9b; stroke-width: 1.5; rx: 9; }
+      .danger { fill: #ffe4e4; stroke: #cf4446; }
+      .arrow { stroke: #243447; stroke-width: 2; fill: none; marker-end: url(#arrow); }
+      .block { stroke: #cf4446; stroke-width: 3; fill: none; stroke-dasharray: 8 6; }
+    </style>
+  </defs>
+  <rect class="bg" width="1280" height="760"/>
+  <text class="title" x="50" y="50">Eval and Release Lanes</text>
+  <text class="small" x="50" y="76">Internal experiments can be expensive and private; public beta release must be clean and allowlisted.</text>
+
+  <rect class="lane dev" x="60" y="120" width="330" height="520"/>
+  <text class="title" x="100" y="160">Beta Dev</text>
+  <text class="small" x="100" y="184">student-autocomplete-lab</text>
+  <rect class="gate dev" x="100" y="220" width="250" height="46"/><text class="label" x="128" y="249">compile + unit tests</text>
+  <rect class="gate dev" x="100" y="286" width="250" height="46"/><text class="label" x="128" y="315">1000 fixture dry run</text>
+  <rect class="gate dev" x="100" y="352" width="250" height="46"/><text class="label" x="128" y="381">scenario replay</text>
+  <rect class="gate dev" x="100" y="418" width="250" height="46"/><text class="label" x="128" y="447">Playwright screenshots</text>
+  <rect class="gate dev" x="100" y="484" width="250" height="46"/><text class="label" x="128" y="513">package smoke</text>
+  <text class="small" x="100" y="575">Docs, scripts, tests, traces allowed locally.</text>
+
+  <rect class="lane internal" x="475" y="120" width="330" height="520"/>
+  <text class="title" x="515" y="160">Beta Internal</text>
+  <text class="small" x="515" y="184">student-autocomplete-lab-internal</text>
+  <rect class="gate internal" x="515" y="220" width="250" height="46"/><text class="label" x="543" y="249">friend test records</text>
+  <rect class="gate internal" x="515" y="286" width="250" height="46"/><text class="label" x="543" y="315">live 100-call calibration</text>
+  <rect class="gate internal" x="515" y="352" width="250" height="46"/><text class="label" x="543" y="381">mismatch summary</text>
+  <rect class="gate internal" x="515" y="418" width="250" height="46"/><text class="label" x="543" y="447">usage accounting</text>
+  <rect class="gate danger" x="515" y="484" width="250" height="46"/><text class="label" x="560" y="513">DO NOT PUBLISH</text>
+  <text class="small" x="515" y="575">Local JSONL records and richer traces allowed.</text>
+
+  <rect class="lane release" x="890" y="120" width="330" height="520"/>
+  <text class="title" x="930" y="160">Beta Release</text>
+  <text class="small" x="930" y="184">student-autocomplete-lab-beta-release</text>
+  <rect class="gate release" x="930" y="220" width="250" height="46"/><text class="label" x="958" y="249">allowlist staging</text>
+  <rect class="gate release" x="930" y="286" width="250" height="46"/><text class="label" x="958" y="315">no docs/scripts/tests</text>
+  <rect class="gate release" x="930" y="352" width="250" height="46"/><text class="label" x="958" y="381">no internal modules</text>
+  <rect class="gate release" x="930" y="418" width="250" height="46"/><text class="label" x="958" y="447">no secrets/local paths</text>
+  <rect class="gate release" x="930" y="484" width="250" height="46"/><text class="label" x="958" y="513">install smoke</text>
+  <text class="small" x="930" y="575">Only clean runtime extension files ship.</text>
+
+  <path class="arrow" d="M390 380 H475"/>
+  <path class="arrow" d="M805 380 H890"/>
+  <path class="block" d="M805 520 C850 540, 870 540, 890 520"/>
+  <text class="small" x="813" y="558" fill="#cf4446">Internal records never flow into release.</text>
+</svg>

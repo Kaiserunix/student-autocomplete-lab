@@ -29,7 +29,14 @@ describe("teaching diagnosis prompt", () => {
         painPointCounts: {
           subtree_boundary: 2
         },
-        activeSkills: ["binary-tree-traversal-reconstruction"]
+        activeSkills: ["binary-tree-traversal-reconstruction"],
+        recentCorrections: [
+          {
+            type: "diagnosis_wrong",
+            target: "python-loop-boundary-check",
+            note: "这次不是循环边界。"
+          }
+        ]
       }
     });
 
@@ -38,9 +45,21 @@ describe("teaching diagnosis prompt", () => {
     expect(prompt).toContain("student_code");
     expect(prompt).toContain("local_evidence");
     expect(prompt).toContain("pain_points");
+    expect(prompt).toContain("specific_hint");
+    expect(prompt).toContain("checkpoint");
+    expect(prompt).toContain("micro_steps");
     expect(prompt).toContain("JSON only");
     expect(prompt).toContain("Do not provide a full solution");
     expect(prompt).toContain("Inspect the final output or return expression");
+    expect(prompt).toContain("code anchor");
+    expect(prompt).toContain("at most 2 tiny");
+    expect(prompt).toContain("must be more concrete than hint");
+    expect(prompt).toContain("hint must be short");
+    expect(prompt).toContain("specific_hint should usually be 2 or 3 short sentences");
+    expect(prompt).toContain("Do not dump every micro-step into the first hint");
+    expect(prompt).toContain("beginner-friendly");
+    expect(prompt).toContain("explain that term in plain words");
+    expect(prompt).toContain("follow-up can be detailed");
     expect(prompt).toContain("prefer traversal_order_confusion");
     expect(prompt).toContain("Do not use child_indexing");
     expect(prompt).toContain("prefer duplicate_handling");
@@ -50,6 +69,9 @@ describe("teaching diagnosis prompt", () => {
     expect(prompt).toContain("prefer graph_adjacency_model");
     expect(prompt).toContain("binary-tree-traversal-reconstruction");
     expect(prompt).toContain("ordered-multiset-semantics");
+    expect(prompt).toContain("recentCorrections");
+    expect(prompt).toContain("diagnosis_wrong");
+    expect(prompt).toContain("high-priority human correction");
   });
 
   test("can explicitly request Simplified Chinese JSON string values", () => {
@@ -72,7 +94,30 @@ describe("teaching diagnosis prompt", () => {
     });
 
     expect(prompt).toContain("Output language: Simplified Chinese");
-    expect(prompt).toContain("write hint, evidence");
+    expect(prompt).toContain("write hint, specific_hint, checkpoint, micro_steps");
+  });
+
+  test("can explicitly request English JSON string values", () => {
+    const prompt = buildTeachingDiagnosisPrompt({
+      problem: {
+        id: "MANUAL-001",
+        title: "Campus Nickname Normalizer",
+        summary: "Normalize nicknames split by '-' or '_'."
+      },
+      language: "python",
+      studentCode: "for i in range(n - 1): pass",
+      ojVerdict: {
+        status: "WA"
+      },
+      localEvidence: [],
+      studentProfile: {
+        painPointCounts: {}
+      },
+      responseLanguage: "en-US"
+    });
+
+    expect(prompt).toContain("Output language: English");
+    expect(prompt).toContain("write hint, specific_hint, checkpoint, micro_steps");
   });
 
   test("includes a hidden teacher pack and asks for a student error model", () => {

@@ -9,11 +9,17 @@ export interface LocalizedTeachingPainPoint {
 
 export interface LocalizedTeachingDiagnosisReport {
   hintTitle: string;
+  specificHintTitle: string;
+  checkpointTitle: string;
+  microStepsTitle: string;
   painTitle: string;
   evidenceTitle: string;
   skillTitle: string;
   recommendationTitle: string;
   rawHint: string;
+  rawSpecificHint?: string;
+  rawCheckpoint?: string;
+  microSteps?: string[];
   painPoints: LocalizedTeachingPainPoint[];
   skillUpdate?: TeachingDiagnosisReport["skillUpdate"];
   recommendation?: TeachingDiagnosisReport["recommendation"];
@@ -41,11 +47,17 @@ const painPointLabels: Record<string, string> = {
 export function localizeTeachingDiagnosisReport(report: TeachingDiagnosisReport): LocalizedTeachingDiagnosisReport {
   return {
     hintTitle: "下一步提示",
+    specificHintTitle: "更具体的下一步",
+    checkpointTitle: "自检点",
+    microStepsTitle: "微步骤",
     painTitle: "痛点判断",
     evidenceTitle: "证据",
     skillTitle: "Skill 候选",
     recommendationTitle: "推荐下一题",
     rawHint: report.hint,
+    rawSpecificHint: report.specificHint,
+    rawCheckpoint: report.checkpoint,
+    microSteps: report.microSteps,
     painPoints: report.painPoints.map((painPoint) => ({
       ...painPoint,
       displayLabel: painPointLabels[painPoint.label] ?? painPoint.label.replaceAll("_", " ")

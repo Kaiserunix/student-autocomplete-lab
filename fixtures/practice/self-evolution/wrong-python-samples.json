@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "samples": [
+    {
+      "problemId": "P1030",
+      "topic": "binary tree traversal reconstruction from inorder and postorder",
+      "painPoint": "binary_tree_traversal_order_confusion",
+      "wrongCode": "import sys\n\ninorder = sys.stdin.readline().strip()\npostorder = sys.stdin.readline().strip()\n\ndef solve(in_s, post_s):\n    if not in_s:\n        return ''\n    root = post_s[-1]\n    k = in_s.index(root)\n    left = solve(in_s[:k], post_s[:k])\n    right = solve(in_s[k + 1:], post_s[k:-1])\n    return left + right + root\n\nprint(solve(inorder, postorder))\n",
+      "expectedDiagnosisHint": "The subtree split is usable, but the function returns left + right + root, which is postorder again. For preorder output, return root before the recursive left and right parts.",
+      "recommendationExpectation": "P1305"
+    },
+    {
+      "problemId": "P4913",
+      "topic": "binary tree depth with numbered children and zero as empty child",
+      "painPoint": "recursion_base_case_and_depth_definition",
+      "wrongCode": "import sys\nsys.setrecursionlimit(1000000)\n\nn = int(input())\nleft = [0] * (n + 1)\nright = [0] * (n + 1)\nfor i in range(1, n + 1):\n    left[i], right[i] = map(int, input().split())\n\ndef dfs(u):\n    if u == 0:\n        return 1\n    return max(dfs(left[u]), dfs(right[u])) + 1\n\nprint(dfs(1))\n",
+      "expectedDiagnosisHint": "An empty child should contribute depth 0, not 1. Counting empty children as real nodes makes every leaf one level too deep.",
+      "recommendationExpectation": "P4913"
+    },
+    {
+      "problemId": "P1427",
+      "topic": "sentinel input and reverse output order",
+      "painPoint": "output_order_and_sentinel_handling",
+      "wrongCode": "nums = list(map(int, input().split()))\nnums.reverse()\nprint(' '.join(map(str, nums)))\n",
+      "expectedDiagnosisHint": "The sentinel 0 is not part of the sequence to output. Stop collecting when 0 appears, then reverse only the collected valid numbers.",
+      "recommendationExpectation": "P1427"
+    },
+    {
+      "problemId": "P5735",
+      "topic": "numeric geometry distance formula and decimal output formatting",
+      "painPoint": "matrix_like_input_and_decimal_format",
+      "wrongCode": "import math\n\npoints = [tuple(map(int, input().split())) for _ in range(3)]\nans = 0\nfor i in range(3):\n    x1, y1 = points[i]\n    x2, y2 = points[(i + 1) % 3]\n    ans += abs(x1 - x2) + abs(y1 - y2)\nprint(ans)\n",
+      "expectedDiagnosisHint": "The task uses Euclidean distance and decimal coordinates. Preserve floating-point input, use the square-root distance formula, and print with the required precision.",
+      "recommendationExpectation": "P5735"
+    },
+    {
+      "problemId": "P3369",
+      "topic": "ordered multiset operations with duplicate values",
+      "painPoint": "balanced_tree_concept_misused_as_sorted_set",
+      "wrongCode": "import bisect\n\nn = int(input())\na = []\nfor _ in range(n):\n    op, x = map(int, input().split())\n    if op == 1:\n        if x not in a:\n            bisect.insort(a, x)\n    elif op == 2:\n        if x in a:\n            a.remove(x)\n    elif op == 3:\n        print(bisect.bisect_left(a, x) + 1)\n    elif op == 4:\n        print(a[x - 1])\n    elif op == 5:\n        print(a[bisect.bisect_left(a, x) - 1])\n    else:\n        print(a[bisect.bisect_right(a, x)])\n",
+      "expectedDiagnosisHint": "This treats the data as a set by dropping duplicate inserts, but rank, kth, predecessor, and successor queries require multiset semantics.",
+      "recommendationExpectation": "P3369"
+    }
+  ]
+}

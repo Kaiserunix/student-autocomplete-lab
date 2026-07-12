@@ -14,7 +14,7 @@ interface SidebarTeachingContextInput {
   teacherPack?: TeacherPackReference;
   ojVerdict?: OjVerdict;
   requestPurpose?: string;
-  responseLanguage?: "zh-CN" | "raw";
+  responseLanguage?: "zh-CN" | "en-US" | "raw";
 }
 
 const SUMMARY_LIMIT = 3600;

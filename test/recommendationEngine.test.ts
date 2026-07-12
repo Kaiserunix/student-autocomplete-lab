@@ -155,6 +155,173 @@ describe("recommendation engine", () => {
     expect(result.strategy.targetDifficulty).toBe(1);
     expect(result.recommendations[0].problem.id).toBe("P1161");
     expect(result.recommendations[0].difficultySignal).toContain("目标难度 1");
+    expect(result.recommendations.map((item) => item.recommendation.difficultyChange)).not.toContain("up");
+  });
+
+  test("does not immediately recommend archived or abandoned problems again", () => {
+    const profile = studentProfile({
+      output_order: { count: 3, score: 2.5 }
+    });
+
+    const result = recommendNextProblems({
+      profile,
+      attemptEvents: [
+        {
+          eventId: "archive-1",
+          problemKey: "luogu:P1427",
+          problemId: "P1427",
+          platform: "luogu",
+          kind: "archived",
+          outcome: "abandoned",
+          occurredAt: "2026-05-01T00:00:00.000Z",
+          painPoints: ["output_order"]
+        }
+      ],
+      candidates: [
+        buildRecommendationCandidate({
+          platform: "luogu",
+          id: "P1427",
+          title: "小鱼的数字游戏",
+          difficulty: 1,
+          tags: ["array", "output-order"],
+          targetPainPoints: ["output_order"]
+        }),
+        buildRecommendationCandidate({
+          platform: "luogu",
+          id: "P5727",
+          title: "冰雹猜想",
+          difficulty: 1,
+          tags: ["simulation", "output-order"],
+          targetPainPoints: ["output_order"]
+        })
+      ],
+      limit: 2
+    });
+
+    expect(result.strategy.excludedProblemIds).toContain("P1427");
+    expect(result.recommendations.map((item) => item.problem.id)).toEqual(["P5727"]);
+  });
+
+  test("returns stable recommendation result fields for UI and eval consumers", () => {
+    const profile = studentProfile({
+      output_order: { count: 2, score: 2 }
+    });
+
+    const result = recommendNextProblems({
+      profile,
+      candidates: [
+        buildRecommendationCandidate({
+          platform: "manual",
+          id: "MICRO-output-order-001",
+          title: "三分钟输出顺序微练",
+          source: "synthetic",
+          difficulty: 1,
+          tags: ["output-order"],
+          targetPainPoints: ["output_order"],
+          skillTargets: ["sentinel-input-output-order"]
+        })
+      ]
+    });
+
+    expect(result.results[0]).toMatchObject({
+      problemId: "MICRO-output-order-001",
+      title: "三分钟输出顺序微练",
+      source: "synthetic",
+      targetSkill: "sentinel-input-output-order",
+      difficultyChange: "down",
+      transferEvidenceStatus: "not_tested",
+      whyNotHarder: "候选难度更低，用来修补基础痛点，而不是提前加压。",
+      whyNotRepeat: "当前没有近期完成/放弃/删除记录；推荐会避开当前题。"
+    });
+    expect(result.recommendations[0].recommendation).toEqual(result.results[0]);
+  });
+
+  test("honors explicit deleted and completed exclusion lists", () => {
+    const profile = studentProfile({
+      output_order: { count: 3, score: 2.5 }
+    });
+
+    const result = recommendNextProblems({
+      profile,
+      completedProblemIds: ["P1427"],
+      deletedProblemIds: ["P5727"],
+      candidates: [
+        buildRecommendationCandidate({
+          platform: "luogu",
+          id: "P1427",
+          title: "小鱼的数字游戏",
+          difficulty: 1,
+          tags: ["array", "output-order"],
+          targetPainPoints: ["output_order"]
+        }),
+        buildRecommendationCandidate({
+          platform: "luogu",
+          id: "P5727",
+          title: "冰雹猜想",
+          difficulty: 1,
+          tags: ["simulation", "output-order"],
+          targetPainPoints: ["output_order"]
+        }),
+        buildRecommendationCandidate({
+          platform: "luogu",
+          id: "P1161",
+          title: "开灯",
+          difficulty: 1,
+          tags: ["array"],
+          targetPainPoints: ["array_indexing"]
+        })
+      ],
+      limit: 3
+    });
+
+    expect(result.strategy.excludedProblemIds).toEqual(expect.arrayContaining(["P1427", "P5727"]));
+    expect(result.recommendations.map((item) => item.problem.id)).toEqual(["P1161"]);
+  });
+
+  test("uses repeated low-hint success as transfer evidence before moving up in difficulty", () => {
+    const profile = studentProfile({
+      traversal_order_confusion: { count: 3, score: 3 }
+    });
+    const baseCandidates = [
+      buildRecommendationCandidate({
+        platform: "luogu",
+        id: "P1305",
+        title: "新二叉树",
+        difficulty: 1,
+        tags: ["binary-tree", "traversal"],
+        targetPainPoints: ["traversal_order_confusion"],
+        skillTargets: ["binary-tree-traversal-reconstruction"]
+      }),
+      buildRecommendationCandidate({
+        platform: "luogu",
+        id: "P1030",
+        title: "求先序排列",
+        difficulty: 2,
+        tags: ["binary-tree", "reconstruction"],
+        targetPainPoints: ["traversal_order_confusion", "root_identification", "subtree_boundary"],
+        skillTargets: ["binary-tree-traversal-reconstruction"]
+      })
+    ];
+
+    const withoutEvidence = recommendNextProblems({
+      profile,
+      candidates: baseCandidates,
+      limit: 2
+    });
+    const withEvidence = recommendNextProblems({
+      profile,
+      attemptEvents: [
+        successEvent("s1", "P9001", ["traversal_order_confusion"]),
+        successEvent("s2", "P9002", ["traversal_order_confusion"])
+      ],
+      candidates: baseCandidates,
+      limit: 2
+    });
+
+    expect(withoutEvidence.recommendations[0].problem.id).toBe("P1305");
+    expect(withEvidence.strategy.lowHintSuccessSkills).toContain("binary-tree-traversal-reconstruction");
+    expect(withEvidence.recommendations[0].problem.id).toBe("P1030");
+    expect(withEvidence.results[0].difficultyChange).toBe("same");
   });
 });
 
@@ -173,5 +340,19 @@ function studentProfile(
       ])
     ),
     skillCandidates: {}
+  };
+}
+
+function successEvent(eventId: string, problemId: string, painPoints: string[]) {
+  return {
+    eventId,
+    problemKey: `luogu:${problemId}`,
+    problemId,
+    platform: "luogu",
+    kind: "solution_scored" as const,
+    outcome: "ac" as const,
+    occurredAt: "2026-05-01T00:00:00.000Z",
+    ojStatus: "AC" as const,
+    painPoints
   };
 }

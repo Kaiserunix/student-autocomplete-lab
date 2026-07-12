@@ -1,17 +1,26 @@
 # Student Autocomplete Lab
 
-This folder is a small Codex-ready brief for building a student-friendly code completion tool.
+Student Autocomplete Lab is a Chinese-first VS Code algorithm coach for students practicing Luogu, LeetCode, and similar contest-style problems. Beta English support covers the main sidebar shell, explicit English AI-output mode, and English Markdown problem import.
 
-The goal is not to build another full agent IDE. The goal is a narrow autocomplete layer that helps with typing and local style recall while preserving the student's own thinking.
+It is not an automatic problem solver or OJ submitter. The beta goal is a restrained loop: safe short autocomplete for the student's own code, explicit AI coaching only after the student asks, and a local `学习画像` that records repeated pain points, useful skills, user corrections, and rollbackable versions.
 
-This is now prepared as an MIT-licensed open-source alpha. The public repo should contain code, docs, tests, and summarized experiment evidence; local model keys, raw runtime traces, and personal learning ledgers stay ignored.
+This repository is prepared as an MIT-licensed open-source beta candidate. Public code, docs, tests, and summarized experiment evidence belong in git; API keys, raw runtime traces, full problem-statement caches, and personal learning ledgers stay ignored.
+
+## Beta Shape
+
+- `AI 教练`: the first screen, used for hints, deeper hints, giving up into a lesson report, AI-estimated submission checks, AC-after learning scores, optimization review, archiving, and next-problem recommendations.
+- `题目`: import Markdown problem files, search/import Luogu problems and training sets, and create starter files for Python, C, C++, Rust, or other configured templates.
+- `学习画像`: an inspectable Student Skill model showing active skills, candidate pain points, disabled judgments, user corrections, and recent rollback snapshots.
+- `安全补全`: inline completion reads only local student-code context and safe code habits; it must not read the imported problem statement, Teacher Pack, or standard answer.
+- `English beta`: switch the sidebar shell to English, choose `English` for AI output, and import English Markdown using headings such as `Problem Statement`, `Input`, `Output`, `Example`, `Constraints`, and `Notes`.
 
 ## Core Direction
 
-- Build code completion only, not a full vibe-coding agent.
+- Build an algorithm-learning coach, not a full vibe-coding agent.
 - Keep Xiaomi MiMo supported because the first real experiments used MiMo quota.
 - Recommended public routing: `dsv4f` for high-frequency autocomplete, `dsv4pro` for teaching analysis and optimization review.
 - Support OpenAI, OpenAI-compatible, and Anthropic-native provider modes.
+- Keep Chinese as the most complete UI language while making the English path usable for beta testers.
 - Keep completions small: usually 1 to 3 lines.
 - Avoid generating full problem solutions by default.
 - Learn user habits transparently and store them as editable local skills.
@@ -23,7 +32,9 @@ This is now prepared as an MIT-licensed open-source alpha. The public repo shoul
 - `docs/beta-v2-final-goals.md`: final beta target, including Student Skill distillation requirements.
 - `docs/large-scale-growth-simulation.md`: costed plan for the 200-problem / 1000-code growth simulation.
 - `docs/open-source-release.md`: release notes, open-source scope, model rationale, and package command.
+- `docs/release-lanes.md`: three VSIX lanes: beta, clean beta release, and private internal test.
 - `docs/internal-testing.md`: summarized live MiMo journey-test evidence.
+- `docs/friend-internal-test-build.md`: local-only friend-testing build with extra recording, not for GitHub or public release.
 - `secrets/models.env`: local API credentials and model routing. This is ignored by git.
 
 ## Current Build Target
@@ -37,11 +48,11 @@ It starts with:
 3. Public Luogu problem import through `GET /problem/:pid` with `x-lentille-request: content-only`.
 4. Public Luogu problem-set import through `GET /training/:id` with `x-luogu-type: content-only`.
 5. Luogu keyword search for problems and problem sets.
-6. Manual paste fallback for problem statements.
+6. Manual Markdown-file import fallback for custom problem statements.
 7. A local JSONL store for imported/manual problems and imported problem sets.
 8. Safe autocomplete prompt/filter modules that do not include problem statements.
 
-LeetCode support is planned as an adapter. Until a stable GraphQL path is wired, LeetCode problems should be pasted manually.
+LeetCode support is planned as an adapter. Until a stable GraphQL path is wired, LeetCode problems should use the manual Markdown-file import path.
 
 ## Development
 
@@ -62,6 +73,34 @@ Compile the extension:
 ```powershell
 npm run compile
 ```
+
+Package the full local beta test build:
+
+```powershell
+npm run package:beta
+```
+
+Package the clean beta release candidate:
+
+```powershell
+npm run package:beta-release
+```
+
+Package the separate friend-testing build with local records enabled:
+
+```powershell
+npm run package:internal
+```
+
+The release lanes use different extension ids and view prefixes. `beta release` is the clean public candidate; `beta 内测版` is for local friend testing only, writes extra records to VS Code global storage, and must not be published or pushed as a release artifact.
+
+Run the local hygiene gate before publishing the clean beta release or sharing a private test package:
+
+```powershell
+npm run check:hygiene
+```
+
+This checks that secrets, runtime traces, local practice files, and personal learning records stay ignored by git. If the clean beta-release staging tree exists, it also scans for blocked engineering, internal-test, source-map, secret, and local-path content.
 
 Run a live MiMo autocomplete trial:
 
@@ -108,6 +147,8 @@ npm run trial:mimo-journey -- --runs 3 --profile-mode carry --transfer-check
 ```
 
 Transfer validation picks unseen same-skill cases from the expanded long set after a skill is marked ready. It records per-step token `usage`, transfer pass rate, and estimated hint reduction without pretending this is a real human-learning proof.
+
+Live chat-model calls also append provider-reported token usage to `.runtime/chat-completions-usage.jsonl`. The log records model name, provider format, sanitized base URL, and prompt/completion/total tokens; it does not record API keys.
 
 Run a GPT practice-generation dry run:
 
@@ -159,7 +200,7 @@ Run a MiMo-powered teaching diagnosis trial:
 npm run trial:mimo-teacher
 ```
 
-The teaching trial turns one verified wrong submission into a student attempt, sends the evidence to the teacher diagnosis layer, updates `.runtime/student_profile.json`, and returns a hint, pain-point diagnosis, skill candidate, and recommendation. It uses `mimo-v2.5` by default, including when `MIMO_CHAT_MODEL=mimo-v2.5-pro` is configured; otherwise it falls back to a deterministic local stub.
+The teaching trial turns one verified wrong submission into a student attempt, sends the evidence to the teacher diagnosis layer, updates `.runtime/student_profile.json`, and returns a hint, pain-point diagnosis, skill candidate, and recommendation. It respects the configured teaching model and falls back to a deterministic local stub when live MiMo is not requested.
 
 Useful overrides:
 
@@ -176,7 +217,7 @@ Current inner-test boundary:
 - Inline autocomplete is usable for local code-continuation smoke tests.
 - Problem statements saved in the sidebar are not included in autocomplete prompts.
 - The Chinese sidebar separates problem import/search, AI interaction, archived attempts, lesson reports, solution scoring, and optimization review.
-- Imported/pasted full problems can generate a hidden Teacher Pack with standard approach, expected algorithm, complexity, invariants, pitfalls, counterexamples, and brute-force suitability. The pack is cached and used as diagnosis reference, not shown as the default student answer.
+- Imported full problems can generate a hidden Teacher Pack with standard approach, expected algorithm, complexity, invariants, pitfalls, counterexamples, and brute-force suitability. The pack is cached and used as diagnosis reference, not shown as the default student answer.
 - Teaching diagnosis and self-evolution are usable enough for personal alpha testing; see `docs/internal-testing.md` for live MiMo evidence.
 - The final beta target is now defined as a local, inspectable, rollbackable `Student Skill` loop; see `docs/beta-v2-final-goals.md`.
 - The first beta v2 code slice persists AI-coach diagnosis into `studentSkill.json` and archives version snapshots beside the legacy `studentProfile.json`.
@@ -195,8 +236,8 @@ The first live trial showed that `mimo-v2.5-pro` responds well to prefix-only au
 
 Model notes from local trials:
 
-- `mimo-v2.5-pro`: keep available for richer comparison trials, not the default high-frequency path.
-- `mimo-v2.5`: current default for inline autocomplete and teaching diagnosis. It works on the simple add-function case and gives the MiMo team useful high-frequency autocomplete traffic.
+- `mimo-v2.5-pro`: currently the more reliable live teaching/comparison model in local tests.
+- `mimo-v2.5`: useful as a cheaper high-frequency experiment path when the upstream endpoint is healthy.
 - `mimo-v2-omni`: can complete the simplest sample, but returned a cursor placeholder on a slightly more OJ-like loop sample. Keep it for multimodal/problem-understanding experiments, not default inline completion.
 - TTS models are voice models and should not be used for code autocomplete.
 
@@ -214,5 +255,5 @@ Package a local VSIX:
 
 ```powershell
 npm run compile
-npx --yes @vscode/vsce package --no-dependencies --out .runtime\student-autocomplete-lab-0.0.1.vsix
+npx --yes @vscode/vsce package --out .runtime\student-autocomplete-lab-0.1.0-beta.1.vsix
 ```

@@ -6,6 +6,6 @@ dist/
 .runtime/
 .student-autocomplete/
 .student-autocomplete-smoke/
-practice/
+/practice/
 test/*.py
 *.vsix

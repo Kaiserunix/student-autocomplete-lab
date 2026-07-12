@@ -100,10 +100,10 @@ This is the real "AI coach" value. It is more useful than simply asking a model 
 
 ### Problem intake
 
-- Paste problem text manually.
+- Import manually-authored Markdown problem files.
 - Import Luogu problem by ID when the public endpoint works.
 - Import/search Luogu problem sets as metadata.
-- LeetCode remains paste/manual unless a stable adapter is added.
+- LeetCode remains manual Markdown-file import unless a stable adapter is added.
 - Full statement import creates a starter source file after the user selects language: Python, C, C++, Rust, or other configured templates.
 - Problem import should generate or refresh Teacher Pack in the background.
 
@@ -142,7 +142,7 @@ This is the real "AI coach" value. It is more useful than simply asking a model 
 - Autocomplete prompt builder has tests proving problem text is excluded.
 - Model routing has tests for OpenAI, OpenAI-compatible, and Anthropic-native config.
 - UI commands are separated into three surfaces:
-  - problem paste/import/search;
+  - problem Markdown import/search;
   - AI interaction and current attempt;
   - archive, optimization, wrong problems, recommendation, and Student Skill.
 - Runtime data stays out of git:
@@ -180,7 +180,7 @@ For personal beta, the user should be able to complete this loop:
 
 1. install the VSIX;
 2. configure one autocomplete model and one teacher model;
-3. import or paste a Luogu problem;
+3. import a Luogu or Markdown problem;
 4. create a source file from the problem;
 5. write code with short autocomplete;
 6. request at least one hint;

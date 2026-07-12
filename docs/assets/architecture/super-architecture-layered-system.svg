@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820" role="img" aria-labelledby="title desc">
+  <title id="title">Student Autocomplete Lab layered architecture</title>
+  <desc id="desc">A layered system diagram showing VS Code surfaces, application services, domain core, adapters, and local data stores.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L0,6 L9,3 z" fill="#2b4c7e"/>
+    </marker>
+    <style>
+      .bg { fill: #f7f9fc; }
+      .layer { fill: #ffffff; stroke: #d1d9e6; stroke-width: 2; rx: 18; }
+      .ui { fill: #eaf4ff; stroke: #5b8fd6; }
+      .app { fill: #edf8f0; stroke: #5fa878; }
+      .core { fill: #fff5e8; stroke: #d49449; }
+      .adapter { fill: #f2ecff; stroke: #8b6fd6; }
+      .data { fill: #f6f6f6; stroke: #8a8f99; }
+      .box { fill: #ffffff; stroke-width: 1.5; rx: 10; }
+      .label { font: 600 20px "Segoe UI", Arial, sans-serif; fill: #1d2733; }
+      .small { font: 14px "Segoe UI", Arial, sans-serif; fill: #354252; }
+      .tiny { font: 12px "Segoe UI", Arial, sans-serif; fill: #5c6878; }
+      .arrow { stroke: #2b4c7e; stroke-width: 2.2; fill: none; marker-end: url(#arrow); }
+      .forbid { stroke: #c92a2a; stroke-width: 2.2; stroke-dasharray: 6 5; fill: none; }
+    </style>
+  </defs>
+  <rect class="bg" x="0" y="0" width="1280" height="820"/>
+  <text class="label" x="50" y="52">Student Autocomplete Lab: Target Layered Architecture</text>
+  <text class="small" x="50" y="78">Dependency direction: UI -&gt; App -&gt; Domain Core -&gt; Adapters -&gt; Local Data. Domain core never imports vscode.</text>
+
+  <rect class="layer ui" x="50" y="110" width="1180" height="110"/>
+  <text class="label" x="80" y="143">VS Code Surfaces</text>
+  <rect class="box ui" x="250" y="132" width="210" height="62"/>
+  <text class="small" x="280" y="158">AI Coach Sidebar</text>
+  <text class="tiny" x="280" y="180">problem, chat, profile</text>
+  <rect class="box ui" x="535" y="132" width="210" height="62"/>
+  <text class="small" x="565" y="158">Inline Autocomplete</text>
+  <text class="tiny" x="565" y="180">code-only context</text>
+  <rect class="box ui" x="820" y="132" width="210" height="62"/>
+  <text class="small" x="850" y="158">Command Palette</text>
+  <text class="tiny" x="850" y="180">focus and explicit actions</text>
+
+  <rect class="layer app" x="50" y="260" width="1180" height="120"/>
+  <text class="label" x="80" y="294">Application Layer</text>
+  <rect class="box app" x="215" y="292" width="210" height="62"/>
+  <text class="small" x="245" y="318">Typed Message Router</text>
+  <text class="tiny" x="245" y="340">command / host event union</text>
+  <rect class="box app" x="535" y="292" width="210" height="62"/>
+  <text class="small" x="565" y="318">Application Services</text>
+  <text class="tiny" x="565" y="340">orchestrate domains</text>
+  <rect class="box app" x="855" y="292" width="210" height="62"/>
+  <text class="small" x="885" y="318">State Snapshot Builder</text>
+  <text class="tiny" x="885" y="340">UI-safe view state</text>
+
+  <rect class="layer core" x="50" y="420" width="1180" height="150"/>
+  <text class="label" x="80" y="454">Domain Core</text>
+  <rect class="box core" x="120" y="480" width="160" height="58"/>
+  <text class="small" x="145" y="506">AttemptSession</text>
+  <text class="tiny" x="145" y="527">thread + evidence</text>
+  <rect class="box core" x="310" y="480" width="170" height="58"/>
+  <text class="small" x="342" y="506">TeachingWorkflow</text>
+  <text class="tiny" x="342" y="527">deterministic coach</text>
+  <rect class="box core" x="510" y="480" width="170" height="58"/>
+  <text class="small" x="540" y="506">Student Skill v2</text>
+  <text class="tiny" x="540" y="527">evidence lifecycle</text>
+  <rect class="box core" x="710" y="480" width="170" height="58"/>
+  <text class="small" x="740" y="506">Recommendation v2</text>
+  <text class="tiny" x="740" y="527">transfer-aware</text>
+  <rect class="box core" x="910" y="480" width="170" height="58"/>
+  <text class="small" x="940" y="506">Context Gatekeeper</text>
+  <text class="tiny" x="940" y="527">role context audit</text>
+
+  <rect class="layer adapter" x="50" y="610" width="1180" height="95"/>
+  <text class="label" x="80" y="645">Adapters</text>
+  <rect class="box adapter" x="240" y="638" width="155" height="44"/>
+  <text class="small" x="270" y="665">ModelRouter</text>
+  <rect class="box adapter" x="430" y="638" width="155" height="44"/>
+  <text class="small" x="463" y="665">Problem Sources</text>
+  <rect class="box adapter" x="620" y="638" width="155" height="44"/>
+  <text class="small" x="653" y="665">StorageGateway</text>
+  <rect class="box adapter" x="810" y="638" width="155" height="44"/>
+  <text class="small" x="853" y="665">MCP Tools</text>
+  <rect class="box adapter" x="1000" y="638" width="155" height="44"/>
+  <text class="small" x="1032" y="665">Local Runner</text>
+
+  <rect class="layer data" x="50" y="735" width="1180" height="55"/>
+  <text class="label" x="80" y="769">Local Data</text>
+  <text class="small" x="245" y="769">Problems</text>
+  <text class="small" x="370" y="769">Sessions</text>
+  <text class="small" x="495" y="769">Teacher Packs</text>
+  <text class="small" x="670" y="769">Student Skill</text>
+  <text class="small" x="830" y="769">Learning Events</text>
+  <text class="small" x="1015" y="769">Internal Logs</text>
+
+  <path class="arrow" d="M355 194 V292"/>
+  <path class="arrow" d="M640 194 V292"/>
+  <path class="arrow" d="M925 194 V292"/>
+  <path class="arrow" d="M640 354 V480"/>
+  <path class="arrow" d="M395 538 C430 585, 520 590, 610 638"/>
+  <path class="arrow" d="M595 538 C610 580, 640 600, 700 638"/>
+  <path class="arrow" d="M995 538 C930 585, 890 600, 887 638"/>
+  <path class="arrow" d="M695 682 V735"/>
+  <path class="arrow" d="M510 682 C470 705, 465 720, 465 735"/>
+  <path class="forbid" d="M640 132 C700 95, 940 95, 1010 125"/>
+  <text class="tiny" x="728" y="100" fill="#c92a2a">Autocomplete cannot read problem statements, Teacher Packs, answers, or pain-point history.</text>
+</svg>

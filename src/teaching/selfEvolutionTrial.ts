@@ -116,7 +116,10 @@ export async function runSelfEvolutionTrial(
   for (const [index, sample] of samples.entries()) {
     const profileBefore = profileSummary(profile);
     const context = buildSelfEvolutionTeachingContext(sample, profileBefore);
-    const report = normalizeTeachingDiagnosisReport(await Promise.resolve(diagnose(sample, context)));
+    const report = normalizeTeachingDiagnosisReport(await Promise.resolve(diagnose(sample, context)), {
+      currentProblemId: context.problem.id,
+      problemSummary: context.problem.summary
+    });
     const result = await runTeachingCycle(context, profile, async () => report, occurredAtForStep(baseOccurredAt, index));
     profile = result.updatedProfile;
 

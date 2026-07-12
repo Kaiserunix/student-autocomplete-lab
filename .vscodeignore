@@ -5,11 +5,15 @@ secrets/**
 .student-autocomplete-smoke/**
 practice/**
 fixtures/**
+extension/**
+scripts/**
 docs/superpowers/**
 test/**
 src/**
 dist/test/**
 dist/vitest.config.*
+*.map
+**/*.map
 node_modules/**
 *.vsix
 *.log

@@ -16,6 +16,17 @@ export interface LongitudinalSelfEvolutionSample extends SelfEvolutionWrongSampl
   stage: number;
   stageLabel: string;
   difficulty: number;
+  expectedOjStatus: "WA" | "RE" | "TLE" | "AC";
+  expectedPrimaryPainPoint: string;
+  expectedSkillCandidate: string;
+  minimumCounterexample: {
+    input: string;
+    expectedOutput: string;
+    actualOutput: string;
+    reason: string;
+  };
+  bruteForceAllowed: boolean;
+  recommendationRange: string[];
 }
 
 export interface LongitudinalBatchOptions {
@@ -43,11 +54,14 @@ export interface LongitudinalSelfEvolutionStep {
   expectedSkillCandidate?: string;
   actualSkillCandidate?: string;
   skillCandidateHit: boolean;
+  expectedRecommendationRange: string[];
   recommendation?: string;
+  recommendationHit: boolean;
   studentSkillRevision: number;
   activeSkills: string[];
   changeSummary: string[];
   usage?: ChatCompletionUsage;
+  diagnosisError?: string;
 }
 
 export interface LongitudinalSelfEvolutionResult {
@@ -60,8 +74,33 @@ export interface LongitudinalSelfEvolutionResult {
     skillCandidateAccuracy: number;
   };
   usage: LongitudinalUsageSummary;
+  mismatchSummary: LongitudinalMismatchSummary;
+  errorCount: number;
   finalProfile: StudentProfile;
   finalStudentSkill: StudentSkill;
+}
+
+export interface LongitudinalMismatchPair {
+  expected: string;
+  actual: string;
+  count: number;
+  sampleIds: string[];
+}
+
+export interface LongitudinalErrorSummary {
+  sampleId: string;
+  problemId: string;
+  category: "provider" | "json" | "unknown";
+  message: string;
+}
+
+export interface LongitudinalMismatchSummary {
+  skillMismatchPairs: LongitudinalMismatchPair[];
+  primaryPainPointMismatchPairs: LongitudinalMismatchPair[];
+  recommendationMismatchPairs: LongitudinalMismatchPair[];
+  diagnosisErrors: LongitudinalErrorSummary[];
+  providerErrorCount: number;
+  jsonRetryOrParseErrorCount: number;
 }
 
 export type LongitudinalDiagnose = (
@@ -179,14 +218,52 @@ export async function runLongitudinalSelfEvolutionBatch(
 
   for (const [index, sample] of samples.entries()) {
     const context = buildSelfEvolutionTeachingContext(sample, profileSummary(profile));
+    const expected = normalizeTeachingDiagnosisReport(diagnoseFromSelfEvolutionSample(sample), {
+      currentProblemId: sample.problemId,
+      problemSummary: context.problem.summary
+    });
+    const expectedPainPoints = expected.painPoints.map((painPoint) => painPoint.label);
+    const expectedSkillCandidate = expected.skillUpdate?.candidate;
     let stepUsage: ChatCompletionUsage | undefined;
-    const rawReport = await Promise.resolve(
-      diagnose(sample, context, (event) => {
-        stepUsage = event;
-        addUsage(usage, event);
-      })
-    );
-    const report = normalizeTeachingDiagnosisReport(rawReport, { currentProblemId: sample.problemId });
+
+    let rawReport: TeachingDiagnosisReport;
+    try {
+      rawReport = await Promise.resolve(
+        diagnose(sample, context, (event) => {
+          stepUsage = event;
+          addUsage(usage, event);
+        })
+      );
+    } catch (error) {
+      steps.push({
+        index,
+        sampleId: sample.sampleId,
+        problemId: sample.problemId,
+        stage: sample.stage,
+        difficulty: sample.difficulty,
+        expectedPainPoints,
+        actualPainPoints: [],
+        painPointHit: false,
+        primaryPainPointHit: false,
+        expectedSkillCandidate,
+        actualSkillCandidate: undefined,
+        skillCandidateHit: false,
+        expectedRecommendationRange: sample.recommendationRange,
+        recommendation: undefined,
+        recommendationHit: false,
+        studentSkillRevision: studentSkill.revision,
+        activeSkills: activeSkillNames(studentSkill),
+        changeSummary: [],
+        usage: stepUsage,
+        diagnosisError: error instanceof Error ? error.message : String(error)
+      });
+      continue;
+    }
+
+    const report = normalizeTeachingDiagnosisReport(rawReport, {
+      currentProblemId: sample.problemId,
+      problemSummary: context.problem.summary
+    });
     const cycle = await runTeachingCycleWithStudentSkill(context, profile, studentSkill, async () => report, {
       occurredAt: occurredAtForStep(baseOccurredAt, index),
       patchSource: options.patchSource ?? "longitudinal-self-evolution"
@@ -194,13 +271,9 @@ export async function runLongitudinalSelfEvolutionBatch(
     profile = cycle.updatedProfile;
     studentSkill = cycle.updatedStudentSkill;
 
-    const expected = normalizeTeachingDiagnosisReport(diagnoseFromSelfEvolutionSample(sample), {
-      currentProblemId: sample.problemId
-    });
-    const expectedPainPoints = expected.painPoints.map((painPoint) => painPoint.label);
     const actualPainPoints = cycle.report.painPoints.map((painPoint) => painPoint.label);
-    const expectedSkillCandidate = expected.skillUpdate?.candidate;
     const actualSkillCandidate = cycle.report.skillUpdate?.candidate;
+    const recommendation = cycle.report.recommendation?.problemId;
 
     steps.push({
       index,
@@ -211,16 +284,15 @@ export async function runLongitudinalSelfEvolutionBatch(
       expectedPainPoints,
       actualPainPoints,
       painPointHit: actualPainPoints.some((painPoint) => expectedPainPoints.includes(painPoint)),
-      primaryPainPointHit: actualPainPoints.includes(expectedPainPoints[0]),
+      primaryPainPointHit: isPrimaryPainPointHit(expectedPainPoints, actualPainPoints, expectedSkillCandidate),
       expectedSkillCandidate,
       actualSkillCandidate,
       skillCandidateHit: expectedSkillCandidate === actualSkillCandidate,
-      recommendation: cycle.report.recommendation?.problemId,
+      expectedRecommendationRange: sample.recommendationRange,
+      recommendation,
+      recommendationHit: recommendation ? sample.recommendationRange.includes(recommendation) : false,
       studentSkillRevision: studentSkill.revision,
-      activeSkills: Object.values(studentSkill.skills)
-        .filter((entry) => entry.status === "active")
-        .map((entry) => entry.name)
-        .sort(),
+      activeSkills: activeSkillNames(studentSkill),
       changeSummary: cycle.studentSkillMerge.changeSummary,
       usage: stepUsage
     });
@@ -236,9 +308,83 @@ export async function runLongitudinalSelfEvolutionBatch(
       skillCandidateAccuracy: ratio(steps.filter((step) => step.skillCandidateHit).length, steps.length)
     },
     usage,
+    mismatchSummary: summarizeLongitudinalMismatches(steps),
+    errorCount: steps.filter((step) => step.diagnosisError).length,
     finalProfile: profile,
     finalStudentSkill: studentSkill
   };
+}
+
+export function summarizeLongitudinalMismatches(steps: LongitudinalSelfEvolutionStep[]): LongitudinalMismatchSummary {
+  const diagnosisErrors = steps
+    .filter((step) => step.diagnosisError)
+    .map((step) => ({
+      sampleId: step.sampleId,
+      problemId: step.problemId,
+      category: classifyDiagnosisError(step.diagnosisError ?? ""),
+      message: step.diagnosisError ?? ""
+    }));
+
+  return {
+    skillMismatchPairs: summarizePairs(
+      steps
+        .filter((step) => !step.skillCandidateHit)
+        .map((step) => ({
+          sampleId: step.sampleId,
+          expected: step.expectedSkillCandidate ?? "missing",
+          actual: step.actualSkillCandidate ?? "missing"
+        }))
+    ),
+    primaryPainPointMismatchPairs: summarizePairs(
+      steps
+        .filter((step) => !step.primaryPainPointHit)
+        .map((step) => ({
+          sampleId: step.sampleId,
+          expected: step.expectedPainPoints[0] ?? "missing",
+          actual: step.actualPainPoints[0] ?? "missing"
+        }))
+    ),
+    recommendationMismatchPairs: summarizePairs(
+      steps
+        .filter((step) => !step.recommendationHit)
+        .map((step) => ({
+          sampleId: step.sampleId,
+          expected: step.expectedRecommendationRange.join("|") || "missing",
+          actual: step.recommendation ?? "missing"
+        }))
+    ),
+    diagnosisErrors,
+    providerErrorCount: diagnosisErrors.filter((error) => error.category === "provider").length,
+    jsonRetryOrParseErrorCount: diagnosisErrors.filter((error) => error.category === "json").length
+  };
+}
+
+function activeSkillNames(studentSkill: StudentSkill): string[] {
+  return Object.values(studentSkill.skills)
+    .filter((entry) => entry.status === "active" || entry.status === "mastered")
+    .map((entry) => entry.name)
+    .sort();
+}
+
+function isPrimaryPainPointHit(
+  expectedPainPoints: string[],
+  actualPainPoints: string[],
+  expectedSkillCandidate: string | undefined
+): boolean {
+  const primary = expectedPainPoints[0];
+  if (!primary) {
+    return false;
+  }
+
+  if (actualPainPoints.includes(primary)) {
+    return true;
+  }
+
+  return (
+    expectedSkillCandidate === "binary-tree-depth-numbered-children" &&
+    primary === "recursion_base_case" &&
+    actualPainPoints.includes("depth_definition")
+  );
 }
 
 function diagnoseFromLongitudinalSample(sample: LongitudinalSelfEvolutionSample): TeachingDiagnosisReport {
@@ -246,11 +392,15 @@ function diagnoseFromLongitudinalSample(sample: LongitudinalSelfEvolutionSample)
 }
 
 function buildSample(index: number, totalCount: number): LongitudinalSelfEvolutionSample {
-  const template = TEMPLATES[index % TEMPLATES.length];
+  const samplesPerProblem = 5;
+  const problemSlot = Math.floor(index / samplesPerProblem);
+  const template = TEMPLATES[problemSlot % TEMPLATES.length];
   const stage = Math.min(10, Math.floor((index / Math.max(1, totalCount)) * 10) + 1);
-  const variant = Math.floor(index / TEMPLATES.length);
-  const problemId = template.problemIds[variant % template.problemIds.length];
+  const variant = index % samplesPerProblem;
+  const publicProblemId = template.problemIds[problemSlot % template.problemIds.length];
+  const problemId = `SIM-${String(problemSlot + 1).padStart(4, "0")}`;
   const difficulty = Math.min(5, template.baseDifficulty + Math.floor((stage - 1) / 3));
+  const expectation = sampleExpectation(template.painPoint, publicProblemId);
 
   return {
     sampleId: `long-${String(index + 1).padStart(4, "0")}`,
@@ -258,11 +408,110 @@ function buildSample(index: number, totalCount: number): LongitudinalSelfEvoluti
     stageLabel: STAGE_LABELS[stage - 1],
     difficulty,
     problemId,
-    topic: `${template.topic}; stage ${stage}: ${STAGE_LABELS[stage - 1]}`,
+    topic: `${template.topic}; public anchor ${publicProblemId}; stage ${stage}: ${STAGE_LABELS[stage - 1]}`,
     painPoint: template.painPoint,
     wrongCode: template.code(stage, variant),
     expectedDiagnosisHint: template.expectedDiagnosisHint,
-    recommendationExpectation: template.recommendationExpectation
+    recommendationExpectation: template.recommendationExpectation,
+    expectedOjStatus: expectation.expectedOjStatus,
+    expectedPrimaryPainPoint: expectation.expectedPrimaryPainPoint,
+    expectedSkillCandidate: expectation.expectedSkillCandidate,
+    minimumCounterexample: expectation.minimumCounterexample,
+    bruteForceAllowed: expectation.bruteForceAllowed,
+    recommendationRange: shouldAllowStayCurrentRecommendation(expectation.expectedPrimaryPainPoint)
+      ? unique([...expectation.recommendationRange, problemId])
+      : unique(expectation.recommendationRange)
+  };
+}
+
+function sampleExpectation(
+  painPoint: string,
+  publicProblemId: string
+): Pick<
+  LongitudinalSelfEvolutionSample,
+  | "expectedOjStatus"
+  | "expectedPrimaryPainPoint"
+  | "expectedSkillCandidate"
+  | "minimumCounterexample"
+  | "bruteForceAllowed"
+  | "recommendationRange"
+> {
+  if (painPoint === "binary_tree_traversal_order_confusion") {
+    return {
+      expectedOjStatus: "WA",
+      expectedPrimaryPainPoint: "traversal_order_confusion",
+      expectedSkillCandidate: "binary-tree-traversal-reconstruction",
+      minimumCounterexample: {
+        input: "DBEAC\nDEBCA\n",
+        expectedOutput: "ABDEC",
+        actualOutput: "DEBCA",
+        reason: "后序+中序重建先序时，根节点必须先输出。"
+      },
+      bruteForceAllowed: false,
+      recommendationRange: [publicProblemId, "P1305", "P1030"]
+    };
+  }
+
+  if (painPoint === "recursion_base_case_and_depth_definition") {
+    return {
+      expectedOjStatus: "WA",
+      expectedPrimaryPainPoint: "recursion_base_case",
+      expectedSkillCandidate: "binary-tree-depth-numbered-children",
+      minimumCounterexample: {
+        input: "1\n0 0\n",
+        expectedOutput: "1",
+        actualOutput: "2",
+        reason: "空孩子深度是 0，单节点树深度是 1。"
+      },
+      bruteForceAllowed: true,
+      recommendationRange: [publicProblemId, "P4913", "P1305"]
+    };
+  }
+
+  if (painPoint === "output_order_and_sentinel_handling") {
+    return {
+      expectedOjStatus: "WA",
+      expectedPrimaryPainPoint: "sentinel_input",
+      expectedSkillCandidate: "sentinel-input-output-order",
+      minimumCounterexample: {
+        input: "1 2 0\n",
+        expectedOutput: "2 1",
+        actualOutput: "0 2 1",
+        reason: "哨兵 0 只负责停止输入，不应该进入输出序列。"
+      },
+      bruteForceAllowed: true,
+      recommendationRange: [publicProblemId, "P1427", "P5727"]
+    };
+  }
+
+  if (painPoint === "matrix_like_input_and_decimal_format") {
+    return {
+      expectedOjStatus: "WA",
+      expectedPrimaryPainPoint: "distance_formula",
+      expectedSkillCandidate: "numeric-geometry-formatting",
+      minimumCounterexample: {
+        input: "0 0\n3 4\n3 0\n",
+        expectedOutput: "12.00",
+        actualOutput: "10",
+        reason: "题目要求欧氏距离和两位小数，不能用曼哈顿距离或整数输出。"
+      },
+      bruteForceAllowed: true,
+      recommendationRange: [publicProblemId, "P5735", "P5730"]
+    };
+  }
+
+  return {
+    expectedOjStatus: "WA",
+    expectedPrimaryPainPoint: "duplicate_handling",
+    expectedSkillCandidate: "ordered-multiset-semantics",
+    minimumCounterexample: {
+      input: "5\n1 2\n1 2\n3 2\n4 2\n2 2\n",
+      expectedOutput: "1\n2",
+      actualOutput: "1\n",
+      reason: "普通平衡树语义是有序多重集，重复值会影响 rank/kth。"
+    },
+    bruteForceAllowed: false,
+    recommendationRange: [publicProblemId, "P5076", "P3369"]
   };
 }
 
@@ -507,4 +756,52 @@ function ratio(hitCount: number, total: number): number {
   }
 
   return Math.round((hitCount / total) * 1000) / 1000;
+}
+
+function shouldAllowStayCurrentRecommendation(primaryPainPoint: string): boolean {
+  return (
+    primaryPainPoint === "output_format" ||
+    primaryPainPoint === "numeric_input_type" ||
+    primaryPainPoint === "distance_formula" ||
+    primaryPainPoint === "needs_teacher_review"
+  );
+}
+
+function summarizePairs(
+  pairs: Array<{ expected: string; actual: string; sampleId: string }>
+): LongitudinalMismatchPair[] {
+  const grouped = new Map<string, LongitudinalMismatchPair>();
+  for (const pair of pairs) {
+    const key = `${pair.expected} -> ${pair.actual}`;
+    const previous = grouped.get(key);
+    if (previous) {
+      previous.count += 1;
+      previous.sampleIds = unique([...previous.sampleIds, pair.sampleId]).slice(0, 10);
+    } else {
+      grouped.set(key, {
+        expected: pair.expected,
+        actual: pair.actual,
+        count: 1,
+        sampleIds: [pair.sampleId]
+      });
+    }
+  }
+
+  return [...grouped.values()].sort((left, right) => right.count - left.count || left.expected.localeCompare(right.expected));
+}
+
+function classifyDiagnosisError(message: string): LongitudinalErrorSummary["category"] {
+  if (/json|parse|schema/i.test(message)) {
+    return "json";
+  }
+
+  if (/fetch|http|timeout|502|503|500|provider|completion|network/i.test(message)) {
+    return "provider";
+  }
+
+  return "unknown";
+}
+
+function unique(values: string[]): string[] {
+  return Array.from(new Set(values)).sort();
 }
