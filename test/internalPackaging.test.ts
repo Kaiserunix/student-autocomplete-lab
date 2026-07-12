@@ -45,6 +45,7 @@ describe("beta release packaging script", () => {
     expect(source).toContain('"recommendation"');
     expect(source).toContain('"attempt"');
     expect(source).toContain('"mcp"');
+    expect(source).toContain('"codex"');
     expect(source).toContain("problemSearchServer.js");
     expect(source).toContain("longitudinalSelfEvolution.js");
     expect(source).toContain("assertNoBlockedReleaseContent");

@@ -17,6 +17,7 @@ const allowedTopLevelRuntime = [
   "attempt",
   "extension.js",
   "autocomplete",
+  "codex",
   "config",
   "mcp",
   "models",

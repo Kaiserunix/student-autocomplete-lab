@@ -933,7 +933,7 @@ git commit -m "feat: add Codex OAuth configuration UI"
 - Test: `test/internalPackaging.test.ts`
 - Create only if desktop acceptance remains incomplete: `MANUAL-ACCEPTANCE.md`
 
-- [ ] **Step 1: Run context-boundary verification**
+- [x] **Step 1: Run context-boundary verification**
 
 ```powershell
 npm test -- --run test/context.test.ts test/autocomplete.test.ts test/autocompleteRequestGate.test.ts
@@ -944,7 +944,7 @@ rg -n "teacherPack|standard|solution|statement|problem\.statement|coachThread" s
 Expected: tests pass; review the search output and confirm no new OAuth path
 crosses teaching-only context into autocomplete.
 
-- [ ] **Step 2: Run the full source verification**
+- [x] **Step 2: Run the full source verification**
 
 ```powershell
 npm test
@@ -954,7 +954,7 @@ npm run check:hygiene
 
 Expected: zero failures and zero hygiene violations.
 
-- [ ] **Step 3: Build and inspect the beta VSIX**
+- [x] **Step 3: Build and inspect the beta VSIX**
 
 ```powershell
 npm run package:beta
@@ -964,7 +964,7 @@ tar -tf .runtime\student-autocomplete-lab-0.1.0-beta.1.vsix | Select-String -Pat
 Expected: package succeeds; inspection has no credential/cache matches. A VSIX
 is a ZIP archive, so use `tar -tf` only for listing.
 
-- [ ] **Step 4: Install the VSIX and record the installed version**
+- [x] **Step 4: Install the VSIX and record the installed version**
 
 ```powershell
 code --install-extension .runtime\student-autocomplete-lab-0.1.0-beta.1.vsix --force
@@ -1025,7 +1025,7 @@ git status --short
 Expected: tests, compile, package, and diff check pass. Status contains only
 intentional feature/acceptance files.
 
-- [ ] **Step 8: Commit verification artifacts or acceptance checklist**
+- [x] **Step 8: Commit verification artifacts or acceptance checklist**
 
 If code/package hygiene changed:
 
