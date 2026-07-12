@@ -472,7 +472,7 @@ git commit -m "feat: add managed Codex OAuth state"
 - Create: `src/codex/codexModelService.ts`
 - Create: `test/codexModelService.test.ts`
 
-- [ ] **Step 1: Write a failing visible-model normalization test**
+- [x] **Step 1: Write a failing visible-model normalization test**
 
 ```ts
 const result = await service.listModels();
@@ -496,7 +496,7 @@ expect(result.recommendedAutocompleteModel).toBe("gpt-5.3-codex-spark");
 expect(result.recommendedTeachingModel).toBe("gpt-5.6-terra");
 ```
 
-- [ ] **Step 2: Run the model-service test and confirm RED**
+- [x] **Step 2: Run the model-service test and confirm RED**
 
 ```powershell
 npm test -- --run test/codexModelService.test.ts
@@ -504,7 +504,7 @@ npm test -- --run test/codexModelService.test.ts
 
 Expected: import failure.
 
-- [ ] **Step 3: Implement model listing and recommendation**
+- [x] **Step 3: Implement model listing and recommendation**
 
 Call:
 
@@ -521,12 +521,12 @@ const teaching = contains("terra") ?? models.find((model) => model.isDefault)?.i
 
 Do not use hidden models and do not substitute an arbitrary first model.
 
-- [ ] **Step 4: Add unavailable-saved-model tests**
+- [x] **Step 4: Add unavailable-saved-model tests**
 
 Verify `validateSelection(modelId, models)` returns a typed unavailable result
 with a recommendation instead of changing the selected ID.
 
-- [ ] **Step 5: Run model tests and compile**
+- [x] **Step 5: Run model tests and compile**
 
 ```powershell
 npm test -- --run test/codexModelService.test.ts
@@ -535,7 +535,7 @@ npm run compile
 
 Expected: pass.
 
-- [ ] **Step 6: Commit Task 4**
+- [x] **Step 6: Commit Task 4**
 
 ```powershell
 git add src/codex/codexModelService.ts test/codexModelService.test.ts
