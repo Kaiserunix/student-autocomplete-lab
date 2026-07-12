@@ -222,7 +222,7 @@ git commit -m "feat: add Codex OAuth route configuration"
 - Create: `test/codexAppServerProtocol.test.ts`
 - Create: `test/codexAppServerClient.test.ts`
 
-- [ ] **Step 1: Write one protocol guard test**
+- [x] **Step 1: Write one protocol guard test**
 
 ```ts
 test("classifies responses and notifications without accepting arrays", () => {
@@ -240,7 +240,7 @@ test("classifies responses and notifications without accepting arrays", () => {
 });
 ```
 
-- [ ] **Step 2: Run the protocol test and confirm RED**
+- [x] **Step 2: Run the protocol test and confirm RED**
 
 ```powershell
 npm test -- --run test/codexAppServerProtocol.test.ts
@@ -248,19 +248,19 @@ npm test -- --run test/codexAppServerProtocol.test.ts
 
 Expected: import failure for `parseAppServerMessage`.
 
-- [ ] **Step 3: Implement strict protocol parsing**
+- [x] **Step 3: Implement strict protocol parsing**
 
 Implement a discriminated parser that accepts numeric/string request IDs,
 response `result`/`error`, and method notifications. Malformed JSON returns
 `undefined`; it does not crash the process client.
 
-- [ ] **Step 4: Run the protocol test and confirm GREEN**
+- [x] **Step 4: Run the protocol test and confirm GREEN**
 
 Run the Step 2 command.
 
 Expected: pass.
 
-- [ ] **Step 5: Write a failing process-client tracer test**
+- [x] **Step 5: Write a failing process-client tracer test**
 
 Create a fake process with writable stdin and readable stdout/stderr. Verify the
 client emits this exact handshake and resolves an `account/read` response:
@@ -287,7 +287,7 @@ fake.emitJson({ id: 2, result: { account: null, requiresOpenaiAuth: true } });
 await expect(pending).resolves.toEqual({ account: null, requiresOpenaiAuth: true });
 ```
 
-- [ ] **Step 6: Run the process-client test and confirm RED**
+- [x] **Step 6: Run the process-client test and confirm RED**
 
 ```powershell
 npm test -- --run test/codexAppServerClient.test.ts
@@ -295,7 +295,7 @@ npm test -- --run test/codexAppServerClient.test.ts
 
 Expected: import failure for `CodexAppServerClient`.
 
-- [ ] **Step 7: Implement the minimal process client**
+- [x] **Step 7: Implement the minimal process client**
 
 The constructor accepts:
 
@@ -325,7 +325,7 @@ Spawn `codex app-server` with `CODEX_HOME` set to `codexHome`, process cwd set
 to `runtimeCwd`, and stdio pipes. Reject all pending requests on exit. Redact
 raw stderr to a bounded message and never log JSON request params.
 
-- [ ] **Step 8: Add timeout, malformed-line, notification, and crash tests**
+- [x] **Step 8: Add timeout, malformed-line, notification, and crash tests**
 
 Add one test per observable behaviour:
 
@@ -338,7 +338,7 @@ fake.exit(1);
 await expect(inFlight).rejects.toThrow("exited");
 ```
 
-- [ ] **Step 9: Run both Task 2 test files and compile**
+- [x] **Step 9: Run both Task 2 test files and compile**
 
 ```powershell
 npm test -- --run test/codexAppServerProtocol.test.ts test/codexAppServerClient.test.ts
@@ -347,7 +347,7 @@ npm run compile
 
 Expected: both commands pass.
 
-- [ ] **Step 10: Commit Task 2**
+- [x] **Step 10: Commit Task 2**
 
 ```powershell
 git add src/codex/appServerProtocol.ts src/codex/appServerClient.ts test/codexAppServerProtocol.test.ts test/codexAppServerClient.test.ts
