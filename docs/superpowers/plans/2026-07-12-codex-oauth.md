@@ -653,7 +653,7 @@ git commit -m "feat: add text-only Codex generation transport"
 - Test: `test/completionsClient.test.ts`
 - Create: `test/codexOAuthRouting.test.ts`
 
-- [ ] **Step 1: Write one failing OAuth chat-delegation test**
+- [x] **Step 1: Write one failing OAuth chat-delegation test**
 
 ```ts
 const transport: ModelTextTransport = { generate: vi.fn(async () => "OK") };
@@ -683,7 +683,7 @@ expect(transport.generate).toHaveBeenCalledWith(expect.objectContaining({
 }));
 ```
 
-- [ ] **Step 2: Run chat/completion tests and confirm RED**
+- [x] **Step 2: Run chat/completion tests and confirm RED**
 
 ```powershell
 npm test -- --run test/chatCompletionsClient.test.ts test/completionsClient.test.ts test/codexOAuthRouting.test.ts
@@ -691,7 +691,7 @@ npm test -- --run test/chatCompletionsClient.test.ts test/completionsClient.test
 
 Expected: type/import failure for the OAuth config shape.
 
-- [ ] **Step 3: Add discriminated HTTP/OAuth config unions**
+- [x] **Step 3: Add discriminated HTTP/OAuth config unions**
 
 Use `format: "codex-app-server"` as the discriminator. OAuth configs contain
 `transport` and no API key. HTTP configs retain required `baseUrl` and `apiKey`.
@@ -717,7 +717,7 @@ safe prompt and suffix in the serialized text request, and defaults to a short
 timeout. HTTP branches keep their current request bodies byte-for-byte except
 for type narrowing.
 
-- [ ] **Step 4: Prove old HTTP payloads remain unchanged**
+- [x] **Step 4: Prove old HTTP payloads remain unchanged**
 
 Keep all existing fetch assertions. Add explicit regression assertions for:
 
@@ -726,7 +726,7 @@ Keep all existing fetch assertions. Add explicit regression assertions for:
 - DeepSeek beta `suffix`;
 - Anthropic `/messages`.
 
-- [ ] **Step 5: Run focused client/routing tests and compile**
+- [x] **Step 5: Run focused client/routing tests and compile**
 
 Run the Step 2 command, then:
 
@@ -736,7 +736,7 @@ npm run compile
 
 Expected: pass.
 
-- [ ] **Step 6: Commit Task 6**
+- [x] **Step 6: Commit Task 6**
 
 ```powershell
 git add src/models/chatCompletionsClient.ts src/models/completionsClient.ts src/models/providerContracts.ts test/chatCompletionsClient.test.ts test/completionsClient.test.ts test/codexOAuthRouting.test.ts

@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
-import type { CompletionProviderConfig } from "../models/completionsClient";
-import type { ChatCompletionProviderConfig } from "../models/chatCompletionsClient";
+import type { HttpCompletionProviderConfig } from "../models/completionsClient";
+import type { HttpChatCompletionProviderConfig } from "../models/chatCompletionsClient";
 
 export type AiProviderMode = "openai" | "openai-compatible" | "anthropic-native";
 export type OpenAiAuthMode = "api-key" | "codex-oauth";
@@ -79,8 +79,8 @@ export interface AiConfigView {
   autocompleteFormat: AutocompleteFormat;
 }
 
-export type TeachingProviderConfig = ChatCompletionProviderConfig & { mode: AiProviderMode };
-export type AutocompleteProviderConfig = CompletionProviderConfig & { mode: AiProviderMode };
+export type TeachingProviderConfig = HttpChatCompletionProviderConfig & { mode: AiProviderMode };
+export type AutocompleteProviderConfig = HttpCompletionProviderConfig & { mode: AiProviderMode };
 
 export function loadModelEnvFromText(text: string): ModelEnv {
   const env: Record<string, string> = {};
@@ -217,7 +217,7 @@ export function requireMimoAutocompleteConfig(env: ModelEnv): {
   apiKey: string;
   model: string;
   mode?: string;
-  format?: "openai-completions" | "openai-chat" | "anthropic-messages" | "codex-app-server";
+  format?: "openai-completions" | "openai-chat" | "anthropic-messages";
   anthropicVersion?: string;
 } {
   return requireAutocompleteConfig(env);
@@ -228,7 +228,7 @@ export function requireMimoTeachingConfig(env: ModelEnv): {
   apiKey: string;
   model: string;
   mode?: string;
-  format?: "openai-chat" | "anthropic-messages" | "codex-app-server";
+  format?: "openai-chat" | "anthropic-messages";
   anthropicVersion?: string;
 } {
   return requireTeachingConfig(env);

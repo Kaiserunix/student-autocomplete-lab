@@ -8,11 +8,9 @@ import { buildAutocompleteInputFromText, extractStudentCodeFromText } from "../a
 import { requestMimoAutocomplete } from "../autocomplete/mimoAutocomplete";
 import {
   type AiConfigView,
-  type AutocompleteProviderConfig,
   type AiProviderConfigUpdate,
   type AiProviderMode,
-  type ModelEnv,
-  type TeachingProviderConfig
+  type ModelEnv
 } from "../config/modelEnv";
 import {
   buildAiConfigViewFromVsCode,
@@ -24,8 +22,8 @@ import {
   type InternalTestEventInput,
   type InternalTestRecorder
 } from "../internalTesting/internalTestRecorder";
-import { requestChatCompletionText } from "../models/chatCompletionsClient";
-import { requestCompletion } from "../models/completionsClient";
+import { requestChatCompletionText, type ChatCompletionProviderConfig } from "../models/chatCompletionsClient";
+import { requestCompletion, type CompletionProviderConfig } from "../models/completionsClient";
 import { listProviderModels } from "../models/providerModelsClient";
 import { routeAutocompleteModel, routeTeachingModel } from "../models/modelRouter";
 import { fetchLuoguProblem } from "../problemBank/luoguClient";
@@ -1691,7 +1689,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
   private async ensureTeacherPack(
     problem: ProblemRecord,
-    config: TeachingProviderConfig
+    config: ChatCompletionProviderConfig
   ): Promise<TeacherPackRecord | undefined> {
     const cached = await findTeacherPack(this.teacherPacksPath(), problem.platform, problem.id);
     if (cached) {
@@ -6107,7 +6105,7 @@ async function runChatSmokeHealthCheck(
       endpoint: route.endpoint,
       model: route.model,
       format: route.format,
-      keyState: keyStateForApiKey(route.config.apiKey, config.apiKey),
+      keyState: keyStateForApiKey(providerApiKey(route.config), config.apiKey),
       latencyMs: elapsedSince(startedAt)
     };
   } catch (error) {
@@ -6137,7 +6135,7 @@ async function runAutocompleteSmokeHealthCheck(
         endpoint: route.endpoint,
         model: route.model,
         format: route.format,
-        keyState: keyStateForApiKey(route.config.apiKey, config.apiKey),
+        keyState: keyStateForApiKey(providerApiKey(route.config), config.apiKey),
         latencyMs: elapsedSince(startedAt),
         error: "DeepSeek FIM 补全端点不是 /beta。",
         errorHint: deepSeekHint
@@ -6161,7 +6159,7 @@ async function runAutocompleteSmokeHealthCheck(
       endpoint: route.endpoint,
       model: route.model,
       format: route.format,
-      keyState: keyStateForApiKey(route.config.apiKey, config.apiKey),
+      keyState: keyStateForApiKey(providerApiKey(route.config), config.apiKey),
       latencyMs: elapsedSince(startedAt)
     };
   } catch (error) {
@@ -6196,7 +6194,7 @@ function safeTeachingRouteInfo(env: ModelEnv): {
       endpoint: route.endpoint,
       model: route.model,
       format: route.format,
-      apiKey: route.config.apiKey
+      apiKey: providerApiKey(route.config)
     };
   } catch {
     return {};
@@ -6215,14 +6213,17 @@ function safeAutocompleteRouteInfo(env: ModelEnv): {
       endpoint: route.endpoint,
       model: route.model,
       format: route.format,
-      apiKey: route.config.apiKey
+      apiKey: providerApiKey(route.config)
     };
   } catch {
     return {};
   }
 }
 
-function deepSeekFimEndpointHint(config: AutocompleteProviderConfig): string | undefined {
+function deepSeekFimEndpointHint(config: CompletionProviderConfig): string | undefined {
+  if (config.format === "codex-app-server") {
+    return undefined;
+  }
   if (
     config.format === "openai-completions" &&
     sanitizeBaseUrlForDisplay(config.baseUrl).includes("api.deepseek.com") &&
@@ -6268,6 +6269,12 @@ function keyStateForApiKey(apiKey: string | undefined, providedApiKey: string | 
     return "saved";
   }
   return "missing";
+}
+
+function providerApiKey(
+  config: ChatCompletionProviderConfig | CompletionProviderConfig
+): string | undefined {
+  return config.format === "codex-app-server" ? undefined : config.apiKey;
 }
 
 function collectKnownSecrets(...sources: Array<ModelEnv | AiProviderConfigUpdate>): string[] {

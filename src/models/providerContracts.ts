@@ -14,8 +14,6 @@ export interface CodexOAuthProviderConfig {
   authMode: "codex-oauth";
   model: string;
   format: "codex-app-server";
-  baseUrl: "codex://app-server";
-  apiKey: "";
   transport: ModelTextTransport;
 }
 

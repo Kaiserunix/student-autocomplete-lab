@@ -73,8 +73,6 @@ function codexOAuthRoute(
     authMode: "codex-oauth",
     model: model.trim(),
     format: "codex-app-server",
-    baseUrl: "codex://app-server",
-    apiKey: "",
     transport
   };
   return {

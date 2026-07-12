@@ -2,15 +2,27 @@ import { appendFile, mkdir } from "node:fs/promises";
 import * as path from "node:path";
 import type { ModelTextTransport } from "./modelTextTransport";
 
-export interface ChatCompletionProviderConfig {
+export interface HttpChatCompletionProviderConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
   mode?: string;
-  format?: "openai-chat" | "anthropic-messages" | "codex-app-server";
+  authMode?: "api-key";
+  format?: "openai-chat" | "anthropic-messages";
   anthropicVersion?: string;
-  transport?: ModelTextTransport;
 }
+
+export interface CodexChatCompletionProviderConfig {
+  model: string;
+  mode?: "openai";
+  authMode: "codex-oauth";
+  format: "codex-app-server";
+  transport: ModelTextTransport;
+}
+
+export type ChatCompletionProviderConfig =
+  | HttpChatCompletionProviderConfig
+  | CodexChatCompletionProviderConfig;
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
@@ -22,6 +34,8 @@ export interface ChatCompletionRequest {
   maxTokens: number;
   temperature: number;
   responseFormat?: { type: "json_object" };
+  timeoutMs?: number;
+  signal?: AbortSignal;
   onUsage?: ChatCompletionUsageSink;
   usageLogPath?: string | false;
 }
@@ -84,6 +98,17 @@ export async function requestChatCompletionText(
   request: ChatCompletionRequest,
   fetchImpl: typeof fetch = fetch
 ): Promise<string> {
+  if (config.format === "codex-app-server") {
+    return config.transport.generate({
+      purpose: "analysis",
+      model: config.model,
+      prompt: serializeChatMessages(request.messages),
+      maxOutputTokens: request.maxTokens,
+      temperature: request.temperature,
+      timeoutMs: request.timeoutMs ?? 60_000,
+      signal: request.signal
+    });
+  }
   if (config.format === "anthropic-messages") {
     return requestAnthropicMessageText(config, request, fetchImpl);
   }
@@ -126,7 +151,7 @@ export async function requestChatCompletionText(
 }
 
 async function requestAnthropicMessageText(
-  config: ChatCompletionProviderConfig,
+  config: HttpChatCompletionProviderConfig,
   request: ChatCompletionRequest,
   fetchImpl: typeof fetch
 ): Promise<string> {
@@ -173,7 +198,7 @@ async function fetchJson<T>(
   endpoint: string,
   init: RequestInit,
   fetchImpl: typeof fetch,
-  context: { operation: string; endpoint: string; config: ChatCompletionProviderConfig }
+  context: { operation: string; endpoint: string; config: HttpChatCompletionProviderConfig }
 ): Promise<JsonResponse<T>> {
   let response: Response;
   try {
@@ -215,7 +240,7 @@ function errorFromPayload(payload: unknown): string | undefined {
 
 function requestContext(context: {
   endpoint: string;
-  config: ChatCompletionProviderConfig;
+  config: HttpChatCompletionProviderConfig;
 }): string {
   return `endpoint=${context.endpoint}; model=${context.config.model}; format=${context.config.format ?? "openai-chat"}`;
 }
@@ -229,7 +254,7 @@ function previewText(text: string): string | undefined {
   return preview || undefined;
 }
 
-function modelHint(config: ChatCompletionProviderConfig, status: number): string {
+function modelHint(config: HttpChatCompletionProviderConfig, status: number): string {
   if (
     status >= 500 &&
     sanitizeBaseUrl(config.baseUrl).includes("xiaomimimo.com") &&
@@ -242,7 +267,7 @@ function modelHint(config: ChatCompletionProviderConfig, status: number): string
 }
 
 function effectiveOpenAiChatMaxTokens(
-  config: ChatCompletionProviderConfig,
+  config: HttpChatCompletionProviderConfig,
   request: ChatCompletionRequest
 ): number {
   if (isDeepSeekV4Chat(config)) {
@@ -252,7 +277,7 @@ function effectiveOpenAiChatMaxTokens(
   return request.maxTokens;
 }
 
-function isDeepSeekV4Chat(config: ChatCompletionProviderConfig): boolean {
+function isDeepSeekV4Chat(config: HttpChatCompletionProviderConfig): boolean {
   return sanitizeBaseUrl(config.baseUrl).includes("api.deepseek.com") && config.model.startsWith("deepseek-v4");
 }
 
@@ -281,7 +306,7 @@ function emitUsage(onUsage: ChatCompletionUsageSink | undefined, usage: ChatComp
 }
 
 async function persistRuntimeUsage(
-  config: ChatCompletionProviderConfig,
+  config: HttpChatCompletionProviderConfig,
   usage: ChatCompletionUsage | undefined,
   usageLogPath: string | false | undefined
 ): Promise<void> {
@@ -383,4 +408,10 @@ function optionalNumber(value: unknown): number | undefined {
   }
 
   return undefined;
+}
+
+function serializeChatMessages(messages: ChatMessage[]): string {
+  return messages
+    .map((message) => `[${message.role}]\n${message.content}`)
+    .join("\n\n");
 }

@@ -1,14 +1,24 @@
 import type { ModelTextTransport } from "./modelTextTransport";
 
-export interface CompletionProviderConfig {
+export interface HttpCompletionProviderConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
   mode?: string;
-  format?: "openai-completions" | "openai-chat" | "anthropic-messages" | "codex-app-server";
+  authMode?: "api-key";
+  format?: "openai-completions" | "openai-chat" | "anthropic-messages";
   anthropicVersion?: string;
-  transport?: ModelTextTransport;
 }
+
+export interface CodexCompletionProviderConfig {
+  model: string;
+  mode?: "openai";
+  authMode: "codex-oauth";
+  format: "codex-app-server";
+  transport: ModelTextTransport;
+}
+
+export type CompletionProviderConfig = HttpCompletionProviderConfig | CodexCompletionProviderConfig;
 
 export interface CompletionRequest {
   prompt: string;
@@ -16,6 +26,8 @@ export interface CompletionRequest {
   maxTokens: number;
   temperature: number;
   stop?: string[];
+  timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 interface CompletionResponse {
@@ -69,6 +81,17 @@ export async function requestCompletion(
   request: CompletionRequest,
   fetchImpl: typeof fetch = fetch
 ): Promise<string> {
+  if (config.format === "codex-app-server") {
+    return config.transport.generate({
+      purpose: "autocomplete",
+      model: config.model,
+      prompt: serializeCompletionPrompt(request),
+      maxOutputTokens: request.maxTokens,
+      temperature: request.temperature,
+      timeoutMs: request.timeoutMs ?? 5_000,
+      signal: request.signal
+    });
+  }
   if (config.format === "openai-chat") {
     return requestChatCompletion(config, request, fetchImpl);
   }
@@ -108,7 +131,7 @@ export async function requestCompletion(
 }
 
 async function requestChatCompletion(
-  config: CompletionProviderConfig,
+  config: HttpCompletionProviderConfig,
   request: CompletionRequest,
   fetchImpl: typeof fetch
 ): Promise<string> {
@@ -151,7 +174,7 @@ async function requestChatCompletion(
 }
 
 async function requestAnthropicCompletion(
-  config: CompletionProviderConfig,
+  config: HttpCompletionProviderConfig,
   request: CompletionRequest,
   fetchImpl: typeof fetch
 ): Promise<string> {
@@ -194,7 +217,7 @@ async function fetchJson<T>(
   endpoint: string,
   init: RequestInit,
   fetchImpl: typeof fetch,
-  context: { operation: string; endpoint: string; config: CompletionProviderConfig }
+  context: { operation: string; endpoint: string; config: HttpCompletionProviderConfig }
 ): Promise<JsonResponse<T>> {
   let response: Response;
   try {
@@ -234,7 +257,7 @@ function errorFromPayload(payload: unknown): string | undefined {
   return typeof error?.message === "string" ? error.message : undefined;
 }
 
-function requestContext(context: { endpoint: string; config: CompletionProviderConfig }): string {
+function requestContext(context: { endpoint: string; config: HttpCompletionProviderConfig }): string {
   return `endpoint=${context.endpoint}; model=${context.config.model}; format=${context.config.format ?? "openai-completions"}`;
 }
 
@@ -247,7 +270,7 @@ function previewText(text: string): string | undefined {
   return preview || undefined;
 }
 
-function modelHint(config: CompletionProviderConfig, status: number): string {
+function modelHint(config: HttpCompletionProviderConfig, status: number): string {
   if (
     status === 400 &&
     sanitizeBaseUrl(config.baseUrl).includes("api.deepseek.com") &&
@@ -277,7 +300,7 @@ function sanitizeBaseUrl(baseUrl: string): string {
   }
 }
 
-function shouldSendFimSuffix(config: CompletionProviderConfig, request: CompletionRequest): boolean {
+function shouldSendFimSuffix(config: HttpCompletionProviderConfig, request: CompletionRequest): boolean {
   return Boolean(
     request.suffix &&
       config.format !== "openai-chat" &&
@@ -293,4 +316,11 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
   }
 
   return value as Record<string, unknown>;
+}
+
+function serializeCompletionPrompt(request: CompletionRequest): string {
+  if (request.suffix === undefined) {
+    return request.prompt;
+  }
+  return `${request.prompt}\n\n<suffix>\n${request.suffix}\n</suffix>`;
 }
