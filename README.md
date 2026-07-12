@@ -30,6 +30,7 @@ This repository is prepared as an MIT-licensed open-source beta candidate. Publi
 - `docs/requirements.md`: product requirements and guardrails.
 - `docs/codex-start-prompt.md`: prompt to give Codex for the first build attempt.
 - `docs/beta-v2-final-goals.md`: final beta target, including Student Skill distillation requirements.
+- `docs/superpowers/specs/2026-07-12-oj-submission-design.md`: approved hybrid architecture for user-confirmed real OJ submission and interactive login.
 - `docs/large-scale-growth-simulation.md`: costed plan for the 200-problem / 1000-code growth simulation.
 - `docs/open-source-release.md`: release notes, open-source scope, model rationale, and package command.
 - `docs/release-lanes.md`: three VSIX lanes: beta, clean beta release, and private internal test.
@@ -53,6 +54,8 @@ It starts with:
 8. Safe autocomplete prompt/filter modules that do not include problem statements.
 
 LeetCode support is planned as an adapter. Until a stable GraphQL path is wired, LeetCode problems should use the manual Markdown-file import path.
+
+Real OJ submission is designed but not implemented in the current beta. The approved design uses explicit confirmation, per-platform adapters, delegated CLI support where practical, and human-operated verification without browser-cookie scraping or CAPTCHA bypass.
 
 ## Development
 

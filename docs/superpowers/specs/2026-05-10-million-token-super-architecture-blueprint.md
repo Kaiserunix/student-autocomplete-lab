@@ -107,6 +107,7 @@ This matrix answers the question "were the current reference documents actually 
 | [problem-search-mcp.md](../../problem-search-mcp.md) | stdio MCP problem discovery, tools, client config, scope | drove public-ish MCP tool boundaries and the rule that npm lifecycle output must not corrupt MCP JSON-RPC |
 | [ai-problem-writing-standard.md](../../ai-problem-writing-standard.md) | manual Markdown problem authoring format | drove Problem Intake v2: Markdown import is the reliable path and synthetic/manual problems must use a parseable schema |
 | [codex-start-prompt.md](../../codex-start-prompt.md) | project handoff/start prompt | informs maintainer workflow only; not a runtime product feature |
+| [2026-07-12-oj-submission-design.md](2026-07-12-oj-submission-design.md) | user-confirmed real OJ submission, interactive login, adapter isolation, official verdict flow | adds a future hybrid submission boundary without weakening the algorithm-coach, CAPTCHA, privacy, or contest-safety rules |
 | [open-source docs and release notes as a set](../../open-source-release.md) | repo-public vs local-private boundary | reinforces the security/privacy and release hygiene architecture |
 
 Coverage gap after this revision: there is still no executable architecture validator that checks the blueprint against code structure. Add that later as a docs/architecture lint or dependency-boundary test.
@@ -1298,9 +1299,7 @@ If we start implementing after this design, do these first:
 2. **AttemptSession seam**: add persistent session storage and route follow-up through it.
 3. **TeachingWorkflow seam**: move hint/follow-up/abandon/complete orchestration out of `ProblemBankViewProvider`.
 
-Single-goal execution guide for the beta 0.2 refactor: [2026-05-10-single-goal-beta-0.2-execution-plan.md](../plans/2026-05-10-single-goal-beta-0.2-execution-plan.md).
-
-Narrow first-epic guide, kept as a reference if the executor decides to split only after hitting a stop condition: [2026-05-10-next-goal-full-scale-execution-guide.md](../plans/2026-05-10-next-goal-full-scale-execution-guide.md).
+These three moves landed in the May 2026 beta 0.2 refactor. Their completed step-by-step execution plans were removed in the July 2026 documentation cleanup; the durable architecture remains in this blueprint and the source tree.
 
 Do not start with:
 
@@ -1340,10 +1339,11 @@ This checklist is the guard against "big document, incomplete architecture".
 | Governance rules | yes | Section 19 |
 | Debt register | yes | Section 20 |
 | Immediate execution order | yes | Section 22 |
+| User-confirmed real OJ submission | yes | Separate July 2026 adapter and interactive-login design |
 
 Remaining intentional non-coverage:
 
 - no React/Vite component architecture yet, because UI framework choice should wait until the domain core and typed protocol exist;
 - no cloud sync architecture, because beta 0.2 is local-first;
-- no automatic official OJ submission architecture, because it remains a non-goal;
+- no unattended official OJ submission; user-confirmed real submission is specified separately and remains unimplemented until its adapter, login, trust, and one-submit safety gates pass;
 - no neural knowledge-tracing training plan, because current real user data is insufficient.

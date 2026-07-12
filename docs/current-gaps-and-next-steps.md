@@ -1,6 +1,6 @@
 # Current Gaps And Next Steps
 
-Date: 2026-05-20
+Date: 2026-07-12
 
 Status: internal project note after the DeepSeek autocomplete and Luogu training import repair. This is not a public release note.
 
@@ -17,6 +17,7 @@ Status: internal project note after the DeepSeek autocomplete and Luogu training
 
 ### Product And UI
 
+- Real OJ submission is not implemented. The approved hybrid design uses explicit confirmation, delegated CLI adapters where practical, experimental native adapters for Luogu and LeetCode, and human-operated graphical verification. See [superpowers/specs/2026-07-12-oj-submission-design.md](superpowers/specs/2026-07-12-oj-submission-design.md).
 - UI quality still depends too much on manual screenshots. There is no automated screenshot comparison or real VS Code webview interaction gate.
 - The AI coach page is usable, but the information hierarchy still needs polish: current problem, session state, model state, and next action should be impossible to miss.
 - Some historical entry points and command-palette commands still carry old naming such as `mimo` even when the active provider is DeepSeek or another OpenAI-compatible provider.
@@ -67,6 +68,7 @@ Status: internal project note after the DeepSeek autocomplete and Luogu training
 
 ### Near-Term Stabilization
 
+- Keep real OJ submission in Phase 0 design/probe until authenticated dedicated-account testing proves login continuity and one-submit safety; do not ship the Playwright probe as production code.
 - Rename legacy `mimo` CLI/runtime labels to neutral `ai` or `openai-compatible` labels.
 - Add a visible provider health check: model list, chat smoke test, FIM smoke test, and clear endpoint/key/model errors.
 - Add per-role API key support for OpenAI-compatible analysis and autocomplete.
