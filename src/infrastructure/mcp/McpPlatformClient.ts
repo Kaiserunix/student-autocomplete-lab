@@ -92,9 +92,10 @@ export class McpPlatformClient {
   }
 
   private async connectAndVerify(signal?: AbortSignal): Promise<void> {
-    const connection = this.options.connectionFactory.create(this.entrypoint);
-    this.connection = connection;
+    let connection: McpClientConnection | undefined;
     try {
+      connection = this.options.connectionFactory.create(this.entrypoint);
+      this.connection = connection;
       await connection.connect(signal);
       const tools = await connection.listTools(signal);
       this.verifyTools(tools);
@@ -109,8 +110,8 @@ export class McpPlatformClient {
       });
       this.currentState = "ready";
     } catch (error) {
-      await connection.close().catch(() => undefined);
-      if (this.connection === connection) {
+      await connection?.close().catch(() => undefined);
+      if (connection && this.connection === connection) {
         this.connection = undefined;
       }
       if (this.currentState !== "quarantined" && this.currentState !== "closed") {

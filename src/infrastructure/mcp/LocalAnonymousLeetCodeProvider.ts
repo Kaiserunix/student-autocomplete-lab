@@ -19,6 +19,7 @@ export interface LocalAnonymousLeetCodeRegistration {
 
 export interface LocalAnonymousLeetCodeAdmissionOptions {
   providerRoot: string;
+  trustedRuntimePaths?: string[];
   readArtifact?: (filePath: string) => Promise<Uint8Array>;
   resolveRealPath?: (filePath: string) => Promise<string>;
 }
@@ -50,14 +51,26 @@ async function verifyPinnedEntrypoint(
   const entrypoint = manifest.entrypoints[0];
   const launchTarget = entrypoint.args?.[0] ?? entrypoint.command!;
   const resolvePath = options.resolveRealPath ?? realpath;
-  const [resolvedInstallRoot, resolvedTarget] = await Promise.all([resolvePath(installRoot), resolvePath(launchTarget)]);
+  const [resolvedInstallRoot, resolvedTarget, resolvedCommand, resolvedTrustedRuntimes] = await Promise.all([
+    resolvePath(installRoot),
+    resolvePath(launchTarget),
+    resolvePath(entrypoint.command!),
+    Promise.all((options.trustedRuntimePaths ?? [process.execPath]).map((runtime) => resolvePath(runtime)))
+  ]);
   assertPathInside(resolvedInstallRoot, resolvedTarget, "Provider launch target");
+  if ((entrypoint.args?.length ?? 0) > 0 && !resolvedTrustedRuntimes.some((runtime) => samePath(runtime, resolvedCommand))) {
+    throw new Error("The local anonymous LeetCode script must use an extension-approved runtime executable.");
+  }
 
   const bytes = await (options.readArtifact ?? readFile)(resolvedTarget);
   const actualSha256 = createHash("sha256").update(bytes).digest("hex");
   if (actualSha256.toLowerCase() !== manifest.artifacts.active.filesSha256.toLowerCase()) {
     throw new Error("The local anonymous LeetCode entrypoint hash does not match the pinned active artifact.");
   }
+}
+
+function samePath(left: string, right: string): boolean {
+  return process.platform === "win32" ? left.toLowerCase() === right.toLowerCase() : left === right;
 }
 
 function assertPathInside(root: string, candidate: string, label: string): void {

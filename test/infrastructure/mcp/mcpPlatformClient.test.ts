@@ -97,6 +97,22 @@ describe("McpPlatformClient", () => {
     expect(client.state).toBe("ready");
   });
 
+  test("resets startup when the connection factory throws before creating a process", async () => {
+    const recovered = new FakeConnection(fixtureTools, { structuredContent: {} });
+    const factory = new ThrowOnceFactory(recovered);
+    const client = new McpPlatformClient({
+      manifest: createFixtureManifest(),
+      entrypointId: "agentReadOnly",
+      connectionFactory: factory
+    });
+
+    await expect(client.start()).rejects.toThrow("create failed");
+    await client.start();
+
+    expect(factory.createCount).toBe(2);
+    expect(client.state).toBe("ready");
+  });
+
   test("quarantines an already connected provider after tools/list_changed drift", async () => {
     const connection = new FakeConnection(fixtureTools, { structuredContent: {} });
     const client = new McpPlatformClient({
@@ -165,5 +181,19 @@ class QueueFactory implements McpConnectionFactory {
       throw new Error("No fake MCP connection remains.");
     }
     return connection;
+  }
+}
+
+class ThrowOnceFactory implements McpConnectionFactory {
+  createCount = 0;
+
+  constructor(private readonly recovered: McpClientConnection) {}
+
+  create(): McpClientConnection {
+    this.createCount += 1;
+    if (this.createCount === 1) {
+      throw new Error("create failed");
+    }
+    return this.recovered;
   }
 }

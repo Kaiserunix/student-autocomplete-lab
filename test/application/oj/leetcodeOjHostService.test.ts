@@ -19,6 +19,7 @@ import {
 
 const admissionOptions = {
   providerRoot: leetcodeProviderRoot,
+  trustedRuntimePaths: [process.execPath],
   readArtifact: async () => leetcodeArtifactBytes,
   resolveRealPath: async (filePath: string) => filePath
 };

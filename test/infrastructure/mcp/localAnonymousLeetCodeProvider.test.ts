@@ -15,6 +15,7 @@ import {
 
 const admissionOptions = {
   providerRoot: leetcodeProviderRoot,
+  trustedRuntimePaths: [process.execPath],
   readArtifact: async () => leetcodeArtifactBytes,
   resolveRealPath: async (filePath: string) => filePath
 };
@@ -68,6 +69,16 @@ describe("local anonymous LeetCode provider admission", () => {
 
     await expect(admitLocalAnonymousLeetCodeProvider(registry, escaped, admissionOptions)).rejects.toThrow(/trusted provider root/i);
     await expect(admitLocalAnonymousLeetCodeProvider(registry, mismatched, admissionOptions)).rejects.toThrow(/hash/i);
+  });
+
+  test("rejects an unapproved runtime even when the pinned script is valid", async () => {
+    const registry = new ProviderRegistry(new CapturingFactory(new FakeConnection(leetcodeTools, { structuredContent: {} })));
+    const manifest = createLeetcodeManifest();
+    manifest.entrypoints[0].command = path.resolve("outside-runtime", "node.exe");
+
+    await expect(admitLocalAnonymousLeetCodeProvider(registry, manifest, admissionOptions)).rejects.toThrow(
+      /approved runtime/i
+    );
   });
 
   test("quarantines tools whose schemas differ from the injected manifest hashes", async () => {
