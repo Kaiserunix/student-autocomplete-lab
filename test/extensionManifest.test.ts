@@ -70,6 +70,8 @@ describe("VS Code extension manifest", () => {
 
     expect(properties).toHaveProperty("studentAutocomplete.ai.providerMode");
     expect(properties).toHaveProperty("studentAutocomplete.ai.openai.baseUrl");
+    expect(properties).toHaveProperty("studentAutocomplete.ai.openai.authMode");
+    expect(properties).toHaveProperty("studentAutocomplete.ai.codex.executablePath");
     expect(properties).toHaveProperty("studentAutocomplete.ai.openai.chatModel");
     expect(properties).toHaveProperty("studentAutocomplete.ai.openaiCompatible.autocompleteFormat");
     expect(properties).toHaveProperty("studentAutocomplete.ai.anthropic.chatModel");

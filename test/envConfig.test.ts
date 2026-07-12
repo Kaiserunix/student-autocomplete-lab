@@ -96,6 +96,7 @@ AI_OPENAI_AUTOCOMPLETE_MODEL=gpt-4.1-mini
       format: "openai-chat",
       model: "gpt-4.1-mini"
     });
+    expect(buildAiConfigView(env).authMode).toBe("api-key");
   });
 
   test("builds OpenAI-compatible config with a legacy completions autocomplete path", () => {
@@ -277,6 +278,30 @@ MIMO_AUTOCOMPLETE_MODEL=mimo-v2.5
       model: "gpt-test-autocomplete"
     });
     expect(JSON.stringify(buildAiConfigView(env))).not.toContain("secret-storage-openai");
+  });
+
+  test("keeps Codex OAuth settings without requiring an OpenAI API key", () => {
+    const env = modelEnvFromSettings(
+      {},
+      {
+        providerMode: "openai",
+        openai: {
+          authMode: "codex-oauth",
+          chatModel: "gpt-5.6-terra",
+          autocompleteModel: "gpt-5.3-codex-spark"
+        }
+      },
+      {}
+    );
+
+    expect(env.AI_OPENAI_AUTH_MODE).toBe("codex-oauth");
+    expect(buildAiConfigView(env)).toMatchObject({
+      mode: "openai",
+      authMode: "codex-oauth",
+      hasApiKey: false,
+      chatModel: "gpt-5.6-terra",
+      autocompleteModel: "gpt-5.3-codex-spark"
+    });
   });
 
   test("keeps legacy env as fallback when settings are empty", () => {

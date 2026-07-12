@@ -76,6 +76,20 @@
           "default": "https://api.openai.com/v1",
           "description": "OpenAI 官方 API Base URL。"
         },
+        "studentAutocomplete.ai.openai.authMode": {
+          "type": "string",
+          "enum": [
+            "api-key",
+            "codex-oauth"
+          ],
+          "default": "api-key",
+          "description": "OpenAI 认证方式：API Key 或 Codex OAuth。"
+        },
+        "studentAutocomplete.ai.codex.executablePath": {
+          "type": "string",
+          "default": "codex",
+          "description": "Codex OAuth 路线使用的 Codex CLI 可执行文件路径。"
+        },
         "studentAutocomplete.ai.openai.apiKey": {
           "type": "string",
           "default": "",

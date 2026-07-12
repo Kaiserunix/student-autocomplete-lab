@@ -11,7 +11,8 @@ import {
   type AiSecretSnapshot,
   type AiSettingsSnapshot,
   type AutocompleteFormat,
-  type ModelEnv
+  type ModelEnv,
+  type OpenAiAuthMode
 } from "./modelEnv";
 
 const settingSection = "studentAutocomplete.ai";
@@ -48,6 +49,7 @@ export async function saveAiConfigToVsCode(
   await configuration.update("providerMode", update.mode, target);
   if (update.mode === "openai") {
     await updateProviderSettings(configuration, target, "openai", update);
+    await configuration.update("openai.authMode", update.authMode ?? "api-key", target);
     await storeSecretIfProvided(context.secrets, secretKeys.openai, update.apiKey);
   } else if (update.mode === "anthropic-native") {
     await updateProviderSettings(configuration, target, "anthropic", update);
@@ -75,6 +77,10 @@ function readConfiguredAiSettings(): AiSettingsSnapshot {
 
 function readProviderSettings(configuration: vscode.WorkspaceConfiguration, prefix: string): AiProviderSettings | undefined {
   const settings: AiProviderSettings = {
+    authMode:
+      prefix === "openai"
+        ? configuredEnum<OpenAiAuthMode>(configuration, `${prefix}.authMode`, ["api-key", "codex-oauth"])
+        : undefined,
     baseUrl: configuredString(configuration, `${prefix}.baseUrl`),
     autocompleteBaseUrl: configuredString(configuration, `${prefix}.autocompleteBaseUrl`),
     apiKey: configuredString(configuration, `${prefix}.apiKey`),

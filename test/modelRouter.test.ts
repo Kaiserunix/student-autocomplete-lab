@@ -1,5 +1,6 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { routeAutocompleteModel, routeTeachingModel } from "../src/models/modelRouter";
+import type { ModelTextTransport } from "../src/models/modelTextTransport";
 
 describe("model router", () => {
   test("routes OpenAI-compatible teaching and autocomplete models independently", () => {
@@ -69,6 +70,35 @@ describe("model router", () => {
       model: "claude-fast",
       endpoint: "https://api.anthropic.com/v1/messages",
       format: "anthropic-messages"
+    });
+  });
+
+  test("routes Codex OAuth teaching and autocomplete through the injected app-server transport", () => {
+    const transport: ModelTextTransport = {
+      generate: vi.fn(async () => "ok")
+    };
+    const env = {
+      AI_PROVIDER_MODE: "openai",
+      AI_OPENAI_AUTH_MODE: "codex-oauth",
+      AI_OPENAI_CHAT_MODEL: "gpt-5.6-terra",
+      AI_OPENAI_AUTOCOMPLETE_MODEL: "gpt-5.3-codex-spark"
+    };
+
+    expect(routeTeachingModel(env, transport)).toMatchObject({
+      purpose: "analysis",
+      providerMode: "openai",
+      authMode: "codex-oauth",
+      format: "codex-app-server",
+      model: "gpt-5.6-terra",
+      config: { transport }
+    });
+    expect(routeAutocompleteModel(env, transport)).toMatchObject({
+      purpose: "autocomplete",
+      providerMode: "openai",
+      authMode: "codex-oauth",
+      format: "codex-app-server",
+      model: "gpt-5.3-codex-spark",
+      config: { transport }
     });
   });
 });

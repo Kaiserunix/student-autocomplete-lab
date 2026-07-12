@@ -1,13 +1,15 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import * as path from "node:path";
+import type { ModelTextTransport } from "./modelTextTransport";
 
 export interface ChatCompletionProviderConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
   mode?: string;
-  format?: "openai-chat" | "anthropic-messages";
+  format?: "openai-chat" | "anthropic-messages" | "codex-app-server";
   anthropicVersion?: string;
+  transport?: ModelTextTransport;
 }
 
 export interface ChatMessage {

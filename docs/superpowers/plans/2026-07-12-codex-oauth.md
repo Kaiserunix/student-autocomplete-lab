@@ -83,7 +83,7 @@ Existing regression tests to extend:
 - Test: `test/modelRouter.test.ts`
 - Test: `test/extensionManifest.test.ts`
 
-- [ ] **Step 1: Write failing configuration tests**
+- [x] **Step 1: Write failing configuration tests**
 
 Add tests proving that the default remains API key and OAuth survives settings
 round-trips:
@@ -145,7 +145,7 @@ expect(routeAutocompleteModel(oauthEnv, transport)).toMatchObject({
 });
 ```
 
-- [ ] **Step 2: Run the focused tests and confirm RED**
+- [x] **Step 2: Run the focused tests and confirm RED**
 
 Run:
 
@@ -156,7 +156,7 @@ npm test -- --run test/envConfig.test.ts test/modelRouter.test.ts test/extension
 Expected: failure because `authMode`, `ModelTextTransport`, and
 `codex-app-server` do not exist.
 
-- [ ] **Step 3: Add the configuration and route types**
+- [x] **Step 3: Add the configuration and route types**
 
 Introduce:
 
@@ -200,13 +200,13 @@ and the manifest setting:
 is selected without a transport. HTTP routes keep their current endpoints and
 config objects.
 
-- [ ] **Step 4: Run the focused tests and confirm GREEN**
+- [x] **Step 4: Run the focused tests and confirm GREEN**
 
 Run the Task 1 command again.
 
 Expected: all selected tests pass.
 
-- [ ] **Step 5: Commit Task 1**
+- [x] **Step 5: Commit Task 1**
 
 ```powershell
 git add package.json src/config/modelEnv.ts src/config/vscodeModelEnv.ts src/models/providerContracts.ts src/models/modelRouter.ts src/models/modelTextTransport.ts test/envConfig.test.ts test/modelRouter.test.ts test/extensionManifest.test.ts

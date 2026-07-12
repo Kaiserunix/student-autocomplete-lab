@@ -1,10 +1,13 @@
+import type { ModelTextTransport } from "./modelTextTransport";
+
 export interface CompletionProviderConfig {
   baseUrl: string;
   apiKey: string;
   model: string;
   mode?: string;
-  format?: "openai-completions" | "openai-chat" | "anthropic-messages";
+  format?: "openai-completions" | "openai-chat" | "anthropic-messages" | "codex-app-server";
   anthropicVersion?: string;
+  transport?: ModelTextTransport;
 }
 
 export interface CompletionRequest {

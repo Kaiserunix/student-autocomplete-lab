@@ -3,12 +3,14 @@ import type { CompletionProviderConfig } from "../models/completionsClient";
 import type { ChatCompletionProviderConfig } from "../models/chatCompletionsClient";
 
 export type AiProviderMode = "openai" | "openai-compatible" | "anthropic-native";
+export type OpenAiAuthMode = "api-key" | "codex-oauth";
 export type AutocompleteFormat = "openai-completions" | "openai-chat" | "anthropic-messages";
 
 export interface ModelEnv {
   [key: string]: string | undefined;
   AI_PROVIDER_MODE?: string;
   AI_OPENAI_BASE_URL?: string;
+  AI_OPENAI_AUTH_MODE?: string;
   AI_OPENAI_API_KEY?: string;
   AI_OPENAI_CHAT_MODEL?: string;
   AI_OPENAI_AUTOCOMPLETE_MODEL?: string;
@@ -33,6 +35,7 @@ export interface ModelEnv {
 
 export interface AiProviderConfigUpdate {
   mode: AiProviderMode;
+  authMode?: OpenAiAuthMode;
   baseUrl: string;
   autocompleteBaseUrl?: string;
   apiKey?: string;
@@ -42,6 +45,7 @@ export interface AiProviderConfigUpdate {
 }
 
 export interface AiProviderSettings {
+  authMode?: OpenAiAuthMode;
   baseUrl?: string;
   autocompleteBaseUrl?: string;
   apiKey?: string;
@@ -65,6 +69,7 @@ export interface AiSecretSnapshot {
 
 export interface AiConfigView {
   mode: AiProviderMode;
+  authMode: OpenAiAuthMode;
   baseUrl: string;
   autocompleteBaseUrl: string;
   hasApiKey: boolean;
@@ -212,7 +217,7 @@ export function requireMimoAutocompleteConfig(env: ModelEnv): {
   apiKey: string;
   model: string;
   mode?: string;
-  format?: "openai-completions" | "openai-chat" | "anthropic-messages";
+  format?: "openai-completions" | "openai-chat" | "anthropic-messages" | "codex-app-server";
   anthropicVersion?: string;
 } {
   return requireAutocompleteConfig(env);
@@ -223,7 +228,7 @@ export function requireMimoTeachingConfig(env: ModelEnv): {
   apiKey: string;
   model: string;
   mode?: string;
-  format?: "openai-chat" | "anthropic-messages";
+  format?: "openai-chat" | "anthropic-messages" | "codex-app-server";
   anthropicVersion?: string;
 } {
   return requireTeachingConfig(env);
@@ -249,6 +254,7 @@ export function buildAiConfigView(env: ModelEnv): AiConfigView {
   if (mode === "openai") {
     return {
       mode,
+      authMode: normalizeOpenAiAuthMode(env.AI_OPENAI_AUTH_MODE),
       baseUrl: env.AI_OPENAI_BASE_URL || "https://api.openai.com/v1",
       autocompleteBaseUrl: "",
       hasApiKey: Boolean(env.AI_OPENAI_API_KEY),
@@ -262,6 +268,7 @@ export function buildAiConfigView(env: ModelEnv): AiConfigView {
   if (mode === "anthropic-native") {
     return {
       mode,
+      authMode: "api-key",
       baseUrl: env.AI_ANTHROPIC_BASE_URL || "https://api.anthropic.com/v1",
       autocompleteBaseUrl: "",
       hasApiKey: Boolean(env.AI_ANTHROPIC_API_KEY),
@@ -278,6 +285,7 @@ export function buildAiConfigView(env: ModelEnv): AiConfigView {
 
   return {
     mode: "openai-compatible",
+    authMode: "api-key",
     baseUrl,
     autocompleteBaseUrl,
     hasApiKey: Boolean(apiKey),
@@ -293,6 +301,7 @@ export function applyAiConfigUpdateToEnvText(existingText: string, update: AiPro
   env.AI_PROVIDER_MODE = update.mode;
 
   if (update.mode === "openai") {
+    env.AI_OPENAI_AUTH_MODE = normalizeOpenAiAuthMode(update.authMode);
     env.AI_OPENAI_BASE_URL = update.baseUrl || "https://api.openai.com/v1";
     if (update.apiKey?.trim()) {
       env.AI_OPENAI_API_KEY = update.apiKey.trim();
@@ -340,6 +349,9 @@ function applyOpenAiSettings(env: ModelEnv, settings: AiProviderSettings | undef
     return;
   }
 
+  if (settings?.authMode) {
+    env.AI_OPENAI_AUTH_MODE = normalizeOpenAiAuthMode(settings.authMode);
+  }
   if (settings?.baseUrl?.trim()) {
     env.AI_OPENAI_BASE_URL = settings.baseUrl.trim();
   }
@@ -415,6 +427,10 @@ function normalizeAutocompleteFormat(value: string | undefined, fallback: Autoco
   }
 
   return fallback;
+}
+
+function normalizeOpenAiAuthMode(value: string | undefined): OpenAiAuthMode {
+  return value === "codex-oauth" ? "codex-oauth" : "api-key";
 }
 
 function requireValue(value: string | undefined, message: string): string {
