@@ -4116,6 +4116,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       const preview = data.preview || {};
       const target = preview.target || {};
       const editor = preview.editor || {};
+      coachOjVerdict.value = "UNKNOWN";
+      state.ojVerdict = "UNKNOWN";
       ojSubmissionStatus.innerHTML = "";
       ojSubmissionStatus.appendChild(textSpan("提交前确认", "aiResponseTitle"));
       ojSubmissionStatus.appendChild(responseBlock("目标", [

@@ -186,6 +186,8 @@ describe("problem bank webview script", () => {
     expect(source).toContain("renderOjSubmissionPreview(data)");
     expect(source).toContain("renderOjSubmissionResult(data)");
     expect(source).toContain("confirmButton.remove()");
+    expect(source).toContain('coachOjVerdict.value = "UNKNOWN";');
+    expect(source).toContain('state.ojVerdict = "UNKNOWN";');
     expect(source).toContain('data.type === "ojSubmissionPreview"');
     expect(source).toContain('data.type === "ojSubmissionResult"');
   });
