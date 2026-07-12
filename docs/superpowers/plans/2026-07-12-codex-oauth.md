@@ -361,7 +361,7 @@ git commit -m "feat: add Codex app-server JSON-RPC client"
 - Create: `src/codex/codexAuthService.ts`
 - Create: `test/codexAuthService.test.ts`
 
-- [ ] **Step 1: Write the signed-out/signed-in tracer test**
+- [x] **Step 1: Write the signed-out/signed-in tracer test**
 
 Use a fake request client and verify account normalization:
 
@@ -381,7 +381,7 @@ await expect(service.refresh()).resolves.toEqual({
 });
 ```
 
-- [ ] **Step 2: Run the auth test and confirm RED**
+- [x] **Step 2: Run the auth test and confirm RED**
 
 ```powershell
 npm test -- --run test/codexAuthService.test.ts
@@ -389,7 +389,7 @@ npm test -- --run test/codexAuthService.test.ts
 
 Expected: import failure.
 
-- [ ] **Step 3: Implement refresh and public state subscription**
+- [x] **Step 3: Implement refresh and public state subscription**
 
 Expose:
 
@@ -401,7 +401,7 @@ onDidChange(listener: (state: CodexAuthState) => void): Disposable;
 
 Normalize only `email` and `planType`. Never spread upstream account objects.
 
-- [ ] **Step 4: Add browser and device-code login tests**
+- [x] **Step 4: Add browser and device-code login tests**
 
 ```ts
 await expect(service.startBrowserLogin()).resolves.toMatchObject({
@@ -428,7 +428,7 @@ The browser request parameters must be:
 }
 ```
 
-- [ ] **Step 5: Implement login, completion notification, cancellation, and logout**
+- [x] **Step 5: Implement login, completion notification, cancellation, and logout**
 
 Expose:
 
@@ -444,12 +444,12 @@ dispose(): void;
 on failure. `account/updated` with `authMode: null` becomes signed out. Logout
 never deletes or reads credential files directly.
 
-- [ ] **Step 6: Add sensitive-field and invalid-payload tests**
+- [x] **Step 6: Add sensitive-field and invalid-payload tests**
 
 Prove serialized public state does not contain `accessToken`, `refreshToken`,
 `cookie`, or `authUrl` after sign-in.
 
-- [ ] **Step 7: Run auth tests and compile**
+- [x] **Step 7: Run auth tests and compile**
 
 ```powershell
 npm test -- --run test/codexAuthService.test.ts
@@ -458,7 +458,7 @@ npm run compile
 
 Expected: pass.
 
-- [ ] **Step 8: Commit Task 3**
+- [x] **Step 8: Commit Task 3**
 
 ```powershell
 git add src/codex/codexAuthService.ts test/codexAuthService.test.ts
