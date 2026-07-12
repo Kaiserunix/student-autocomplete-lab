@@ -152,6 +152,25 @@ describe("problem bank webview script", () => {
     expect(source).not.toContain('command: "requestSolutionScore",\n        problemKey: keyOf(problem),\n        studentRequest: coachQuestion.value.trim(),\n        ojVerdict: {\n          status: "AC"\n        }');
   });
 
+  test("connects a trusted one-time Codeforces submission host flow", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain('message.command === "requestOjLogin"');
+    expect(source).toContain('message.command === "requestOjSubmissionPreview"');
+    expect(source).toContain('message.command === "confirmOjSubmission"');
+    expect(source).toContain("vscode.workspace.isTrusted");
+    expect(source).toContain("SubmissionConfirmationStore");
+    expect(source).toContain("editor.document.save()");
+    expect(source).toContain("parseCodeforcesProblemUrl");
+    expect(source).toContain("checkOnlineJudgeTools");
+    expect(source).toContain("submitWithOnlineJudgeTools");
+    expect(source).toContain("pollCodeforcesVerdict");
+    expect(source).toContain('type: "ojSubmissionPreview"');
+    expect(source).toContain('type: "ojSubmissionResult"');
+    expect(source).not.toContain("result.stdout");
+    expect(source).not.toContain("result.stderr");
+  });
+
   test("shows context boundary audits for AI diagnosis and autocomplete preview", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 

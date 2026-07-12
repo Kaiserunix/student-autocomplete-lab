@@ -34,6 +34,11 @@ import { searchLuoguProblems, searchLuoguProblemSets } from "../problemBank/luog
 import type { ProblemRecord, ProblemSetRecord } from "../problemBank/types";
 import { appendJsonlRecord, readJsonlRecords, writeJsonlRecords } from "../storage/jsonlStore";
 import { createStudentAutocompleteStoragePaths, type StudentAutocompleteStoragePaths } from "../storage/StoragePaths";
+import { parseCodeforcesProblemUrl } from "../submission/codeforcesTarget";
+import { pollCodeforcesVerdict } from "../submission/codeforcesVerdict";
+import { SubmissionConfirmationStore } from "../submission/confirmationStore";
+import { checkOnlineJudgeTools, submitWithOnlineJudgeTools } from "../submission/onlineJudgeTools";
+import type { EditorSubmissionIdentity, OjSubmissionResult } from "../submission/types";
 import { buildAttemptEvent, summarizeAttemptEvents, type AttemptEvent } from "../teaching/attemptEvent";
 import { requestMimoCoachFollowUp } from "../teaching/coachFollowUp";
 import { requestMimoLessonReport } from "../teaching/lessonReport";
@@ -128,6 +133,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
   private readonly internalRecorder: InternalTestRecorder;
   private readonly storagePaths: StudentAutocompleteStoragePaths;
+  private readonly submissionConfirmations = new SubmissionConfirmationStore();
 
   public constructor(private readonly context: vscode.ExtensionContext) {
     this.storagePaths = createStudentAutocompleteStoragePaths(context.globalStorageUri.fsPath);
@@ -295,6 +301,22 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     if (message.command === "requestAutocompletePreview") {
       return this.handleAutocompletePreview();
+    }
+
+    if (message.command === "requestOjLogin") {
+      return this.handleOjLoginRequest();
+    }
+
+    if (message.command === "requestOjSubmissionPreview") {
+      return this.handleOjSubmissionPreviewRequest(
+        message.problemKey,
+        message.problemUrl,
+        message.codeforcesHandle
+      );
+    }
+
+    if (message.command === "confirmOjSubmission") {
+      return this.handleOjSubmissionConfirmation(message.confirmationId);
     }
 
     if (message.command === "copyInternalTestSummary") {
@@ -1518,6 +1540,181 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       status: suggestion.trim()
         ? "AI 已生成一次补全预览。"
         : "AI 补全接口已调用，但这次返回为空。换到有上下文的代码行再试。"
+    };
+  }
+
+  private async handleOjLoginRequest(): Promise<Record<string, unknown>> {
+    this.requireTrustedWorkspaceForSubmission();
+    const availability = await checkOnlineJudgeTools();
+    if (!availability.available) {
+      throw new Error(availability.message);
+    }
+
+    const terminal = vscode.window.createTerminal({ name: "OJ 登录" });
+    terminal.sendText("oj login https://codeforces.com/", true);
+    terminal.show();
+    return {
+      type: "status",
+      text: "已打开 OJ 登录终端；请按提示亲自完成 Codeforces 登录和图形验证。"
+    };
+  }
+
+  private async handleOjSubmissionPreviewRequest(
+    problemKey: string,
+    problemUrl: string,
+    codeforcesHandle?: string
+  ): Promise<Record<string, unknown>> {
+    this.requireTrustedWorkspaceForSubmission();
+    await this.requireKnownProblem(problemKey);
+    const target = parseCodeforcesProblemUrl(problemUrl);
+    const handle = normalizeOptionalCodeforcesHandle(codeforcesHandle);
+    const availability = await checkOnlineJudgeTools();
+    if (!availability.available) {
+      throw new Error(availability.message);
+    }
+
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.uri.scheme !== "file") {
+      throw new Error("先打开一个已经保存到磁盘的代码文件。");
+    }
+    const saved = await editor.document.save();
+    if (!saved) {
+      throw new Error("当前代码文件保存失败，未创建提交确认。");
+    }
+
+    const preview = this.submissionConfirmations.create({
+      problemKey,
+      target,
+      editor: this.editorSubmissionIdentity(editor),
+      codeforcesHandle: handle
+    });
+    return {
+      type: "ojSubmissionPreview",
+      preview,
+      toolVersion: availability.version,
+      status: "提交预览已生成；尚未发送代码。"
+    };
+  }
+
+  private async handleOjSubmissionConfirmation(confirmationId: string): Promise<Record<string, unknown>> {
+    this.requireTrustedWorkspaceForSubmission();
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.document.uri.scheme !== "file") {
+      throw new Error("提交前必须保持预览时的代码文件处于打开状态。");
+    }
+    if (editor.document.isDirty) {
+      throw new Error("预览后代码已修改，请保存并重新生成提交预览。");
+    }
+
+    const preview = this.submissionConfirmations.consume(
+      confirmationId,
+      this.editorSubmissionIdentity(editor)
+    );
+    const submittedAfterSeconds = Math.floor(Date.now() / 1_000);
+    const cliResult = await submitWithOnlineJudgeTools(
+      preview.target.canonicalUrl,
+      preview.editor.filePath,
+      path.dirname(preview.editor.filePath)
+    );
+
+    if (cliResult.status !== "submitted") {
+      const result: OjSubmissionResult = {
+        status: cliResult.status,
+        message: cliResult.message,
+        submissionUrl: cliResult.submissionUrl
+      };
+      return {
+        type: "ojSubmissionResult",
+        problemKey: preview.problemKey,
+        result,
+        status: result.message
+      };
+    }
+
+    if (!preview.codeforcesHandle) {
+      const result: OjSubmissionResult = {
+        status: "submitted",
+        message: "代码已提交；未填写 Codeforces handle，因此没有自动查询判题结果。",
+        submissionUrl: cliResult.submissionUrl
+      };
+      return {
+        type: "ojSubmissionResult",
+        problemKey: preview.problemKey,
+        result,
+        status: result.message
+      };
+    }
+
+    try {
+      const pollResult = await pollCodeforcesVerdict({
+        handle: preview.codeforcesHandle,
+        target: preview.target,
+        submittedAfterSeconds
+      });
+      const result: OjSubmissionResult =
+        pollResult.status === "judged"
+          ? {
+              status: "judged",
+              message: `Codeforces 判题完成：${pollResult.verdict}。`,
+              submissionUrl: pollResult.submissionUrl,
+              submissionId: pollResult.submissionId,
+              verdict: pollResult.verdict,
+              passedTestCount: pollResult.passedTestCount
+            }
+          : {
+              status: "submitted",
+              message: "代码已提交，但自动查询在限定时间内没有得到最终结果；不会自动重试提交。",
+              submissionUrl: cliResult.submissionUrl,
+              verdict: "UNKNOWN"
+            };
+      return {
+        type: "ojSubmissionResult",
+        problemKey: preview.problemKey,
+        result,
+        status: result.message
+      };
+    } catch {
+      const result: OjSubmissionResult = {
+        status: "submitted",
+        message: "代码已提交，但 Codeforces 公共状态查询失败；不会自动重试提交。",
+        submissionUrl: cliResult.submissionUrl,
+        verdict: "UNKNOWN"
+      };
+      return {
+        type: "ojSubmissionResult",
+        problemKey: preview.problemKey,
+        result,
+        status: result.message
+      };
+    }
+  }
+
+  private requireTrustedWorkspaceForSubmission(): void {
+    if (!vscode.workspace.isTrusted) {
+      throw new Error("真实 OJ 提交在受限工作区中已禁用；请先确认并信任当前工作区。");
+    }
+  }
+
+  private async requireKnownProblem(problemKey: string): Promise<void> {
+    const savedProblems = await this.loadSavedProblems();
+    const completedProblems = await this.loadCompletedProblems();
+    const known =
+      savedProblems.some((problem) => makeProblemKey(problem) === problemKey) ||
+      completedProblems.some(
+        (problem) => problem.problemKey === problemKey || makeProblemKey(problem) === problemKey
+      );
+    if (!known) {
+      throw new Error("先选择一道已导入或已归档的题目。");
+    }
+  }
+
+  private editorSubmissionIdentity(editor: vscode.TextEditor): EditorSubmissionIdentity {
+    return {
+      uri: editor.document.uri.toString(),
+      filePath: editor.document.uri.fsPath,
+      version: editor.document.version,
+      languageId: editor.document.languageId,
+      codeSize: Buffer.byteLength(editor.document.getText(), "utf8")
     };
   }
 
@@ -3830,6 +4027,29 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       vscode.postMessage({
         command: "requestSubmissionJudge",
         problemKey: keyOf(problem)
+      });
+    }
+
+    function requestOjLogin() {
+      setStatus("正在打开 Codeforces 登录终端...");
+      vscode.postMessage({ command: "requestOjLogin" });
+    }
+
+    function requestOjSubmissionPreview(problemKey, problemUrl, codeforcesHandle) {
+      setStatus("正在检查 Codeforces 提交信息...");
+      vscode.postMessage({
+        command: "requestOjSubmissionPreview",
+        problemKey,
+        problemUrl,
+        codeforcesHandle
+      });
+    }
+
+    function confirmOjSubmission(confirmationId) {
+      setStatus("正在提交一次到 Codeforces...");
+      vscode.postMessage({
+        command: "confirmOjSubmission",
+        confirmationId
       });
     }
 
@@ -6320,6 +6540,17 @@ function normalizeCompletionReason(value: string | undefined): CompletionReason 
   }
 
   return "completed";
+}
+
+function normalizeOptionalCodeforcesHandle(value: string | undefined): string | undefined {
+  const handle = value?.trim();
+  if (!handle) {
+    return undefined;
+  }
+  if (!/^[A-Za-z0-9_.-]+$/.test(handle)) {
+    throw new Error("Codeforces handle 格式不正确。");
+  }
+  return handle;
 }
 
 function actionToAttemptEventKind(

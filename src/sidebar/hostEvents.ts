@@ -2,6 +2,7 @@ import type { AiProviderMode } from "../config/modelEnv";
 import type { InternalTestSummary } from "../internalTesting/internalTestRecorder";
 import type { ProviderModelInfo } from "../models/providerModelsClient";
 import type { ProblemSearchResult, ProblemSetSearchResult } from "../problemBank/types";
+import type { OjSubmissionPreview, OjSubmissionResult } from "../submission/types";
 import type { AiHealthCheckResult, ProblemBankStateView } from "./stateView";
 
 export const hostEventTypeNames = [
@@ -10,6 +11,8 @@ export const hostEventTypeNames = [
   "autocompletePreview",
   "coachFollowUp",
   "internalTestSummary",
+  "ojSubmissionPreview",
+  "ojSubmissionResult",
   "optimizationReport",
   "problemBankState",
   "problemRecommendation",
@@ -62,6 +65,20 @@ export interface InternalTestSummaryHostEvent {
   status: string;
 }
 
+export interface OjSubmissionPreviewHostEvent {
+  type: "ojSubmissionPreview";
+  preview: OjSubmissionPreview;
+  toolVersion?: string;
+  status: string;
+}
+
+export interface OjSubmissionResultHostEvent {
+  type: "ojSubmissionResult";
+  problemKey: string;
+  result: OjSubmissionResult;
+  status: string;
+}
+
 export type LooseTypedHostEvent =
   | { type: "autocompletePreview"; [key: string]: unknown }
   | { type: "coachFollowUp"; [key: string]: unknown }
@@ -78,4 +95,6 @@ export type HostEvent =
   | AiModelResultsHostEvent
   | AiHealthCheckResultHostEvent
   | InternalTestSummaryHostEvent
+  | OjSubmissionPreviewHostEvent
+  | OjSubmissionResultHostEvent
   | LooseTypedHostEvent;
