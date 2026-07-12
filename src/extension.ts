@@ -1,11 +1,17 @@
 import * as vscode from "vscode";
+import { LeetCodeOjHostService } from "./application/oj/LeetCodeOjHostService";
 import { createMimoInlineCompletionProvider } from "./autocomplete/inlineProvider";
+import { SdkMcpConnectionFactory } from "./infrastructure/mcp/McpTransportFactory";
 import { createInternalTestRecorder } from "./internalTesting/internalTestRecorder";
 import { ProblemBankViewProvider } from "./sidebar/ProblemBankViewProvider";
 import { CurrentSessionViewProvider } from "./ui/host/CurrentSessionViewProvider";
 import { ProblemLibraryTreeProvider } from "./ui/host/ProblemLibraryTreeProvider";
 
-export function activate(context: vscode.ExtensionContext): void {
+export interface StudentAutocompleteHostApi {
+  readonly oj: LeetCodeOjHostService;
+}
+
+export function activate(context: vscode.ExtensionContext): StudentAutocompleteHostApi {
   const internalRecorder = createInternalTestRecorder({
     globalStoragePath: context.globalStorageUri.fsPath,
     packageName: String(context.extension.packageJSON.name ?? "student-autocomplete-lab"),
@@ -17,6 +23,7 @@ export function activate(context: vscode.ExtensionContext): void {
   const problemLibrary = new ProblemLibraryTreeProvider(() => provider.loadProblemLibrary());
   const currentSession = new CurrentSessionViewProvider(context, provider, () => problemLibrary.refresh());
   const output = vscode.window.createOutputChannel("AI 做题陪练");
+  const ojHost = new LeetCodeOjHostService(new SdkMcpConnectionFactory());
   const autocompleteStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
   autocompleteStatus.name = "AI 做题陪练补全";
   autocompleteStatus.command = "studentAutocomplete.triggerInlineCompletion";
@@ -32,6 +39,7 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     output,
+    ojHost,
     autocompleteStatus,
     vscode.languages.registerInlineCompletionItemProvider(
       [{ scheme: "file" }],
@@ -106,6 +114,8 @@ export function activate(context: vscode.ExtensionContext): void {
       await vscode.commands.executeCommand("editor.action.inlineSuggest.trigger");
     })
   );
+
+  return { oj: ojHost };
 }
 
 function focusCoachView(actionName: string): void {

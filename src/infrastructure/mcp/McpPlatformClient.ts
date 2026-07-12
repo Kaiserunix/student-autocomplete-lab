@@ -1,5 +1,7 @@
 import type {
   OjCapabilities,
+  OjProblemDocument,
+  OjProblemRef,
   OjProviderEntrypointV1,
   OjProviderManifestV1,
   OjProviderToolName,
@@ -8,7 +10,14 @@ import type {
   OjSearchResult
 } from "../../domain/oj/contracts";
 import type { z } from "zod";
-import { ojCapabilitiesSchema, ojProviderHealthSchema, ojSearchRequestSchema, ojSearchResultSchema } from "../../domain/oj/schemas";
+import {
+  ojCapabilitiesSchema,
+  ojProblemDocumentSchema,
+  ojProblemRefSchema,
+  ojProviderHealthSchema,
+  ojSearchRequestSchema,
+  ojSearchResultSchema
+} from "../../domain/oj/schemas";
 import { decodeMcpToolResult, hashMcpToolSchema } from "./McpToolCodec";
 import type { McpClientConnection, McpConnectionFactory, McpListedTool } from "./McpTransportFactory";
 import { McpContractError, ProviderQuarantinedError } from "./errors";
@@ -67,6 +76,11 @@ export class McpPlatformClient {
   async search(input: OjSearchRequest, signal?: AbortSignal): Promise<OjSearchResult> {
     const request = ojSearchRequestSchema.parse(input);
     return this.call("searchProblems", request, ojSearchResultSchema, signal);
+  }
+
+  async fetchProblem(input: OjProblemRef, signal?: AbortSignal): Promise<OjProblemDocument> {
+    const problem = ojProblemRefSchema.parse(input);
+    return this.call("fetchProblem", problem, ojProblemDocumentSchema, signal);
   }
 
   async close(): Promise<void> {

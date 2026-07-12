@@ -16,7 +16,7 @@ export interface McpListedTool {
 }
 
 export interface McpToolCallResult {
-  structuredContent?: Record<string, unknown>;
+  structuredContent?: unknown;
   isError?: boolean;
 }
 

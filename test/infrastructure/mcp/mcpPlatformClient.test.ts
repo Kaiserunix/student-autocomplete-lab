@@ -10,6 +10,7 @@ import type {
 import { ProviderQuarantinedError } from "../../../src/infrastructure/mcp/errors";
 import { FakeConnection } from "../../fixtures/mcp/fakeConnection";
 import { createFixtureManifest, fixtureSource, fixtureTools } from "../../fixtures/mcp/providerFixture";
+import { createLeetcodeManifest, createLeetcodeProblemDocument, createLeetcodeProblemRef, leetcodeTools } from "./leetcodeFixture";
 
 describe("McpPlatformClient", () => {
   test("hashes tool input and output schemas deterministically", () => {
@@ -51,6 +52,20 @@ describe("McpPlatformClient", () => {
     expect(connection.connectCount).toBe(1);
     expect(connection.calls).toEqual([{ name: "oj_search_problems", arguments: expect.objectContaining({ query: "watermelon" }) }]);
     expect(result.requestId).toBe("search-1");
+  });
+
+  test("fetches a problem through the typed canonical contract", async () => {
+    const connection = new FakeConnection(leetcodeTools, { structuredContent: createLeetcodeProblemDocument() });
+    const client = new McpPlatformClient({
+      manifest: createLeetcodeManifest(),
+      entrypointId: "productPrivate",
+      connectionFactory: new FakeFactory(connection)
+    });
+
+    const problem = await client.fetchProblem(createLeetcodeProblemRef());
+
+    expect(problem.schemaVersion).toBe("oj.problem-document/v1");
+    expect(connection.calls).toEqual([{ name: "oj_fetch_problem", arguments: createLeetcodeProblemRef() }]);
   });
 
   test("quarantines providers when tools drift from the signed manifest", async () => {
