@@ -1,7 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { createWebviewNonce, htmlLanguage, renderWebviewDocumentShell } from "../src/sidebar/html";
-import { disabledReasonForCoachAction, primaryCoachButtonIds, sidebarPageIds } from "../src/sidebar/webview/main";
+import {
+  disabledReasonForCoachAction,
+  ojActionButtonIds,
+  primaryCoachButtonIds,
+  sidebarPageIds
+} from "../src/sidebar/webview/main";
 import { getSidebarUiCopy, normalizeUiLanguage } from "../src/sidebar/webview/i18n";
 import { normalizeMathText, parseMarkdownBlocks, renderMarkdownToHtml } from "../src/sidebar/webview/markdown";
 
@@ -41,6 +46,7 @@ describe("sidebar webview modules", () => {
     expect([...sidebarPageIds]).toEqual(["aiPage", "problemPage", "skillPage"]);
     expect([...primaryCoachButtonIds]).toContain("coachSendCustom");
     expect([...primaryCoachButtonIds]).toContain("coachRecommendRule");
+    expect([...ojActionButtonIds]).toEqual(["ojLogin", "ojPreviewSubmit"]);
     expect(disabledReasonForCoachAction({ hasProblem: false, isBusy: false })).toContain("先导入");
     expect(disabledReasonForCoachAction({ hasProblem: true, isBusy: true })).toContain("正在处理");
   });

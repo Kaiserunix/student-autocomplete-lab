@@ -2886,7 +2886,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
             </select>
           </div>
         </div>
-        <div class="coachActions">
+          <div class="coachActions">
             <button id="coachHint" type="button">简单提示</button>
             <button id="coachSpecific" class="secondary" type="button">再具体点</button>
             <button id="coachFollowUp" class="secondary" type="button">继续聊</button>
@@ -2894,6 +2894,27 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
             <button id="coachCompleted" class="secondary" type="button">我已完成</button>
             <button id="coachAutocomplete" class="secondary" type="button">测试补全</button>
           </div>
+          <details id="ojSubmissionPanel" class="aiConfigBox">
+            <summary>OJ 提交（Codeforces 实验）</summary>
+            <div class="panelBody">
+              <span class="hint">需要用户自行安装 online-judge-tools。登录在可见终端中完成，扩展不会读取或保存账号、密码、Cookie、验证码。</span>
+              <div class="field">
+                <label for="ojProblemUrl">Codeforces 题目链接</label>
+                <input id="ojProblemUrl" type="url" placeholder="https://codeforces.com/contest/1234/problem/A">
+              </div>
+              <div class="field">
+                <label for="ojCodeforcesHandle">Codeforces handle（可选）</label>
+                <input id="ojCodeforcesHandle" autocomplete="off" placeholder="用于公开查询本次判题结果">
+              </div>
+              <div class="coachActions">
+                <button id="ojLogin" class="secondary" type="button">登录 Codeforces</button>
+                <button id="ojPreviewSubmit" type="button">提交前确认</button>
+              </div>
+              <div id="ojSubmissionStatus" class="aiResponse">
+                <span class="hint">确认后只会提交一次；网络超时或结果不明时不会自动重试提交。</span>
+              </div>
+            </div>
+          </details>
           <div id="aiStatusGrid" class="aiStatusGrid"></div>
           <div id="aiResponse" class="aiResponse">
             <span class="aiResponseTitle">等待 AI 交互</span>
@@ -3038,6 +3059,11 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const practiceLanguage = document.getElementById("practiceLanguage");
     const coachResponseLanguage = document.getElementById("coachResponseLanguage");
     const coachOjVerdict = document.getElementById("coachOjVerdict");
+    const ojProblemUrl = document.getElementById("ojProblemUrl");
+    const ojCodeforcesHandle = document.getElementById("ojCodeforcesHandle");
+    const ojLogin = document.getElementById("ojLogin");
+    const ojPreviewSubmit = document.getElementById("ojPreviewSubmit");
+    const ojSubmissionStatus = document.getElementById("ojSubmissionStatus");
     const aiConfigMode = document.getElementById("aiConfigMode");
     const aiAutocompleteFormat = document.getElementById("aiAutocompleteFormat");
     const aiBaseUrl = document.getElementById("aiBaseUrl");
@@ -3153,6 +3179,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     document.getElementById("coachGiveUp").addEventListener("click", () => requestAiCoach("giveUp"));
     document.getElementById("coachCompleted").addEventListener("click", () => requestCompletionReview());
     document.getElementById("coachAutocomplete").addEventListener("click", () => requestAutocompletePreview());
+    ojLogin.addEventListener("click", () => requestOjLogin());
+    ojPreviewSubmit.addEventListener("click", () => previewOjSubmission());
     document.getElementById("copyInternalTestSummary").addEventListener("click", () => {
       vscode.postMessage({ command: "copyInternalTestSummary" });
     });
@@ -3247,6 +3275,17 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         setStatus(data.status || "AI 已完成交题前自检。");
         switchPage("ai");
         renderSubmissionJudge(data);
+      }
+      if (data.type === "ojSubmissionPreview") {
+        setStatus(data.status || "提交预览已生成；尚未发送代码。");
+        switchPage("ai");
+        renderOjSubmissionPreview(data);
+      }
+      if (data.type === "ojSubmissionResult") {
+        const failed = ["login_required", "unavailable", "failed"].includes(data.result?.status);
+        setStatus(data.status || data.result?.message || "Codeforces 提交流程已结束。", failed ? "error" : undefined);
+        switchPage("ai");
+        renderOjSubmissionResult(data);
       }
       if (data.type === "optimizationReport") {
         setStatus(data.status || "AI 已完成优化复盘。");
@@ -4035,6 +4074,26 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       vscode.postMessage({ command: "requestOjLogin" });
     }
 
+    function previewOjSubmission() {
+      const problem = selectedCoachProblem();
+      const problemUrl = ojProblemUrl.value.trim();
+      if (!problem) {
+        setStatus("先选择或导入一道题。", "error");
+        return;
+      }
+      if (!problemUrl) {
+        setStatus("请先粘贴 Codeforces 题目链接。", "error");
+        ojProblemUrl.focus();
+        return;
+      }
+
+      setCoachBusy(true);
+      ojSubmissionStatus.innerHTML = "";
+      ojSubmissionStatus.appendChild(textSpan("正在生成提交预览", "aiResponseTitle"));
+      ojSubmissionStatus.appendChild(textSpan("此时只检查链接、当前文件和工具状态，不会发送代码。", "hint"));
+      requestOjSubmissionPreview(keyOf(problem), problemUrl, ojCodeforcesHandle.value.trim());
+    }
+
     function requestOjSubmissionPreview(problemKey, problemUrl, codeforcesHandle) {
       setStatus("正在检查 Codeforces 提交信息...");
       vscode.postMessage({
@@ -4051,6 +4110,60 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         command: "confirmOjSubmission",
         confirmationId
       });
+    }
+
+    function renderOjSubmissionPreview(data) {
+      const preview = data.preview || {};
+      const target = preview.target || {};
+      const editor = preview.editor || {};
+      ojSubmissionStatus.innerHTML = "";
+      ojSubmissionStatus.appendChild(textSpan("提交前确认", "aiResponseTitle"));
+      ojSubmissionStatus.appendChild(responseBlock("目标", [
+        "平台：Codeforces",
+        "题目：" + (target.contestKind || "contest") + " " + (target.contestId || "?") + target.problemIndex,
+        "链接：" + (target.canonicalUrl || "?")
+      ].join("\\n")));
+      ojSubmissionStatus.appendChild(responseBlock("当前文件", [
+        "路径：" + (editor.filePath || "?"),
+        "语言：" + (editor.languageId || "?"),
+        "代码大小：" + (typeof editor.codeSize === "number" ? editor.codeSize + " 字节" : "?"),
+        preview.codeforcesHandle ? "Handle：" + preview.codeforcesHandle : "Handle：未填写（不会自动查询判题）"
+      ].join("\\n")));
+      ojSubmissionStatus.appendChild(textSpan(
+        "确认有效期至 " + formatDateTime(preview.expiresAt) + (data.toolVersion ? " · oj " + data.toolVersion : ""),
+        "mini"
+      ));
+      ojSubmissionStatus.appendChild(textSpan("确认后只提交一次；网络结果不明时不会自动重试提交。", "hint"));
+      const confirmButton = document.createElement("button");
+      confirmButton.type = "button";
+      confirmButton.textContent = "确认并提交一次";
+      confirmButton.addEventListener("click", () => {
+        confirmButton.disabled = true;
+        confirmButton.remove();
+        setCoachBusy(true);
+        confirmOjSubmission(preview.confirmationId);
+      });
+      ojSubmissionStatus.appendChild(confirmButton);
+    }
+
+    function renderOjSubmissionResult(data) {
+      const result = data.result || {};
+      ojSubmissionStatus.innerHTML = "";
+      ojSubmissionStatus.appendChild(textSpan("真实 OJ 提交结果", "aiResponseTitle"));
+      ojSubmissionStatus.appendChild(textSpan(result.message || "提交流程已结束。", "hint"));
+      const details = [
+        "状态：" + (result.status || "unknown"),
+        result.verdict ? "判题：" + result.verdict : "",
+        typeof result.submissionId === "number" ? "提交 ID：" + result.submissionId : "",
+        typeof result.passedTestCount === "number" ? "通过测试：" + result.passedTestCount : "",
+        result.submissionUrl ? "结果链接：" + result.submissionUrl : ""
+      ].filter(Boolean);
+      ojSubmissionStatus.appendChild(responseBlock("结果", details.join("\\n")));
+      if (["AC", "WA", "RE", "TLE", "MLE"].includes(result.verdict)) {
+        coachOjVerdict.value = result.verdict;
+        state.ojVerdict = result.verdict;
+      }
+      ojSubmissionStatus.appendChild(textSpan("本次确认已失效；再次提交必须重新生成预览并确认。", "mini"));
     }
 
     function requestArchiveProblem(reason) {
@@ -5550,6 +5663,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       const isArchivedCoachProblem = Boolean(selectedArchivedProblem());
       coachGiveUp.disabled = Boolean(isBusy || isArchivedCoachProblem);
       coachCompleted.disabled = Boolean(isBusy || isArchivedCoachProblem);
+      ojLogin.disabled = Boolean(isBusy);
+      ojPreviewSubmit.disabled = Boolean(isBusy);
     }
 
     function markdownBlock(text, className) {
