@@ -91,4 +91,23 @@ describe("VS Code extension manifest", () => {
     expect(source).not.toContain("answer reveal and wrong-problem bank are planned");
     expect(source).toContain("请在左侧 AI 教练");
   });
+
+  test("documents the optional Codeforces submission dependency and ships its notice", async () => {
+    const readme = await readFile("README.md", "utf8");
+    const notices = await readFile("THIRD_PARTY_NOTICES.md", "utf8");
+    const releaseReadme = await readFile("README.release.md", "utf8");
+    const releasePackager = await readFile("scripts/packageBetaReleaseVsix.js", "utf8");
+
+    expect(readme).toContain("online-judge-tools");
+    expect(readme).toContain("每次提交都必须明确确认");
+    expect(readme).toContain("当前仅实验性支持 Codeforces");
+    expect(readme).toContain("不会打包进 VSIX");
+    expect(notices).toContain("https://github.com/online-judge-tools/oj");
+    expect(notices).toContain("The MIT License (MIT)");
+    expect(notices).toContain("Copyright (c) 2017-2020 Kimiyuki Onaka");
+    expect(releaseReadme).toContain("online-judge-tools");
+    expect(releasePackager).toContain('"submission"');
+    expect(releasePackager).toContain('copyIfExists("THIRD_PARTY_NOTICES.md")');
+    expect(releasePackager).toContain('"THIRD_PARTY_NOTICES.md"');
+  });
 });

@@ -2,7 +2,7 @@
 
 Date: 2026-07-12
 
-Status: approved product direction and feasibility design. Production implementation has not started.
+Status: approved overall design. The first Codeforces delegated-CLI slice is implemented; authenticated live submission remains an explicit manual gate.
 
 ## 1. Decision
 
@@ -279,12 +279,16 @@ After a real submission:
 - add fake adapters and state-machine tests;
 - add SecretStorage and Workspace Trust boundaries without real credentials.
 
+Implementation note (2026-07-12): the Codeforces phase-1/2 slice now includes strict target parsing, a safe no-shell process host, user-installed `online-judge-tools` capability checks, a two-minute single-use confirmation tied to the saved editor version, delegated terminal login, and optional bounded public-verdict polling. It stores no credentials and does not include the earlier browser probe in production code.
+
 ### Phase 2: Delegated CLI Adapters
 
 - support executable discovery and health checks;
 - integrate Kattis CLI first because it has an official submission client;
 - integrate Codeforces and AtCoder through a pinned, user-installed `online-judge-tools` contract;
 - normalize verdicts and connect them to teaching records.
+
+Codeforces is the only implemented adapter in this phase. It is still marked experimental until the manual dedicated-account smoke gate passes. AtCoder and Kattis remain design targets, not shipped support.
 
 ### Phase 3: Native Experimental Adapters
 
