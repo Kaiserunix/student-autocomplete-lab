@@ -1097,7 +1097,7 @@ git add docs/superpowers/plans/2026-07-12-codex-oauth.md
 git commit -m "docs: complete Codex OAuth implementation plan"
 ```
 
-- [ ] **Step 4: Run the final post-commit proof**
+- [x] **Step 4: Run the final post-commit proof**
 
 ```powershell
 npm test
@@ -1107,7 +1107,7 @@ git status --short --branch
 
 Expected: all tests and compile pass; the feature worktree is clean.
 
-- [ ] **Step 5: Use the finishing-a-development-branch skill**
+- [x] **Step 5: Use the finishing-a-development-branch skill**
 
 Present verified options for merging, pushing/PR, keeping the branch, or
 discarding it. Do not merge into the dirty primary worktree without first
