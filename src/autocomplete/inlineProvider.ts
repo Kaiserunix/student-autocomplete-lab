@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 import { loadModelEnvFromVsCode } from "../config/vscodeModelEnv";
 import type { CompletionProviderConfig } from "../models/completionsClient";
 import { routeAutocompleteModel } from "../models/modelRouter";
+import type { ModelTextTransport } from "../models/modelTextTransport";
 import { buildAutocompleteInputFromText } from "./context";
 import { requestMimoAutocomplete } from "./mimoAutocomplete";
 import { AutocompleteRequestGate } from "./requestGate";
@@ -18,6 +19,7 @@ interface InlineCompletionProviderOptions {
   onEvent?: (event: InlineCompletionEvent) => void;
   minAutomaticIntervalMs?: number;
   cacheTtlMs?: number;
+  oauthTransport: ModelTextTransport;
 }
 
 export function createMimoInlineCompletionProvider(
@@ -35,7 +37,10 @@ export function createMimoInlineCompletionProvider(
     }
 
     const envPath = path.join(workspaceFolder.uri.fsPath, "secrets", "models.env");
-    return routeAutocompleteModel(await loadModelEnvFromVsCode(options.extensionContext, envPath)).config;
+    return routeAutocompleteModel(
+      await loadModelEnvFromVsCode(options.extensionContext, envPath),
+      options.oauthTransport
+    ).config;
   }
 
   return {
@@ -65,6 +70,8 @@ export function createMimoInlineCompletionProvider(
       if (!requestGate.beginRequest(isExplicit)) {
         return [];
       }
+      const abortController = new AbortController();
+      const cancellationSubscription = token.onCancellationRequested(() => abortController.abort());
 
       try {
         options.onEvent?.({
@@ -91,7 +98,8 @@ export function createMimoInlineCompletionProvider(
         }
         const suggestion = await requestMimoAutocomplete(config, {
           ...input,
-          habits: ["Prefer direct student code.", "Return only the immediate local continuation."]
+          habits: ["Prefer direct student code.", "Return only the immediate local continuation."],
+          signal: abortController.signal
         });
 
         if (token?.isCancellationRequested) {
@@ -118,6 +126,7 @@ export function createMimoInlineCompletionProvider(
         });
         return [];
       } finally {
+        cancellationSubscription.dispose();
         requestGate.finishRequest();
       }
     }

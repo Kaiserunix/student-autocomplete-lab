@@ -6,6 +6,8 @@ import type { AttemptStorePaths, CoachThreadTurn } from "../attempt/schema";
 import { problemRefFromRecord } from "../attempt/session";
 import { buildAutocompleteInputFromText, extractStudentCodeFromText } from "../autocomplete/context";
 import { requestMimoAutocomplete } from "../autocomplete/mimoAutocomplete";
+import type { CodexServices } from "../codex/codexServices";
+import type { CodexModelService } from "../codex/codexModelService";
 import {
   type AiConfigView,
   type AiProviderConfigUpdate,
@@ -26,6 +28,7 @@ import { requestChatCompletionText, type ChatCompletionProviderConfig } from "..
 import { requestCompletion, type CompletionProviderConfig } from "../models/completionsClient";
 import { listProviderModels } from "../models/providerModelsClient";
 import { routeAutocompleteModel, routeTeachingModel } from "../models/modelRouter";
+import type { ModelTextTransport } from "../models/modelTextTransport";
 import { fetchLuoguProblem } from "../problemBank/luoguClient";
 import { fetchLuoguProblemSet } from "../problemBank/luoguProblemSetClient";
 import { searchLuoguProblems, searchLuoguProblemSets } from "../problemBank/luoguSearchClient";
@@ -127,7 +130,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   private readonly internalRecorder: InternalTestRecorder;
   private readonly storagePaths: StudentAutocompleteStoragePaths;
 
-  public constructor(private readonly context: vscode.ExtensionContext) {
+  public constructor(
+    private readonly context: vscode.ExtensionContext,
+    private readonly codexServices: CodexServices
+  ) {
     this.storagePaths = createStudentAutocompleteStoragePaths(context.globalStorageUri.fsPath);
     this.internalRecorder = createInternalTestRecorder({
       globalStoragePath: context.globalStorageUri.fsPath,
@@ -500,9 +506,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const checkedAt = new Date().toISOString();
 
     const [models, chatSmoke, autocompleteSmoke] = await Promise.all([
-      runModelListHealthCheck(env, mode, config, knownSecrets),
-      runChatSmokeHealthCheck(env, config, knownSecrets),
-      runAutocompleteSmokeHealthCheck(env, config, knownSecrets)
+      runModelListHealthCheck(env, mode, config, knownSecrets, this.codexServices.models),
+      runChatSmokeHealthCheck(env, config, knownSecrets, this.codexServices.text),
+      runAutocompleteSmokeHealthCheck(env, config, knownSecrets, this.codexServices.text)
     ]);
     const result: AiHealthCheckResult = {
       checkedAt,
@@ -688,7 +694,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       throw new Error("先打开你的代码文件，AI 才能分析当前卡点。");
     }
 
-    const config = routeTeachingModel(await this.loadRuntimeModelEnv()).config;
+    const config = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text).config;
     const profile = await loadStudentProfile(this.profilePath());
     const studentSkill = await this.loadStudentSkillForProfile(profile);
     const teacherPack = await this.ensureTeacherPack(problem, config);
@@ -1044,7 +1050,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     const occurredAt = new Date().toISOString();
-    const config = routeTeachingModel(await this.loadRuntimeModelEnv()).config;
+    const config = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text).config;
     const profile = await loadStudentProfile(this.profilePath());
     const attemptStats = summarizeAttemptEvents(await this.loadAttemptEvents(), problemKey);
     const teachingContext = buildSidebarTeachingContext({
@@ -1169,7 +1175,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     const occurredAt = new Date().toISOString();
-    const config = routeTeachingModel(await this.loadRuntimeModelEnv()).config;
+    const config = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text).config;
     const profile = await loadStudentProfile(this.profilePath());
     const attemptStats = summarizeAttemptEvents(await this.loadAttemptEvents(), problemKey);
     const studentCode = extractStudentCodeFromText(editor.document.getText());
@@ -1332,7 +1338,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     const occurredAt = new Date().toISOString();
-    const config = routeTeachingModel(await this.loadRuntimeModelEnv()).config;
+    const config = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text).config;
     const profile = await loadStudentProfile(this.profilePath());
     const profileBefore = profileSummary(profile);
     const teachingContext = buildSidebarTeachingContext({
@@ -1480,7 +1486,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       throw new Error("先打开你的代码文件，再测试补全。");
     }
 
-    const config = routeAutocompleteModel(await this.loadRuntimeModelEnv()).config;
+    const config = routeAutocompleteModel(await this.loadRuntimeModelEnv(), this.codexServices.text).config;
     const position = editor.selection.active;
     const input = buildAutocompleteInputFromText({
       text: editor.document.getText(),
@@ -1535,7 +1541,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       throw new Error("先打开你的代码文件，再做 AI 找错复盘。");
     }
 
-    const config = routeTeachingModel(await this.loadRuntimeModelEnv()).config;
+    const config = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text).config;
     const profile = await loadStudentProfile(this.profilePath());
     const teachingContext = buildSidebarTeachingContext({
       problem,
@@ -1589,8 +1595,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       return {
         envPath: envPath ?? "VS Code Settings",
         providerMode: configView.mode,
-        autocomplete: readAutocompleteStatus(env),
-        teaching: readTeachingStatus(env)
+        autocomplete: readAutocompleteStatus(env, this.codexServices.text),
+        teaching: readTeachingStatus(env, this.codexServices.text)
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -1680,7 +1686,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
   private async tryPrepareTeacherPack(problem: ProblemRecord): Promise<TeacherPackRecord | undefined> {
     try {
-      const config = routeTeachingModel(await this.loadRuntimeModelEnv()).config;
+      const config = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text).config;
       return this.ensureTeacherPack(problem, config);
     } catch {
       return undefined;
@@ -5976,6 +5982,7 @@ function applyAiConfigUpdateForHealthCheck(env: ModelEnv, update: AiProviderConf
   next.AI_PROVIDER_MODE = mode;
 
   if (mode === "openai") {
+    next.AI_OPENAI_AUTH_MODE = update.authMode ?? next.AI_OPENAI_AUTH_MODE ?? "api-key";
     if (update.baseUrl?.trim()) {
       next.AI_OPENAI_BASE_URL = update.baseUrl.trim();
     }
@@ -6020,9 +6027,29 @@ async function runModelListHealthCheck(
   env: ModelEnv,
   mode: AiProviderMode,
   config: AiProviderConfigUpdate,
-  knownSecrets: string[]
+  knownSecrets: string[],
+  codexModels: CodexModelService
 ): Promise<AiHealthCheckStep> {
   const startedAt = Date.now();
+  if (mode === "openai" && env.AI_OPENAI_AUTH_MODE === "codex-oauth") {
+    try {
+      const result = await codexModels.listModels();
+      return {
+        status: "pass",
+        endpoint: "codex://app-server/model/list",
+        count: result.models.length,
+        latencyMs: elapsedSince(startedAt)
+      };
+    } catch (error) {
+      const message = redactKnownSecrets(errorMessage(error), knownSecrets);
+      return failHealthCheckStep({
+        endpoint: "codex://app-server/model/list",
+        latencyMs: elapsedSince(startedAt),
+        error: message,
+        errorHint: healthCheckErrorHint(message, "models")
+      });
+    }
+  }
   const endpointBase = savedBaseUrlForMode(env, mode);
   const apiKey = savedApiKeyForMode(env, mode);
   const keyState = keyStateForApiKey(apiKey, config.apiKey);
@@ -6074,11 +6101,12 @@ async function runModelListHealthCheck(
 async function runChatSmokeHealthCheck(
   env: ModelEnv,
   config: AiProviderConfigUpdate,
-  knownSecrets: string[]
+  knownSecrets: string[],
+  oauthTransport: ModelTextTransport
 ): Promise<AiHealthCheckStep> {
   const startedAt = Date.now();
   try {
-    const route = routeTeachingModel(env);
+    const route = routeTeachingModel(env, oauthTransport);
     const text = await requestChatCompletionText(
       route.config,
       {
@@ -6105,15 +6133,14 @@ async function runChatSmokeHealthCheck(
       endpoint: route.endpoint,
       model: route.model,
       format: route.format,
-      keyState: keyStateForApiKey(providerApiKey(route.config), config.apiKey),
+      keyState: providerKeyState(route.config, config.apiKey),
       latencyMs: elapsedSince(startedAt)
     };
   } catch (error) {
     const message = redactKnownSecrets(errorMessage(error), knownSecrets);
-    const routeInfo = safeTeachingRouteInfo(env);
+    const routeInfo = safeTeachingRouteInfo(env, oauthTransport, config.apiKey);
     return failHealthCheckStep({
       ...routeInfo,
-      keyState: keyStateForApiKey(routeInfo.apiKey, config.apiKey),
       latencyMs: elapsedSince(startedAt),
       error: message,
       errorHint: healthCheckErrorHint(message, "chat")
@@ -6124,18 +6151,19 @@ async function runChatSmokeHealthCheck(
 async function runAutocompleteSmokeHealthCheck(
   env: ModelEnv,
   config: AiProviderConfigUpdate,
-  knownSecrets: string[]
+  knownSecrets: string[],
+  oauthTransport: ModelTextTransport
 ): Promise<AiHealthCheckStep> {
   const startedAt = Date.now();
   try {
-    const route = routeAutocompleteModel(env);
+    const route = routeAutocompleteModel(env, oauthTransport);
     const deepSeekHint = deepSeekFimEndpointHint(route.config);
     if (deepSeekHint) {
       return failHealthCheckStep({
         endpoint: route.endpoint,
         model: route.model,
         format: route.format,
-        keyState: keyStateForApiKey(providerApiKey(route.config), config.apiKey),
+        keyState: providerKeyState(route.config, config.apiKey),
         latencyMs: elapsedSince(startedAt),
         error: "DeepSeek FIM 补全端点不是 /beta。",
         errorHint: deepSeekHint
@@ -6159,15 +6187,14 @@ async function runAutocompleteSmokeHealthCheck(
       endpoint: route.endpoint,
       model: route.model,
       format: route.format,
-      keyState: keyStateForApiKey(providerApiKey(route.config), config.apiKey),
+      keyState: providerKeyState(route.config, config.apiKey),
       latencyMs: elapsedSince(startedAt)
     };
   } catch (error) {
     const message = redactKnownSecrets(errorMessage(error), knownSecrets);
-    const routeInfo = safeAutocompleteRouteInfo(env);
+    const routeInfo = safeAutocompleteRouteInfo(env, oauthTransport, config.apiKey);
     return failHealthCheckStep({
       ...routeInfo,
-      keyState: keyStateForApiKey(routeInfo.apiKey, config.apiKey),
       latencyMs: elapsedSince(startedAt),
       error: message,
       errorHint: healthCheckErrorHint(message, "autocomplete")
@@ -6182,38 +6209,46 @@ function failHealthCheckStep(step: Omit<AiHealthCheckStep, "status">): AiHealthC
   };
 }
 
-function safeTeachingRouteInfo(env: ModelEnv): {
+function safeTeachingRouteInfo(
+  env: ModelEnv,
+  oauthTransport: ModelTextTransport,
+  providedApiKey?: string
+): {
   endpoint?: string;
   model?: string;
   format?: string;
-  apiKey?: string;
+  keyState?: AiHealthCheckStep["keyState"];
 } {
   try {
-    const route = routeTeachingModel(env);
+    const route = routeTeachingModel(env, oauthTransport);
     return {
       endpoint: route.endpoint,
       model: route.model,
       format: route.format,
-      apiKey: providerApiKey(route.config)
+      keyState: providerKeyState(route.config, providedApiKey)
     };
   } catch {
     return {};
   }
 }
 
-function safeAutocompleteRouteInfo(env: ModelEnv): {
+function safeAutocompleteRouteInfo(
+  env: ModelEnv,
+  oauthTransport: ModelTextTransport,
+  providedApiKey?: string
+): {
   endpoint?: string;
   model?: string;
   format?: string;
-  apiKey?: string;
+  keyState?: AiHealthCheckStep["keyState"];
 } {
   try {
-    const route = routeAutocompleteModel(env);
+    const route = routeAutocompleteModel(env, oauthTransport);
     return {
       endpoint: route.endpoint,
       model: route.model,
       format: route.format,
-      apiKey: providerApiKey(route.config)
+      keyState: providerKeyState(route.config, providedApiKey)
     };
   } catch {
     return {};
@@ -6275,6 +6310,15 @@ function providerApiKey(
   config: ChatCompletionProviderConfig | CompletionProviderConfig
 ): string | undefined {
   return config.format === "codex-app-server" ? undefined : config.apiKey;
+}
+
+function providerKeyState(
+  config: ChatCompletionProviderConfig | CompletionProviderConfig,
+  providedApiKey?: string
+): AiHealthCheckStep["keyState"] {
+  return config.format === "codex-app-server"
+    ? undefined
+    : keyStateForApiKey(config.apiKey, providedApiKey);
 }
 
 function collectKnownSecrets(...sources: Array<ModelEnv | AiProviderConfigUpdate>): string[] {
@@ -6467,9 +6511,12 @@ function completionReasonLabel(reason: CompletionReason): string {
   return "已完成";
 }
 
-function readAutocompleteStatus(env: ModelEnv): AiRuntimeStatus["autocomplete"] {
+function readAutocompleteStatus(
+  env: ModelEnv,
+  oauthTransport: ModelTextTransport
+): AiRuntimeStatus["autocomplete"] {
   try {
-    const route = routeAutocompleteModel(env);
+    const route = routeAutocompleteModel(env, oauthTransport);
     return {
       configured: true,
       model: route.model,
@@ -6484,9 +6531,9 @@ function readAutocompleteStatus(env: ModelEnv): AiRuntimeStatus["autocomplete"] 
   }
 }
 
-function readTeachingStatus(env: ModelEnv): AiRuntimeStatus["teaching"] {
+function readTeachingStatus(env: ModelEnv, oauthTransport: ModelTextTransport): AiRuntimeStatus["teaching"] {
   try {
-    const route = routeTeachingModel(env);
+    const route = routeTeachingModel(env, oauthTransport);
     return {
       configured: true,
       model: route.model,

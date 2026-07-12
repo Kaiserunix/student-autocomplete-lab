@@ -754,7 +754,7 @@ git commit -m "feat: route model text through Codex OAuth"
 - Test: `test/sidebarTeachingContext.test.ts`
 - Test: `test/problemBankWebviewScript.test.ts`
 
-- [ ] **Step 1: Write a failing service-container routing test**
+- [x] **Step 1: Write a failing service-container routing test**
 
 Extract a small factory that creates app-server/auth/model/text services from:
 
@@ -770,7 +770,7 @@ interface CodexServicePaths {
 Test that `codexHome` and `runtimeCwd` are descendants of
 `context.globalStorageUri.fsPath` and never descendants of a workspace folder.
 
-- [ ] **Step 2: Run focused product tests and confirm RED**
+- [x] **Step 2: Run focused product tests and confirm RED**
 
 ```powershell
 npm test -- --run test/autocomplete.test.ts test/sidebarTeachingContext.test.ts test/problemBankWebviewScript.test.ts
@@ -778,7 +778,7 @@ npm test -- --run test/autocomplete.test.ts test/sidebarTeachingContext.test.ts 
 
 Expected: failure for the missing service container/factory contract.
 
-- [ ] **Step 3: Wire one shared service container at activation**
+- [x] **Step 3: Wire one shared service container at activation**
 
 Create the services once in `activate`, pass the text transport to
 `createMimoInlineCompletionProvider`, and pass auth/model/text services into
@@ -787,7 +787,7 @@ Create the services once in `activate`, pass the text transport to
 `deactivate` must not own a second process; disposal happens through
 `context.subscriptions`.
 
-- [ ] **Step 4: Route every teaching/autocomplete config through the transport-aware router**
+- [x] **Step 4: Route every teaching/autocomplete config through the transport-aware router**
 
 Every `routeTeachingModel` and `routeAutocompleteModel` call in the sidebar and
 inline provider receives the shared OAuth text transport. Existing provider
@@ -800,7 +800,7 @@ Health checks behave as follows:
 - OAuth autocomplete smoke uses the autocomplete OAuth route;
 - API-key/custom-provider checks keep their existing logic.
 
-- [ ] **Step 5: Strengthen context-boundary tests**
+- [x] **Step 5: Strengthen context-boundary tests**
 
 Capture the OAuth transport request and assert forbidden strings never occur:
 
@@ -814,7 +814,7 @@ expect(request.prompt).not.toContain("coach thread secret");
 Also assert app-server thread cwd equals the extension runtime directory and
 not the workspace.
 
-- [ ] **Step 6: Run product tests and compile**
+- [x] **Step 6: Run product tests and compile**
 
 ```powershell
 npm test -- --run test/context.test.ts test/autocomplete.test.ts test/autocompleteRequestGate.test.ts test/sidebarTeachingContext.test.ts test/teachingWorkflow.test.ts test/problemBankWebviewScript.test.ts
@@ -823,7 +823,7 @@ npm run compile
 
 Expected: pass.
 
-- [ ] **Step 7: Commit Task 7**
+- [x] **Step 7: Commit Task 7**
 
 ```powershell
 git add src/extension.ts src/autocomplete/inlineProvider.ts src/sidebar/ProblemBankViewProvider.ts test/autocomplete.test.ts test/sidebarTeachingContext.test.ts test/problemBankWebviewScript.test.ts

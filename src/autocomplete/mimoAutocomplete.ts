@@ -8,6 +8,7 @@ export interface MimoAutocompleteInput {
   language: string;
   filePath: string;
   habits?: string[];
+  signal?: AbortSignal;
 }
 
 export async function requestMimoAutocomplete(
@@ -22,7 +23,8 @@ export async function requestMimoAutocomplete(
       prompt,
       suffix: input.suffix,
       maxTokens: 64,
-      temperature: 0.1
+      temperature: 0.1,
+      signal: input.signal
     },
     fetchImpl
   );

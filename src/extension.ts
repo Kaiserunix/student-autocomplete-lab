@@ -1,9 +1,21 @@
 import * as vscode from "vscode";
 import { createMimoInlineCompletionProvider } from "./autocomplete/inlineProvider";
+import { createCodexServices, resolveCodexServicePaths } from "./codex/codexServices";
 import { createInternalTestRecorder } from "./internalTesting/internalTestRecorder";
 import { ProblemBankViewProvider } from "./sidebar/ProblemBankViewProvider";
 
 export function activate(context: vscode.ExtensionContext): void {
+  const output = vscode.window.createOutputChannel("AI 做题陪练");
+  const codexServices = createCodexServices(
+    resolveCodexServicePaths({
+      globalStoragePath: context.globalStorageUri.fsPath,
+      executablePath: vscode.workspace
+        .getConfiguration("studentAutocomplete")
+        .get<string>("ai.codex.executablePath", "codex"),
+      extensionVersion: String(context.extension.packageJSON.version ?? "")
+    }),
+    (entry) => output.appendLine(`[codex:${entry.level}] ${entry.event}${entry.message ? ` ${entry.message}` : ""}`)
+  );
   const internalRecorder = createInternalTestRecorder({
     globalStoragePath: context.globalStorageUri.fsPath,
     packageName: String(context.extension.packageJSON.name ?? "student-autocomplete-lab"),
@@ -11,8 +23,7 @@ export function activate(context: vscode.ExtensionContext): void {
     version: String(context.extension.packageJSON.version ?? ""),
     workspaceFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
   });
-  const provider = new ProblemBankViewProvider(context);
-  const output = vscode.window.createOutputChannel("AI 做题陪练");
+  const provider = new ProblemBankViewProvider(context, codexServices);
   const autocompleteStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
   autocompleteStatus.name = "AI 做题陪练补全";
   autocompleteStatus.command = "studentAutocomplete.triggerInlineCompletion";
@@ -28,11 +39,13 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     output,
+    codexServices,
     autocompleteStatus,
     vscode.languages.registerInlineCompletionItemProvider(
       [{ scheme: "file" }],
       createMimoInlineCompletionProvider({
         extensionContext: context,
+        oauthTransport: codexServices.text,
         onEvent: (event) => {
           output.appendLine(`[autocomplete:${event.type}] ${event.message}`);
           void internalRecorder.record({

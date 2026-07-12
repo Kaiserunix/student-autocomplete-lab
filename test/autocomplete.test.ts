@@ -1,7 +1,9 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { limitCompletionLines } from "../src/autocomplete/filter";
+import { requestMimoAutocomplete } from "../src/autocomplete/mimoAutocomplete";
 import { buildAutocompletePrompt, buildMimoAutocompletePrompt } from "../src/autocomplete/prompt";
 import { isSupportedAutocompleteLanguage, shouldRequestInlineCompletion } from "../src/autocomplete/triggerPolicy";
+import type { ModelTextRequest } from "../src/models/modelTextTransport";
 
 describe("autocomplete safety", () => {
   test("limits model output to at most three non-empty lines", () => {
@@ -138,5 +140,43 @@ return d
     expect(isSupportedAutocompleteLanguage("rust")).toBe(true);
     expect(isSupportedAutocompleteLanguage("markdown")).toBe(false);
     expect(isSupportedAutocompleteLanguage("plaintext")).toBe(false);
+  });
+
+  test("keeps teaching-only data out of the Codex OAuth autocomplete request", async () => {
+    const requests: ModelTextRequest[] = [];
+    const generate = vi.fn(async (request: ModelTextRequest) => {
+      requests.push(request);
+      return "return a + b";
+    });
+    const input = {
+      prefix: "def add(a, b):\n    ",
+      suffix: "\nprint(add(1, 2))",
+      language: "python",
+      filePath: "C:/workspace/student/main.py",
+      habits: ["Prefer direct Python."],
+      activeProblem: { statement: "The hidden statement" },
+      teacherPack: "Teacher Pack secret",
+      standardAnswer: "standard answer secret",
+      coachThread: "coach thread secret"
+    };
+
+    await requestMimoAutocomplete(
+      {
+        mode: "openai",
+        authMode: "codex-oauth",
+        model: "gpt-5.3-codex-spark",
+        format: "codex-app-server",
+        transport: { generate }
+      },
+      input
+    );
+
+    const request = requests[0]!;
+    expect(request.prompt).toContain("def add(a, b)");
+    expect(request.prompt).toContain("print(add(1, 2))");
+    expect(request.prompt).not.toContain("The hidden statement");
+    expect(request.prompt).not.toContain("Teacher Pack secret");
+    expect(request.prompt).not.toContain("standard answer secret");
+    expect(request.prompt).not.toContain("coach thread secret");
   });
 });
