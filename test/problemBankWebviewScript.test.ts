@@ -44,6 +44,7 @@ describe("problem bank webview script", () => {
     }
     expect(source).toContain('value="api-key"');
     expect(source).toContain('value="codex-oauth"');
+    expect(source).toContain(".codexOAuthPanel[hidden]");
   });
 
   test("keeps fix-hint newlines escaped inside the embedded script", async () => {

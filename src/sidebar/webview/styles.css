@@ -20,6 +20,11 @@
   padding: 8px;
 }
 
+.field[hidden],
+.codexOAuthPanel[hidden] {
+  display: none !important;
+}
+
 .markdownBody {
   overflow-wrap: anywhere;
   line-height: 1.62;

@@ -15,6 +15,7 @@ export interface AppServerProcess {
   stdout: Readable;
   stderr: Readable;
   once(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): this;
+  once(event: "error", listener: (error: Error) => void): this;
   kill(signal?: NodeJS.Signals | number): boolean;
 }
 
@@ -144,13 +145,15 @@ export class CodexAppServerClient {
       }
     });
     child.once("exit", (code, signal) => this.handleExit(code, signal));
+    child.once("error", () => this.handleProcessError());
 
     await this.requestRaw("initialize", {
       clientInfo: {
         name: "student_autocomplete_lab",
         title: "Student Autocomplete Lab",
         version: this.options.clientVersion
-      }
+      },
+      capabilities: null
     });
     this.notify("initialized", {});
     this.options.onLog?.({ level: "info", event: "started" });
@@ -241,6 +244,18 @@ export class CodexAppServerClient {
     this.options.onLog?.({ level: "error", event: "exited", message: detail });
   }
 
+  private handleProcessError(): void {
+    this.process = undefined;
+    this.startPromise = undefined;
+    this.stdoutLines?.close();
+    this.stderrLines?.close();
+    if (this.stopping) {
+      return;
+    }
+    this.rejectPending(new Error("Codex app-server failed to start."));
+    this.options.onLog?.({ level: "error", event: "spawn-failed" });
+  }
+
   private rejectPending(error: Error): void {
     for (const pending of this.pending.values()) {
       clearTimeout(pending.timer);
@@ -255,12 +270,43 @@ function defaultSpawnProcess(
   args: string[],
   options: { cwd: string; env: NodeJS.ProcessEnv }
 ): AppServerProcess {
-  return spawn(executablePath, args, {
+  const launch = resolveAppServerLaunch(executablePath, args);
+  return spawn(launch.executablePath, launch.args, {
     cwd: options.cwd,
     env: options.env,
     stdio: ["pipe", "pipe", "pipe"],
-    windowsHide: true
+    windowsHide: true,
+    windowsVerbatimArguments: launch.windowsVerbatimArguments
   });
+}
+
+export interface AppServerLaunch {
+  executablePath: string;
+  args: string[];
+  windowsVerbatimArguments?: boolean;
+}
+
+export function resolveAppServerLaunch(
+  executablePath: string,
+  args: string[],
+  platform: NodeJS.Platform = process.platform,
+  comspec: string = process.env.ComSpec || "cmd.exe"
+): AppServerLaunch {
+  if (platform !== "win32" || /\.(?:com|exe)$/i.test(executablePath)) {
+    return { executablePath, args };
+  }
+  if ([executablePath, ...args].some((token) => /[\0\r\n"%]/.test(token))) {
+    throw new Error("Codex executable path or argument contains unsafe characters for Windows command resolution.");
+  }
+  return {
+    executablePath: comspec,
+    args: ["/d", "/v:off", "/s", "/c", `"${[`"${executablePath}"`, ...args.map(quoteWindowsCommandToken)].join(" ")}"`],
+    windowsVerbatimArguments: true
+  };
+}
+
+function quoteWindowsCommandToken(token: string): string {
+  return /^[A-Za-z0-9_.-]+$/.test(token) ? token : `"${token.replace(/"/g, '""')}"`;
 }
 
 function sanitizeDiagnostic(line: string): string | undefined {

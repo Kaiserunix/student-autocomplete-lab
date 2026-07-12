@@ -8,6 +8,7 @@ fixtures/**
 extension/**
 scripts/**
 docs/superpowers/**
+MANUAL-ACCEPTANCE.md
 test/**
 src/**
 dist/test/**

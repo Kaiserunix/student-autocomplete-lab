@@ -80,6 +80,7 @@ describe("sidebar webview modules", () => {
     expect(css).toContain(".markdownBody");
     expect(css).toContain(".coachPrimaryAction");
     expect(css).toContain(".codexOAuthPanel");
+    expect(css).toContain(".codexOAuthPanel[hidden]");
   });
 
   test("keeps Codex OAuth control inventory explicit", () => {

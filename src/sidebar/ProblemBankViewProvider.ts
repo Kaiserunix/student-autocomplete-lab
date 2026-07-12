@@ -2312,6 +2312,11 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       padding: 9px;
     }
 
+    .field[hidden],
+    .codexOAuthPanel[hidden] {
+      display: none !important;
+    }
+
     .codexOAuthActions {
       display: flex;
       flex-wrap: wrap;

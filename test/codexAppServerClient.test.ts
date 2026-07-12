@@ -2,6 +2,7 @@ import { PassThrough } from "node:stream";
 import { describe, expect, test } from "vitest";
 import {
   CodexAppServerClient,
+  resolveAppServerLaunch,
   type AppServerProcess
 } from "../src/codex/appServerClient";
 
@@ -46,9 +47,14 @@ class FakeAppServerProcess implements AppServerProcess {
     }
   }
 
-  once(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): this {
+  once(event: "exit", listener: (code: number | null, signal: NodeJS.Signals | null) => void): this;
+  once(event: "error", listener: (error: Error) => void): this;
+  once(
+    event: "exit" | "error",
+    listener: ((code: number | null, signal: NodeJS.Signals | null) => void) | ((error: Error) => void)
+  ): this {
     if (event === "exit") {
-      this.exitListeners.push(listener);
+      this.exitListeners.push(listener as (code: number | null, signal: NodeJS.Signals | null) => void);
     }
     return this;
   }
@@ -83,7 +89,8 @@ describe("Codex app-server client", () => {
             name: "student_autocomplete_lab",
             title: "Student Autocomplete Lab",
             version: "0.1.0-beta.1"
-          }
+          },
+          capabilities: null
         }
       },
       { method: "initialized", params: {} }
@@ -95,6 +102,25 @@ describe("Codex app-server client", () => {
     await expect(pending).resolves.toEqual({ account: null, requiresOpenaiAuth: true });
 
     await client.dispose();
+  });
+
+  test("uses the Windows command resolver for bare executables and command shims", () => {
+    expect(resolveAppServerLaunch("codex", ["app-server"], "win32", "C:/Windows/System32/cmd.exe")).toEqual({
+      executablePath: "C:/Windows/System32/cmd.exe",
+      args: ["/d", "/v:off", "/s", "/c", '""codex" app-server"'],
+      windowsVerbatimArguments: true
+    });
+    expect(resolveAppServerLaunch("C:/tools/codex.cmd", ["app-server"], "win32", "cmd.exe")).toEqual({
+      executablePath: "cmd.exe",
+      args: ["/d", "/v:off", "/s", "/c", '""C:/tools/codex.cmd" app-server"'],
+      windowsVerbatimArguments: true
+    });
+    expect(resolveAppServerLaunch("C:/tools/codex.exe", ["app-server"], "win32", "cmd.exe")).toEqual({
+      executablePath: "C:/tools/codex.exe",
+      args: ["app-server"]
+    });
+    expect(() => resolveAppServerLaunch('codex" & whoami', ["app-server"], "win32", "cmd.exe"))
+      .toThrow("unsafe characters");
   });
 
   test("forwards notifications while isolating malformed output", async () => {

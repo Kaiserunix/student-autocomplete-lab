@@ -9,6 +9,7 @@ describe("ordinary beta packaging ignore rules", () => {
     expect(ignore).toContain("scripts/**");
     expect(ignore).toContain("*.map");
     expect(ignore).toContain("**/*.map");
+    expect(ignore).toContain("MANUAL-ACCEPTANCE.md");
   });
 });
 
