@@ -973,7 +973,7 @@ code --list-extensions --show-versions | Select-String student-autocomplete
 
 Expected: installation succeeds and prints the extension ID/version.
 
-- [ ] **Step 5: Use Computer Use for the installed-extension path**
+- [x] **Step 5: Use Computer Use for the installed-extension path**
 
 Load and follow the `computer-use:computer-use` skill before controlling VS Code.
 Verify:
@@ -990,7 +990,14 @@ Verify:
 9. Logout returns to signed-out state.
 10. OpenAI API-key and OpenAI-compatible configuration panels still work.
 
-- [ ] **Step 6: Write a manual checklist only for remaining desktop gaps**
+Computer Use verified the installed panel, legacy/API-key visibility, OAuth
+visibility, and separate role selectors. A real Codex CLI smoke test verified
+startup and signed-out `account/read`. Account-holder login, returned models,
+text generation, and logout remain in `MANUAL-ACCEPTANCE.md` because private
+credentials/consent could not be automated and the VS Code window later had
+active user input.
+
+- [x] **Step 6: Write a manual checklist only for remaining desktop gaps**
 
 If every Step 5 action is verified, do not create a root checklist. Otherwise
 create `MANUAL-ACCEPTANCE.md` with this exact structure and list only unverified
@@ -1012,7 +1019,7 @@ following user-controlled steps.
 Replace that concrete browser-consent row with another equally specific row
 when a different acceptance action is the one that remains unverified.
 
-- [ ] **Step 7: Run final verification after any acceptance-driven fixes**
+- [x] **Step 7: Run final verification after any acceptance-driven fixes**
 
 ```powershell
 npm test
@@ -1050,7 +1057,7 @@ Do not commit `.runtime` or the generated VSIX.
 - Modify: `docs/superpowers/plans/2026-07-12-codex-oauth.md` checkbox state
 - Review: `docs/superpowers/specs/2026-07-12-codex-oauth-design.md`
 
-- [ ] **Step 1: Check every specification requirement against evidence**
+- [x] **Step 1: Check every specification requirement against evidence**
 
 Create a local audit table from the design sections: authentication, model
 roles, legacy providers, process isolation, text-only enforcement, context
@@ -1058,7 +1065,21 @@ boundary, UI states, deterministic tests, VSIX hygiene, installed extension,
 and manual fallback. Each row must name a test output, source path, package
 listing, or desktop observation.
 
-- [ ] **Step 2: Confirm branch history and working tree**
+| Requirement | Evidence |
+| --- | --- |
+| Authentication lifecycle | `test/codexAuthService.test.ts` (7 tests), `src/codex/codexAuthService.ts`, and real `account/read` smoke returned signed-out/`requiresOpenaiAuth`. |
+| Separate model roles | `test/codexModelService.test.ts`, `test/envConfig.test.ts`, and installed UI observation of independent teaching/autocomplete selectors. |
+| Legacy providers and custom URL/key | Full `test/modelRouter.test.ts`, `test/chatCompletionsClient.test.ts`, `test/completionsClient.test.ts`; installed UI showed OpenAI-compatible and API-key fields and hid OAuth controls correctly. |
+| Process and credential isolation | `test/codexServices.test.ts`, `src/codex/codexServices.ts`; isolated `globalStorage/codex-oauth/{home,runtime}` and VSIX credential-name audit found no auth/token files. |
+| Text-only, read-only generation | `test/codexTextClient.test.ts` (14 tests) covers ephemeral threads, approval rejection, interrupt/delete, and text extraction; runtime uses read-only sandbox and approval `never`. |
+| Autocomplete context boundary | `test/autocomplete.test.ts`, `test/context.test.ts`, and `test/sidebarTeachingContext.test.ts` prove OAuth autocomplete excludes statement, answer, Teacher Pack, and coach history. |
+| UI state correctness | `test/problemBankWebviewScript.test.ts`, `test/sidebarWebviewModules.test.ts`, and Computer Use observations; acceptance found and fixed `[hidden]` CSS precedence. |
+| Deterministic source verification | Final pre-audit run: 80 test files and 285 tests passed; TypeScript compile passed. |
+| VSIX hygiene | `npm run package:beta` passed; 6 Codex runtime files were included, credential patterns were absent, and `MANUAL-ACCEPTANCE.md` is excluded by `.vscodeignore` with a packaging regression test. |
+| Installed extension | `kaiserunix.student-autocomplete-lab@0.1.0-beta.1` installed with `--force`; Computer Use rendered and exercised the configuration panel. |
+| Manual fallback | Root `MANUAL-ACCEPTANCE.md` contains only account-holder login/model/generation/logout checks that could not be safely automated. |
+
+- [x] **Step 2: Confirm branch history and working tree**
 
 ```powershell
 git log --oneline --decorate 098365f..HEAD
@@ -1069,7 +1090,7 @@ git diff 098365f...HEAD --stat
 Expected: feature commits are focused and the worktree is clean except for the
 plan checkbox update that will be committed next.
 
-- [ ] **Step 3: Mark completed plan checkboxes and commit the plan record**
+- [x] **Step 3: Mark completed plan checkboxes and commit the plan record**
 
 ```powershell
 git add docs/superpowers/plans/2026-07-12-codex-oauth.md
