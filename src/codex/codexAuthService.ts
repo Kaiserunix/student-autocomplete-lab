@@ -146,9 +146,14 @@ export class CodexAuthService {
       return;
     }
     const params = asRecord(message.params);
-    if (!params || params.authMode === null) {
-      this.setState({ status: "signed-out" });
+    if (!params) {
+      return;
     }
+    if (params.authMode === null) {
+      this.setState({ status: "signed-out" });
+      return;
+    }
+    void this.refresh();
   }
 
   private setState(state: CodexAuthState): CodexAuthState {
@@ -172,5 +177,19 @@ function stringValue(value: unknown): string | undefined {
 }
 
 function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
+  return sanitizeCodexPublicError(error instanceof Error ? error.message : String(error));
+}
+
+export function sanitizeCodexPublicError(message: string): string {
+  return message
+    .replace(
+      /["']?(?:access[_-]?token|refresh[_-]?token|cookie)["']?\s*[:=]\s*["']?[^"',\s}]+["']?/gi,
+      "[credential]"
+    )
+    .replace(/Bearer\s+\S+/gi, "Bearer [redacted]")
+    .replace(/auth\.json/gi, "[credential file]")
+    .replace(/https?:\/\/\S+/gi, "[url]")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 300);
 }

@@ -1,4 +1,6 @@
 import type { AiConfigView } from "../config/modelEnv";
+import type { CodexAuthState } from "../codex/codexAuthService";
+import type { CodexModelInfo } from "../codex/codexModelService";
 import type { AttemptSession } from "../attempt/schema";
 import type { InternalTestSummary } from "../internalTesting/internalTestRecorder";
 import type { ProblemRecord } from "../problemBank/types";
@@ -62,6 +64,14 @@ export interface AiRuntimeStatus {
   };
 }
 
+export interface CodexOAuthStateView {
+  auth: CodexAuthState;
+  models: CodexModelInfo[];
+  recommendedTeachingModel?: string;
+  recommendedAutocompleteModel?: string;
+  error?: string;
+}
+
 export interface StudentSkillVersionView {
   versionId: string;
   archivedAt: string;
@@ -82,6 +92,7 @@ export interface ProblemBankStateView {
   completedProblems: CompletedProblemStateView[];
   aiStatus: AiRuntimeStatus;
   aiConfig: AiConfigView;
+  codexOAuth: CodexOAuthStateView;
   uiLanguage: UiLanguage;
   studentSkill: StudentSkill;
   studentSkillVersions: StudentSkillVersionView[];

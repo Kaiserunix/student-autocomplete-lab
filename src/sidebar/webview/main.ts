@@ -20,6 +20,19 @@ export const problemImportButtonIds = [
   "searchProblemSet"
 ] as const;
 
+export const codexOAuthControlIds = [
+  "aiOpenAiAuthMode",
+  "codexOAuthPanel",
+  "codexAuthStatus",
+  "codexBrowserLogin",
+  "codexDeviceLogin",
+  "codexCancelLogin",
+  "codexLogout",
+  "codexRefreshModels",
+  "codexTeachingModel",
+  "codexAutocompleteModel"
+] as const;
+
 export type SidebarPageId = (typeof sidebarPageIds)[number];
 export type CoachButtonId = (typeof primaryCoachButtonIds)[number];
 export type ProblemImportButtonId = (typeof problemImportButtonIds)[number];

@@ -8,6 +8,17 @@ function unique(values: string[]): string[] {
 }
 
 describe("sidebar message protocol", () => {
+  test("exposes the complete Codex OAuth command contract", () => {
+    expect(webviewCommandNames).toEqual(expect.arrayContaining([
+      "readCodexAuth",
+      "startCodexBrowserLogin",
+      "startCodexDeviceLogin",
+      "cancelCodexLogin",
+      "logoutCodex",
+      "refreshCodexModels"
+    ]));
+  });
+
   test("exports every command dispatched by the webview script", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
     const dispatched = unique(

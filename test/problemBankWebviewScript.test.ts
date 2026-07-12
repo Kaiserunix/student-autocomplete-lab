@@ -2,6 +2,50 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 
 describe("problem bank webview script", () => {
+  test("keeps the embedded webview JavaScript syntactically valid", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+    const rawScript = source.match(/<script nonce="\$\{nonce\}">([\s\S]*?)<\/script>/)?.[1];
+
+    expect(rawScript).toBeTruthy();
+    const script = new Function(
+      "starterPresetsJson",
+      "practiceLanguageOptionsJson",
+      `return \`${rawScript}\`;`
+    )("[]", "[]") as string;
+    expect(() => new Function(script!)).not.toThrow();
+  });
+
+  test("exposes Codex OAuth account actions and separate role model selectors", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    for (const id of [
+      "aiOpenAiAuthMode",
+      "codexOAuthPanel",
+      "codexAuthStatus",
+      "codexBrowserLogin",
+      "codexDeviceLogin",
+      "codexCancelLogin",
+      "codexLogout",
+      "codexRefreshModels",
+      "codexTeachingModel",
+      "codexAutocompleteModel"
+    ]) {
+      expect(source).toContain(`id="${id}"`);
+    }
+    for (const command of [
+      "readCodexAuth",
+      "startCodexBrowserLogin",
+      "startCodexDeviceLogin",
+      "cancelCodexLogin",
+      "logoutCodex",
+      "refreshCodexModels"
+    ]) {
+      expect(source).toContain(`command: "${command}"`);
+    }
+    expect(source).toContain('value="api-key"');
+    expect(source).toContain('value="codex-oauth"');
+  });
+
   test("keeps fix-hint newlines escaped inside the embedded script", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 

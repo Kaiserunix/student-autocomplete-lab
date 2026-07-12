@@ -1,7 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { createWebviewNonce, htmlLanguage, renderWebviewDocumentShell } from "../src/sidebar/html";
-import { disabledReasonForCoachAction, primaryCoachButtonIds, sidebarPageIds } from "../src/sidebar/webview/main";
+import {
+  codexOAuthControlIds,
+  disabledReasonForCoachAction,
+  primaryCoachButtonIds,
+  sidebarPageIds
+} from "../src/sidebar/webview/main";
 import { getSidebarUiCopy, normalizeUiLanguage } from "../src/sidebar/webview/i18n";
 import { normalizeMathText, parseMarkdownBlocks, renderMarkdownToHtml } from "../src/sidebar/webview/markdown";
 
@@ -74,5 +79,21 @@ describe("sidebar webview modules", () => {
 
     expect(css).toContain(".markdownBody");
     expect(css).toContain(".coachPrimaryAction");
+    expect(css).toContain(".codexOAuthPanel");
+  });
+
+  test("keeps Codex OAuth control inventory explicit", () => {
+    expect(codexOAuthControlIds).toEqual([
+      "aiOpenAiAuthMode",
+      "codexOAuthPanel",
+      "codexAuthStatus",
+      "codexBrowserLogin",
+      "codexDeviceLogin",
+      "codexCancelLogin",
+      "codexLogout",
+      "codexRefreshModels",
+      "codexTeachingModel",
+      "codexAutocompleteModel"
+    ]);
   });
 });

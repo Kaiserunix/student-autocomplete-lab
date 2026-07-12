@@ -7,7 +7,8 @@ import { problemRefFromRecord } from "../attempt/session";
 import { buildAutocompleteInputFromText, extractStudentCodeFromText } from "../autocomplete/context";
 import { requestMimoAutocomplete } from "../autocomplete/mimoAutocomplete";
 import type { CodexServices } from "../codex/codexServices";
-import type { CodexModelService } from "../codex/codexModelService";
+import { sanitizeCodexPublicError } from "../codex/codexAuthService";
+import type { CodexModelService, CodexModelsView } from "../codex/codexModelService";
 import {
   type AiConfigView,
   type AiProviderConfigUpdate,
@@ -129,6 +130,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
   private readonly internalRecorder: InternalTestRecorder;
   private readonly storagePaths: StudentAutocompleteStoragePaths;
+  private codexModelsView: CodexModelsView = { models: [] };
+  private codexModelsError?: string;
+  private codexModelsRefresh?: Promise<void>;
+  private webview?: vscode.Webview;
 
   public constructor(
     private readonly context: vscode.ExtensionContext,
@@ -142,9 +147,20 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       version: String(context.extension.packageJSON.version ?? ""),
       workspaceFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
     });
+    this.codexServices.auth.onDidChange((state) => {
+      void this.handleCodexAuthChange(state.status).catch((error) => {
+        console.warn("Student Autocomplete Codex state update failed", sanitizeCodexPublicError(errorMessage(error)));
+      });
+    });
   }
 
   public resolveWebviewView(webviewView: vscode.WebviewView): void {
+    this.webview = webviewView.webview;
+    webviewView.onDidDispose(() => {
+      if (this.webview === webviewView.webview) {
+        this.webview = undefined;
+      }
+    });
     webviewView.webview.options = {
       enableScripts: true
     };
@@ -173,6 +189,55 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   private async handleMessage(message: WebviewMessage): Promise<HostEvent | Record<string, unknown> | void> {
     if (message.command === "loadProblems") {
       return this.problemBankState();
+    }
+
+    if (message.command === "readCodexAuth") {
+      const auth = await this.codexServices.auth.refresh();
+      if (auth.status === "signed-in") {
+        try {
+          await this.refreshCodexModels();
+        } catch {
+          // The state below carries the sanitized model-list error.
+        }
+      }
+      return this.problemBankState();
+    }
+
+    if (message.command === "startCodexBrowserLogin") {
+      const auth = await this.codexServices.auth.startBrowserLogin();
+      if (auth.status === "login-pending" && auth.authUrl) {
+        await vscode.env.openExternal(vscode.Uri.parse(auth.authUrl));
+      }
+      return this.problemBankState(undefined, auth.status === "error" ? auth.error : "已在浏览器打开 Codex 登录页。");
+    }
+
+    if (message.command === "startCodexDeviceLogin") {
+      const auth = await this.codexServices.auth.startDeviceLogin();
+      return this.problemBankState(
+        undefined,
+        auth.status === "error" ? auth.error : "设备码已生成；复制代码并打开验证页完成登录。"
+      );
+    }
+
+    if (message.command === "cancelCodexLogin") {
+      await this.codexServices.auth.cancelLogin();
+      return this.problemBankState(undefined, "已取消 Codex 登录。");
+    }
+
+    if (message.command === "logoutCodex") {
+      await this.codexServices.auth.logout();
+      this.codexModelsView = { models: [] };
+      this.codexModelsError = undefined;
+      return this.problemBankState(undefined, "已退出 Codex OAuth。");
+    }
+
+    if (message.command === "refreshCodexModels") {
+      try {
+        await this.refreshCodexModels();
+        return this.problemBankState(undefined, `已刷新 ${this.codexModelsView.models.length} 个 Codex 模型。`);
+      } catch {
+        return this.problemBankState(undefined, `Codex 模型刷新失败：${this.codexModelsError ?? "未知错误"}`);
+      }
     }
 
     if (message.command === "importLuogu") {
@@ -403,6 +468,11 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       })),
       aiStatus: await this.aiRuntimeStatus(),
       aiConfig: await this.aiConfigView(),
+      codexOAuth: {
+        auth: this.codexServices.auth.getState(),
+        ...this.codexModelsView,
+        ...(this.codexModelsError ? { error: this.codexModelsError } : {})
+      },
       activeEditor: this.activeEditorState(),
       uiLanguage: this.readUiLanguage(),
       studentSkill: studentSkillState.studentSkill,
@@ -437,6 +507,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   private async handleSaveAiConfigRequest(config: AiProviderConfigUpdate): Promise<Record<string, unknown>> {
     await saveAiConfigToVsCode(this.context, {
       mode: normalizeAiProviderMode(config.mode),
+      authMode: config.authMode,
       baseUrl: config.baseUrl?.trim() ?? "",
       autocompleteBaseUrl: config.autocompleteBaseUrl?.trim() ?? "",
       apiKey: config.apiKey,
@@ -446,6 +517,47 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     });
 
     return this.problemBankState(undefined, "AI 配置已保存到 VS Code Settings；API key 留空时已保留 SecretStorage 里的旧值。");
+  }
+
+  private async refreshCodexModels(): Promise<void> {
+    if (this.codexModelsRefresh) {
+      return this.codexModelsRefresh;
+    }
+    const pending = this.loadCodexModels();
+    this.codexModelsRefresh = pending;
+    try {
+      await pending;
+    } finally {
+      if (this.codexModelsRefresh === pending) {
+        this.codexModelsRefresh = undefined;
+      }
+    }
+  }
+
+  private async loadCodexModels(): Promise<void> {
+    try {
+      this.codexModelsView = await this.codexServices.models.listModels();
+      this.codexModelsError = undefined;
+    } catch (error) {
+      this.codexModelsError = sanitizeCodexPublicError(error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+  }
+
+  private async handleCodexAuthChange(status: string): Promise<void> {
+    if (status === "signed-out") {
+      this.codexModelsView = { models: [] };
+      this.codexModelsError = undefined;
+    } else if (status === "signed-in") {
+      try {
+        await this.refreshCodexModels();
+      } catch {
+        // The sanitized model error is included in the next state update.
+      }
+    }
+    if (this.webview) {
+      await this.webview.postMessage(await this.problemBankState());
+    }
   }
 
   private async handleSaveUiLanguageRequest(language: UiLanguage): Promise<Record<string, unknown>> {
@@ -2190,6 +2302,27 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       grid-column: 1 / -1;
     }
 
+    .codexOAuthPanel {
+      background: color-mix(in srgb, var(--vscode-editor-background) 84%, transparent);
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      display: grid;
+      gap: 8px;
+      grid-column: 1 / -1;
+      padding: 9px;
+    }
+
+    .codexOAuthActions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+
+    .codexDeviceCode {
+      font-family: var(--vscode-editor-font-family);
+      letter-spacing: 0.08em;
+    }
+
     .modelResults {
       border-top: 1px solid var(--line);
       display: grid;
@@ -2718,6 +2851,45 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
                     <option value="anthropic-native">Anthropic Native</option>
                   </select>
                 </div>
+                <div id="aiOpenAiAuthModeField" class="field" hidden>
+                  <label for="aiOpenAiAuthMode">OpenAI 认证</label>
+                  <select id="aiOpenAiAuthMode">
+                    <option value="api-key">API Key</option>
+                    <option value="codex-oauth">Codex OAuth</option>
+                  </select>
+                </div>
+                <div id="codexOAuthPanel" class="codexOAuthPanel" hidden>
+                  <div>
+                    <strong>Codex OAuth</strong>
+                    <div id="codexAuthStatus" class="hint">正在读取 Codex 登录状态…</div>
+                  </div>
+                  <div class="codexOAuthActions">
+                    <button id="codexBrowserLogin" class="secondary" type="button">浏览器登录</button>
+                    <button id="codexDeviceLogin" class="secondary" type="button">设备码登录</button>
+                    <button id="codexCancelLogin" class="secondary" type="button" hidden>取消登录</button>
+                    <button id="codexLogout" class="secondary" type="button" hidden>退出登录</button>
+                    <button id="codexRefreshModels" class="secondary" type="button" hidden>刷新模型</button>
+                  </div>
+                  <div id="codexDeviceCodeRow" class="field" hidden>
+                    <label for="codexDeviceCode">设备码</label>
+                    <div class="row">
+                      <input id="codexDeviceCode" class="codexDeviceCode" readonly>
+                      <button id="codexCopyDeviceCode" class="secondary" type="button">复制</button>
+                    </div>
+                    <a id="codexVerificationLink" href="#" target="_blank" rel="noreferrer">打开设备验证页</a>
+                  </div>
+                  <div class="aiConfigGrid">
+                    <div class="field">
+                      <label for="codexTeachingModel">提示/评分模型</label>
+                      <select id="codexTeachingModel"></select>
+                    </div>
+                    <div class="field">
+                      <label for="codexAutocompleteModel">补全模型</label>
+                      <select id="codexAutocompleteModel"></select>
+                    </div>
+                  </div>
+                  <p id="codexModelHint" class="mini">登录后从当前账号返回的模型中选择；不会猜测或伪造 Spark。</p>
+                </div>
                 <div class="field">
                   <label for="aiAutocompleteFormat">补全协议</label>
                   <select id="aiAutocompleteFormat">
@@ -2808,6 +2980,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       activeEditor: undefined,
       aiStatus: undefined,
       aiConfig: undefined,
+      codexOAuth: undefined,
       internalTesting: undefined,
       studentSkill: undefined,
       studentSkillVersions: [],
@@ -2846,6 +3019,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const coachResponseLanguage = document.getElementById("coachResponseLanguage");
     const coachOjVerdict = document.getElementById("coachOjVerdict");
     const aiConfigMode = document.getElementById("aiConfigMode");
+    const aiOpenAiAuthModeField = document.getElementById("aiOpenAiAuthModeField");
+    const aiOpenAiAuthMode = document.getElementById("aiOpenAiAuthMode");
     const aiAutocompleteFormat = document.getElementById("aiAutocompleteFormat");
     const aiBaseUrl = document.getElementById("aiBaseUrl");
     const aiAutocompleteBaseUrl = document.getElementById("aiAutocompleteBaseUrl");
@@ -2854,6 +3029,19 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const aiAutocompleteModel = document.getElementById("aiAutocompleteModel");
     const aiConfigSavedKey = document.getElementById("aiConfigSavedKey");
     const aiModelResults = document.getElementById("aiModelResults");
+    const codexOAuthPanel = document.getElementById("codexOAuthPanel");
+    const codexAuthStatus = document.getElementById("codexAuthStatus");
+    const codexBrowserLogin = document.getElementById("codexBrowserLogin");
+    const codexDeviceLogin = document.getElementById("codexDeviceLogin");
+    const codexCancelLogin = document.getElementById("codexCancelLogin");
+    const codexLogout = document.getElementById("codexLogout");
+    const codexRefreshModels = document.getElementById("codexRefreshModels");
+    const codexDeviceCodeRow = document.getElementById("codexDeviceCodeRow");
+    const codexDeviceCode = document.getElementById("codexDeviceCode");
+    const codexVerificationLink = document.getElementById("codexVerificationLink");
+    const codexTeachingModel = document.getElementById("codexTeachingModel");
+    const codexAutocompleteModel = document.getElementById("codexAutocompleteModel");
+    const codexModelHint = document.getElementById("codexModelHint");
     const internalTestPanel = document.getElementById("internalTestPanel");
     const internalTestMetrics = document.getElementById("internalTestMetrics");
     const internalTestEventsPath = document.getElementById("internalTestEventsPath");
@@ -2894,6 +3082,38 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       state.ojVerdict = event.target.value;
     });
     aiConfigMode.addEventListener("change", () => updateAiConfigModeUi(true));
+    aiOpenAiAuthMode.addEventListener("change", () => updateAiConfigModeUi(false));
+    codexTeachingModel.addEventListener("change", () => {
+      aiChatModel.value = codexTeachingModel.value;
+    });
+    codexAutocompleteModel.addEventListener("change", () => {
+      aiAutocompleteModel.value = codexAutocompleteModel.value;
+    });
+    codexBrowserLogin.addEventListener("click", () => {
+      setStatus("正在启动 Codex 浏览器登录...");
+      vscode.postMessage({ command: "startCodexBrowserLogin" });
+    });
+    codexDeviceLogin.addEventListener("click", () => {
+      setStatus("正在生成 Codex 设备码...");
+      vscode.postMessage({ command: "startCodexDeviceLogin" });
+    });
+    codexCancelLogin.addEventListener("click", () => {
+      vscode.postMessage({ command: "cancelCodexLogin" });
+    });
+    codexLogout.addEventListener("click", () => {
+      vscode.postMessage({ command: "logoutCodex" });
+    });
+    codexRefreshModels.addEventListener("click", () => {
+      setStatus("正在刷新 Codex 模型...");
+      vscode.postMessage({ command: "refreshCodexModels" });
+    });
+    document.getElementById("codexCopyDeviceCode").addEventListener("click", () => {
+      if (codexDeviceCode.value && navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(codexDeviceCode.value)
+          .then(() => setStatus("设备码已复制。"))
+          .catch(() => setStatus("无法自动复制，请手动选择设备码。", "error"));
+      }
+    });
     document.getElementById("saveAiConfig").addEventListener("click", () => saveAiConfig());
     document.getElementById("fetchAiModels").addEventListener("click", () => fetchAiModels());
     document.getElementById("runAiHealthCheck").addEventListener("click", () => runAiHealthCheck());
@@ -2981,6 +3201,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         }
         state.aiStatus = data.aiStatus;
         state.aiConfig = data.aiConfig;
+        state.codexOAuth = data.codexOAuth;
         state.activeEditor = data.activeEditor || state.activeEditor;
         state.uiLanguage = data.uiLanguage === "en" ? "en" : "zh";
         state.internalTesting = data.internalTesting;
@@ -3075,6 +3296,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     renderStarterPresets();
     switchPage("ai");
     vscode.postMessage({ command: "loadProblems" });
+    vscode.postMessage({ command: "readCodexAuth" });
 
     const uiCopy = {
       zh: {
@@ -3276,6 +3498,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       }
 
       aiConfigMode.value = config.mode || "openai-compatible";
+      aiOpenAiAuthMode.value = config.authMode || "api-key";
       aiBaseUrl.value = config.baseUrl || "";
       aiAutocompleteBaseUrl.value = config.autocompleteBaseUrl || "";
       aiChatModel.value = config.chatModel || "";
@@ -3285,10 +3508,23 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       aiApiKey.placeholder = config.hasApiKey ? "已保存，留空不修改" : "输入 API Key";
       aiConfigSavedKey.textContent = config.hasApiKey ? "API Key：已保存" : "API Key：未保存";
       updateAiConfigModeUi(false);
+      renderCodexOAuth();
     }
 
     function updateAiConfigModeUi(applyDefaults) {
       const mode = aiConfigMode.value;
+      const usesCodexOAuth = mode === "openai" && aiOpenAiAuthMode.value === "codex-oauth";
+      aiOpenAiAuthModeField.hidden = mode !== "openai";
+      codexOAuthPanel.hidden = !usesCodexOAuth;
+      [aiAutocompleteFormat, aiBaseUrl, aiAutocompleteBaseUrl, aiApiKey, aiChatModel, aiAutocompleteModel]
+        .forEach((control) => {
+          const field = control.closest(".field");
+          if (field) {
+            field.hidden = usesCodexOAuth;
+          }
+        });
+      document.getElementById("fetchAiModels").hidden = usesCodexOAuth;
+      aiConfigSavedKey.hidden = usesCodexOAuth;
       if (mode === "openai") {
         aiAutocompleteFormat.value = "openai-chat";
         aiAutocompleteFormat.disabled = true;
@@ -3315,6 +3551,98 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         aiBaseUrl.placeholder = "https://token-plan-cn.xiaomimimo.com/v1";
         aiAutocompleteBaseUrl.placeholder = "留空则跟随分析接口；DeepSeek FIM 用 https://api.deepseek.com/beta";
       }
+      if (usesCodexOAuth) {
+        renderCodexOAuth();
+      }
+    }
+
+    function renderCodexOAuth() {
+      const view = state.codexOAuth || { auth: { status: "starting" }, models: [] };
+      const auth = view.auth || { status: "starting" };
+      const signedIn = auth.status === "signed-in";
+      const pending = auth.status === "login-pending";
+      codexBrowserLogin.hidden = signedIn || pending;
+      codexDeviceLogin.hidden = signedIn || pending;
+      codexCancelLogin.hidden = !pending;
+      codexLogout.hidden = !signedIn;
+      codexRefreshModels.hidden = !signedIn;
+      codexDeviceCodeRow.hidden = !(pending && auth.userCode && auth.verificationUrl);
+      codexDeviceCode.value = auth.userCode || "";
+      if (pending && auth.verificationUrl) {
+        codexVerificationLink.href = auth.verificationUrl;
+      } else {
+        codexVerificationLink.removeAttribute("href");
+      }
+
+      if (auth.status === "signed-in") {
+        codexAuthStatus.textContent = [
+          "已登录",
+          auth.email || "账号邮箱未返回",
+          auth.planType ? "套餐 " + auth.planType : ""
+        ].filter(Boolean).join(" · ");
+      } else if (auth.status === "login-pending") {
+        codexAuthStatus.textContent = auth.userCode
+          ? "等待设备码登录完成。"
+          : "等待浏览器登录完成。";
+      } else if (auth.status === "signed-out") {
+        codexAuthStatus.textContent = "未登录。选择浏览器登录或设备码登录。";
+      } else if (auth.status === "error" || auth.status === "unavailable") {
+        codexAuthStatus.textContent = "Codex OAuth 不可用：" + (auth.error || "未知错误");
+      } else {
+        codexAuthStatus.textContent = "正在读取 Codex 登录状态…";
+      }
+
+      populateCodexModelSelect(
+        codexTeachingModel,
+        aiChatModel.value,
+        view.models || [],
+        view.recommendedTeachingModel,
+        signedIn
+      );
+      populateCodexModelSelect(
+        codexAutocompleteModel,
+        aiAutocompleteModel.value,
+        view.models || [],
+        view.recommendedAutocompleteModel,
+        signedIn
+      );
+      aiChatModel.value = codexTeachingModel.value || aiChatModel.value;
+      aiAutocompleteModel.value = codexAutocompleteModel.value || aiAutocompleteModel.value;
+      codexModelHint.textContent = view.error
+        ? "模型刷新失败：" + view.error
+        : signedIn
+          ? "当前账号返回 " + (view.models || []).length + " 个可选模型。"
+          : "登录后从当前账号返回的模型中选择；不会猜测或伪造 Spark。";
+    }
+
+    function populateCodexModelSelect(select, selected, models, recommended, enabled) {
+      select.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "请选择模型";
+      select.appendChild(placeholder);
+      const available = models.some((model) => model.id === selected);
+      if (selected && !available) {
+        const unavailable = document.createElement("option");
+        unavailable.value = selected;
+        unavailable.textContent = selected + "（当前账号未返回）";
+        select.appendChild(unavailable);
+      }
+      models.forEach((model) => {
+        const option = document.createElement("option");
+        option.value = model.id;
+        option.textContent = model.displayName && model.displayName !== model.id
+          ? model.displayName + " · " + model.id
+          : model.id;
+        select.appendChild(option);
+      });
+      const target = selected || recommended || "";
+      if (target && Array.from(select.options).some((option) => option.value === target)) {
+        select.value = target;
+      } else {
+        select.value = "";
+      }
+      select.disabled = !enabled || select.options.length <= 1;
     }
 
     function renderInternalTesting() {
@@ -3426,6 +3754,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           : aiAutocompleteFormat.value || "openai-completions";
       return {
         mode,
+        authMode: mode === "openai" ? aiOpenAiAuthMode.value || "api-key" : undefined,
         baseUrl: aiBaseUrl.value.trim(),
         autocompleteBaseUrl: mode === "openai-compatible" ? aiAutocompleteBaseUrl.value.trim() : "",
         apiKey: aiApiKey.value.trim(),

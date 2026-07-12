@@ -22,7 +22,11 @@ class FakeAuthClient implements CodexAuthClient {
     if (queued.length === 0) {
       throw new Error(`No fake response for ${method}`);
     }
-    return queued.shift() as T;
+    const next = queued.shift();
+    if (next instanceof Error) {
+      throw next;
+    }
+    return next as T;
   }
 
   onNotification(listener: (message: AppServerNotification) => void): { dispose(): void } {
@@ -51,7 +55,9 @@ describe("Codex OAuth state", () => {
         email: "student@example.com",
         planType: "pro",
         accessToken: "discard-me",
-        refreshToken: "discard-me-too"
+        refreshToken: "discard-me-too",
+        cookie: "discard-cookie",
+        credentialPath: "C:/private/auth.json"
       },
       requiresOpenaiAuth: true
     });
@@ -61,7 +67,23 @@ describe("Codex OAuth state", () => {
       email: "student@example.com",
       planType: "pro"
     });
-    expect(JSON.stringify(state)).not.toContain("discard-me");
+    const serialized = JSON.stringify(state);
+    expect(serialized).not.toContain("discard-me");
+    expect(serialized).not.toMatch(/accessToken|refreshToken|cookie|auth\.json/i);
+  });
+
+  test("redacts credential material from public auth errors", async () => {
+    const client = new FakeAuthClient();
+    const service = new CodexAuthService(client);
+    client.queue(
+      "account/read",
+      new Error('failed C:/private/auth.json accessToken="secret" cookie=session https://login.example.test/private')
+    );
+
+    const state = await service.refresh();
+    const serialized = JSON.stringify(state);
+    expect(state.status).toBe("error");
+    expect(serialized).not.toMatch(/secret|session|accessToken|cookie|auth\.json|login\.example/i);
   });
 
   test("starts a managed browser login with the documented request", async () => {
@@ -137,6 +159,23 @@ describe("Codex OAuth state", () => {
       status: "signed-in",
       email: "student@example.com",
       planType: "pro"
+    });
+  });
+
+  test("refreshes account state after a signed-in account update", async () => {
+    const client = new FakeAuthClient();
+    const service = new CodexAuthService(client);
+    client.queue("account/read", {
+      account: { type: "chatgpt", email: "updated@example.com", planType: "plus" }
+    });
+
+    client.notify("account/updated", { authMode: "chatgpt" });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+
+    expect(service.getState()).toEqual({
+      status: "signed-in",
+      email: "updated@example.com",
+      planType: "plus"
     });
   });
 

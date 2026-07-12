@@ -9,6 +9,7 @@ export type CoachResponseLanguage = "zh" | "en" | "raw";
 
 export const webviewCommandNames = [
   "archiveProblem",
+  "cancelCodexLogin",
   "copyInternalTestSummary",
   "deleteProblem",
   "disableStudentSkill",
@@ -18,24 +19,35 @@ export const webviewCommandNames = [
   "importManualMarkdownFile",
   "importPreset",
   "loadProblems",
+  "logoutCodex",
+  "readCodexAuth",
   "recordStudentSkillFeedback",
   "requestAiCoach",
   "requestAutocompletePreview",
   "requestOptimizationReview",
   "requestSolutionScore",
   "requestSubmissionJudge",
+  "refreshCodexModels",
   "rollbackStudentSkill",
   "runAiHealthCheck",
   "saveAiConfig",
   "saveUiLanguage",
   "searchLuoguProblems",
-  "searchLuoguProblemSets"
+  "searchLuoguProblemSets",
+  "startCodexBrowserLogin",
+  "startCodexDeviceLogin"
 ] as const;
 
 export type WebviewCommandName = (typeof webviewCommandNames)[number];
 
 export type WebviewMessage =
   | { command: "loadProblems" }
+  | { command: "readCodexAuth" }
+  | { command: "startCodexBrowserLogin" }
+  | { command: "startCodexDeviceLogin" }
+  | { command: "cancelCodexLogin" }
+  | { command: "logoutCodex" }
+  | { command: "refreshCodexModels" }
   | { command: "importLuogu"; pid: string; language?: string; createFile?: boolean }
   | { command: "importPreset"; presetId: string }
   | { command: "importLuoguProblemSet"; id: string }

@@ -843,7 +843,7 @@ git commit -m "feat: wire Codex OAuth into teaching and autocomplete"
 - Test: `test/problemBankWebviewScript.test.ts`
 - Test: `test/sidebarWebviewModules.test.ts`
 
-- [ ] **Step 1: Write failing command-contract tests**
+- [x] **Step 1: Write failing command-contract tests**
 
 Require these commands in `webviewCommandNames` and the `WebviewMessage` union:
 
@@ -859,7 +859,7 @@ refreshCodexModels
 Add source-contract assertions for auth-mode selector, OAuth account status,
 browser/device buttons, login cancel, logout, and separate model selectors.
 
-- [ ] **Step 2: Run webview tests and confirm RED**
+- [x] **Step 2: Run webview tests and confirm RED**
 
 ```powershell
 npm test -- --run test/sidebarMessageProtocol.test.ts test/problemBankWebviewScript.test.ts test/sidebarWebviewModules.test.ts
@@ -867,7 +867,7 @@ npm test -- --run test/sidebarMessageProtocol.test.ts test/problemBankWebviewScr
 
 Expected: command and source assertions fail.
 
-- [ ] **Step 3: Extend sanitized state views**
+- [x] **Step 3: Extend sanitized state views**
 
 Add:
 
@@ -884,7 +884,7 @@ interface CodexOAuthStateView {
 `ProblemBankStateView` includes this object. Tests serialize the state and prove
 it contains none of `accessToken`, `refreshToken`, `cookie`, or `auth.json`.
 
-- [ ] **Step 4: Implement host command handlers**
+- [x] **Step 4: Implement host command handlers**
 
 - Browser login opens the returned URL with `vscode.env.openExternal`.
 - Device login returns verification URL and user code to the webview.
@@ -892,7 +892,7 @@ it contains none of `accessToken`, `refreshToken`, `cookie`, or `auth.json`.
 - Auth notifications trigger a state post when the webview is available.
 - Save config persists `authMode` and role model IDs but never OAuth data.
 
-- [ ] **Step 5: Implement the OAuth configuration panel**
+- [x] **Step 5: Implement the OAuth configuration panel**
 
 When provider is OpenAI:
 
@@ -908,7 +908,7 @@ When provider is OpenAI:
 
 OpenAI-compatible and Anthropic panels must retain their current fields.
 
-- [ ] **Step 6: Run webview tests and compile**
+- [x] **Step 6: Run webview tests and compile**
 
 ```powershell
 npm test -- --run test/sidebarMessageProtocol.test.ts test/problemBankWebviewScript.test.ts test/sidebarWebviewModules.test.ts test/envConfig.test.ts
@@ -917,7 +917,7 @@ npm run compile
 
 Expected: pass.
 
-- [ ] **Step 7: Commit Task 8**
+- [x] **Step 7: Commit Task 8**
 
 ```powershell
 git add src/sidebar/messageProtocol.ts src/sidebar/stateView.ts src/sidebar/ProblemBankViewProvider.ts src/sidebar/webview/styles.css src/sidebar/webview/main.ts test/sidebarMessageProtocol.test.ts test/problemBankWebviewScript.test.ts test/sidebarWebviewModules.test.ts test/envConfig.test.ts
