@@ -10,6 +10,7 @@ import type { McpConnectionFactory } from "../../infrastructure/mcp/McpTransport
 import { McpContractError } from "../../infrastructure/mcp/errors";
 import {
   admitLocalAnonymousLeetCodeProvider,
+  type LocalAnonymousLeetCodeAdmissionOptions,
   type LocalAnonymousLeetCodeRegistration
 } from "../../infrastructure/mcp/LocalAnonymousLeetCodeProvider";
 import { ProviderRegistry } from "../../infrastructure/mcp/ProviderRegistry";
@@ -29,19 +30,20 @@ export class LeetCodeOjHostService {
 
   constructor(
     connectionFactory: McpConnectionFactory,
+    private readonly admissionOptions: LocalAnonymousLeetCodeAdmissionOptions,
     private readonly createRequestId: () => string = randomUUID
   ) {
     this.registry = new ProviderRegistry(connectionFactory);
   }
 
-  configure(manifest: unknown): void {
+  async configure(manifest: unknown): Promise<void> {
     if (this.disposed) {
       throw new Error("The LeetCode OJ host service is disposed.");
     }
     if (this.registration) {
       throw new Error("The LeetCode OJ host service is already configured.");
     }
-    this.registration = admitLocalAnonymousLeetCodeProvider(this.registry, manifest);
+    this.registration = await admitLocalAnonymousLeetCodeProvider(this.registry, manifest, this.admissionOptions);
   }
 
   async getCapabilities(signal?: AbortSignal): Promise<OjCapabilities> {

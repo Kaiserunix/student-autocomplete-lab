@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 import type {
   OjProblemDocument,
@@ -17,7 +18,17 @@ export const leetcodeSource: OjSourceRef = {
   confidence: "derived"
 };
 
-export const leetcodeArtifactPath = path.resolve("fixtures", "providers", "leetcode-anonymous-local", "build", "index.js");
+export const leetcodeProviderRoot = path.resolve("fixtures");
+export const leetcodeArtifactPath = path.join(
+  leetcodeProviderRoot,
+  "providers",
+  "leetcode-anonymous-local",
+  "0.1.0",
+  "build",
+  "index.js"
+);
+export const leetcodeArtifactBytes = new TextEncoder().encode("pinned private leetcode adapter fixture");
+export const leetcodeArtifactSha256 = createHash("sha256").update(leetcodeArtifactBytes).digest("hex");
 
 export const leetcodeTools: McpListedTool[] = [
   tool("oj_capabilities", {}, { schemaVersion: { const: "oj.capabilities/v1" } }),
@@ -44,7 +55,7 @@ export function createLeetcodeManifest(): OjProviderManifestV1 {
     arch: ["x64"],
     runtime: "native",
     archiveSha256: "a".repeat(64),
-    filesSha256: "b".repeat(64),
+    filesSha256: leetcodeArtifactSha256,
     sbomSha256: "c".repeat(64),
     license: "MIT"
   };

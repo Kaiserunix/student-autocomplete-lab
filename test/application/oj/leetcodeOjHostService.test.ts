@@ -11,9 +11,17 @@ import {
   createLeetcodeManifest,
   createLeetcodeProblemDocument,
   createLeetcodeProblemRef,
+  leetcodeArtifactBytes,
+  leetcodeProviderRoot,
   leetcodeSource,
   leetcodeTools
 } from "../../infrastructure/mcp/leetcodeFixture";
+
+const admissionOptions = {
+  providerRoot: leetcodeProviderRoot,
+  readArtifact: async () => leetcodeArtifactBytes,
+  resolveRealPath: async (filePath: string) => filePath
+};
 
 describe("LeetCodeOjHostService", () => {
   test("searches and fetches through the registry, then maps the document to ProblemRecord", async () => {
@@ -37,8 +45,8 @@ describe("LeetCodeOjHostService", () => {
       },
       oj_fetch_problem: { structuredContent: createLeetcodeProblemDocument() }
     });
-    const service = new LeetCodeOjHostService(new SingleConnectionFactory(connection), () => "oj-search-1");
-    service.configure(createLeetcodeManifest());
+    const service = new LeetCodeOjHostService(new SingleConnectionFactory(connection), admissionOptions, () => "oj-search-1");
+    await service.configure(createLeetcodeManifest());
 
     const search = await service.searchProblems({ query: "two sum", locale: "en-US", limit: 5 });
     const problem = await service.fetchProblem(createLeetcodeProblemRef());
@@ -74,8 +82,8 @@ describe("LeetCodeOjHostService", () => {
     const connection = new RoutingConnection(leetcodeTools, {
       oj_fetch_problem: { structuredContent: createLeetcodeProblemDocument() }
     });
-    const service = new LeetCodeOjHostService(new SingleConnectionFactory(connection), () => "unused");
-    service.configure(createLeetcodeManifest());
+    const service = new LeetCodeOjHostService(new SingleConnectionFactory(connection), admissionOptions, () => "unused");
+    await service.configure(createLeetcodeManifest());
     const problem = await service.fetchProblem(createLeetcodeProblemRef());
 
     const prompt = buildAutocompletePrompt({
@@ -148,8 +156,8 @@ describe("LeetCodeOjHostService", () => {
         }
       }
     });
-    const service = new LeetCodeOjHostService(new SingleConnectionFactory(connection), () => "unused");
-    service.configure(createLeetcodeManifest());
+    const service = new LeetCodeOjHostService(new SingleConnectionFactory(connection), admissionOptions, () => "unused");
+    await service.configure(createLeetcodeManifest());
 
     const capabilities = await service.getCapabilities();
     const health = await service.getHealth();
@@ -163,10 +171,10 @@ describe("LeetCodeOjHostService", () => {
     const connection = new RoutingConnection(leetcodeTools, {
       oj_fetch_problem: { structuredContent: createLeetcodeProblemDocument() }
     });
-    const service = new LeetCodeOjHostService(new SingleConnectionFactory(connection), () => "unused");
+    const service = new LeetCodeOjHostService(new SingleConnectionFactory(connection), admissionOptions, () => "unused");
 
     await expect(service.fetchProblem(createLeetcodeProblemRef())).rejects.toThrow(/not configured/i);
-    service.configure(createLeetcodeManifest());
+    await service.configure(createLeetcodeManifest());
     await service.fetchProblem(createLeetcodeProblemRef());
     await service.dispose();
 

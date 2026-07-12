@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import * as path from "node:path";
 import { LeetCodeOjHostService } from "./application/oj/LeetCodeOjHostService";
 import { createMimoInlineCompletionProvider } from "./autocomplete/inlineProvider";
 import { SdkMcpConnectionFactory } from "./infrastructure/mcp/McpTransportFactory";
@@ -23,7 +24,9 @@ export function activate(context: vscode.ExtensionContext): StudentAutocompleteH
   const problemLibrary = new ProblemLibraryTreeProvider(() => provider.loadProblemLibrary());
   const currentSession = new CurrentSessionViewProvider(context, provider, () => problemLibrary.refresh());
   const output = vscode.window.createOutputChannel("AI 做题陪练");
-  const ojHost = new LeetCodeOjHostService(new SdkMcpConnectionFactory());
+  const ojHost = new LeetCodeOjHostService(new SdkMcpConnectionFactory(), {
+    providerRoot: path.join(context.globalStorageUri.fsPath, "providers")
+  });
   const autocompleteStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
   autocompleteStatus.name = "AI 做题陪练补全";
   autocompleteStatus.command = "studentAutocomplete.triggerInlineCompletion";

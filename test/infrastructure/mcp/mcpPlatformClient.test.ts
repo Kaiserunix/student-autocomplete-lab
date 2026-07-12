@@ -80,6 +80,23 @@ describe("McpPlatformClient", () => {
     expect(client.state).toBe("quarantined");
   });
 
+  test("closes a failed startup connection before retrying with a new process", async () => {
+    const failed = new FailingListConnection(fixtureTools, { structuredContent: {} });
+    const recovered = new FakeConnection(fixtureTools, { structuredContent: {} });
+    const client = new McpPlatformClient({
+      manifest: createFixtureManifest(),
+      entrypointId: "agentReadOnly",
+      connectionFactory: new QueueFactory([failed, recovered])
+    });
+
+    await expect(client.start()).rejects.toThrow("list failed");
+    await client.start();
+
+    expect(failed.closeCount).toBe(1);
+    expect(recovered.connectCount).toBe(1);
+    expect(client.state).toBe("ready");
+  });
+
   test("quarantines an already connected provider after tools/list_changed drift", async () => {
     const connection = new FakeConnection(fixtureTools, { structuredContent: {} });
     const client = new McpPlatformClient({
@@ -130,5 +147,23 @@ class FakeFactory implements McpConnectionFactory {
 
   create(): McpClientConnection {
     return this.connection;
+  }
+}
+
+class FailingListConnection extends FakeConnection {
+  async listTools(): Promise<McpListedTool[]> {
+    throw new Error("list failed");
+  }
+}
+
+class QueueFactory implements McpConnectionFactory {
+  constructor(private readonly connections: McpClientConnection[]) {}
+
+  create(): McpClientConnection {
+    const connection = this.connections.shift();
+    if (!connection) {
+      throw new Error("No fake MCP connection remains.");
+    }
+    return connection;
   }
 }

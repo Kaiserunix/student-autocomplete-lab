@@ -5,7 +5,19 @@ import { ProviderRegistry } from "../../../src/infrastructure/mcp/ProviderRegist
 import type { McpClientConnection, McpConnectionFactory } from "../../../src/infrastructure/mcp/McpTransportFactory";
 import { ProviderQuarantinedError } from "../../../src/infrastructure/mcp/errors";
 import { FakeConnection } from "../../fixtures/mcp/fakeConnection";
-import { createLeetcodeManifest, leetcodeArtifactPath, leetcodeTools } from "./leetcodeFixture";
+import {
+  createLeetcodeManifest,
+  leetcodeArtifactBytes,
+  leetcodeArtifactPath,
+  leetcodeProviderRoot,
+  leetcodeTools
+} from "./leetcodeFixture";
+
+const admissionOptions = {
+  providerRoot: leetcodeProviderRoot,
+  readArtifact: async () => leetcodeArtifactBytes,
+  resolveRealPath: async (filePath: string) => filePath
+};
 
 describe("local anonymous LeetCode provider admission", () => {
   test("registers an explicitly injected pinned private stdio manifest", async () => {
@@ -13,7 +25,7 @@ describe("local anonymous LeetCode provider admission", () => {
     const factory = new CapturingFactory(connection);
     const registry = new ProviderRegistry(factory);
 
-    const registration = admitLocalAnonymousLeetCodeProvider(registry, createLeetcodeManifest());
+    const registration = await admitLocalAnonymousLeetCodeProvider(registry, createLeetcodeManifest(), admissionOptions);
     await registry.connect(registration.providerId, registration.entrypointId);
 
     expect(registration).toEqual({ providerId: "leetcode-anonymous-local", entrypointId: "productPrivate" });
@@ -39,19 +51,30 @@ describe("local anonymous LeetCode provider admission", () => {
     ["environment injection", (manifest: any) => Object.assign(manifest.entrypoints[0], { env: { LEETCODE_SESSION: "secret" } })],
     ["secret references", (manifest: any) => Object.assign(manifest.entrypoints[0], { secretRefs: [{ logicalName: "session", secretStorageKey: "session", envName: "LEETCODE_SESSION", required: false }] })],
     ["run tools", (manifest: any) => manifest.entrypoints[0].expectedTools.push({ ...manifest.entrypoints[0].expectedTools[3], canonical: "localRun", upstream: "oj_local_run" })]
-  ])("rejects %s before registration", (_label, mutate) => {
+  ])("rejects %s before registration", async (_label, mutate) => {
     const registry = new ProviderRegistry(new CapturingFactory(new FakeConnection(leetcodeTools, { structuredContent: {} })));
     const manifest: any = structuredClone(createLeetcodeManifest());
     mutate(manifest);
 
-    expect(() => admitLocalAnonymousLeetCodeProvider(registry, manifest)).toThrow();
+    await expect(admitLocalAnonymousLeetCodeProvider(registry, manifest, admissionOptions)).rejects.toThrow();
+  });
+
+  test("rejects launch targets outside the trusted install root and mismatched artifact hashes", async () => {
+    const registry = new ProviderRegistry(new CapturingFactory(new FakeConnection(leetcodeTools, { structuredContent: {} })));
+    const escaped = createLeetcodeManifest();
+    escaped.entrypoints[0].args = [path.resolve("outside", "index.js")];
+    const mismatched = createLeetcodeManifest();
+    mismatched.artifacts.active.filesSha256 = "e".repeat(64);
+
+    await expect(admitLocalAnonymousLeetCodeProvider(registry, escaped, admissionOptions)).rejects.toThrow(/trusted provider root/i);
+    await expect(admitLocalAnonymousLeetCodeProvider(registry, mismatched, admissionOptions)).rejects.toThrow(/hash/i);
   });
 
   test("quarantines tools whose schemas differ from the injected manifest hashes", async () => {
     const registry = new ProviderRegistry(new CapturingFactory(new FakeConnection(leetcodeTools, { structuredContent: {} })));
     const manifest = createLeetcodeManifest();
     manifest.entrypoints[0].expectedTools[3].schemaSha256 = "e".repeat(64);
-    const registration = admitLocalAnonymousLeetCodeProvider(registry, manifest);
+    const registration = await admitLocalAnonymousLeetCodeProvider(registry, manifest, admissionOptions);
 
     await expect(registry.connect(registration.providerId, registration.entrypointId)).rejects.toBeInstanceOf(
       ProviderQuarantinedError

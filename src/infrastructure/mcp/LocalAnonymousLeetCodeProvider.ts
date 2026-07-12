@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import type { OjProviderEntrypointV1, OjProviderManifestV1 } from "../../domain/oj/contracts";
 import { ojProviderManifestSchema } from "../../domain/oj/providerManifest";
@@ -15,14 +17,55 @@ export interface LocalAnonymousLeetCodeRegistration {
   entrypointId: "productPrivate";
 }
 
-export function admitLocalAnonymousLeetCodeProvider(
+export interface LocalAnonymousLeetCodeAdmissionOptions {
+  providerRoot: string;
+  readArtifact?: (filePath: string) => Promise<Uint8Array>;
+  resolveRealPath?: (filePath: string) => Promise<string>;
+}
+
+export async function admitLocalAnonymousLeetCodeProvider(
   registry: ProviderRegistry,
-  input: unknown
-): LocalAnonymousLeetCodeRegistration {
+  input: unknown,
+  options: LocalAnonymousLeetCodeAdmissionOptions
+): Promise<LocalAnonymousLeetCodeRegistration> {
   const manifest = ojProviderManifestSchema.parse(input) as OjProviderManifestV1;
   assertAnonymousLeetCodeManifest(manifest);
+  await verifyPinnedEntrypoint(manifest, options);
   registry.register(manifest);
   return { providerId: manifest.providerId, entrypointId: "productPrivate" };
+}
+
+async function verifyPinnedEntrypoint(
+  manifest: OjProviderManifestV1,
+  options: LocalAnonymousLeetCodeAdmissionOptions
+): Promise<void> {
+  if (!path.isAbsolute(options.providerRoot)) {
+    throw new Error("The trusted OJ provider root must be absolute.");
+  }
+  if (path.isAbsolute(manifest.installDirectoryLayout)) {
+    throw new Error("The provider install directory layout must be relative to the trusted root.");
+  }
+  const installRoot = path.resolve(options.providerRoot, manifest.installDirectoryLayout);
+  assertPathInside(options.providerRoot, installRoot, "Provider install directory");
+  const entrypoint = manifest.entrypoints[0];
+  const launchTarget = entrypoint.args?.[0] ?? entrypoint.command!;
+  const resolvePath = options.resolveRealPath ?? realpath;
+  const [resolvedInstallRoot, resolvedTarget] = await Promise.all([resolvePath(installRoot), resolvePath(launchTarget)]);
+  assertPathInside(resolvedInstallRoot, resolvedTarget, "Provider launch target");
+
+  const bytes = await (options.readArtifact ?? readFile)(resolvedTarget);
+  const actualSha256 = createHash("sha256").update(bytes).digest("hex");
+  if (actualSha256.toLowerCase() !== manifest.artifacts.active.filesSha256.toLowerCase()) {
+    throw new Error("The local anonymous LeetCode entrypoint hash does not match the pinned active artifact.");
+  }
+}
+
+function assertPathInside(root: string, candidate: string, label: string): void {
+  const relative = path.relative(path.resolve(root), path.resolve(candidate));
+  if (relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))) {
+    return;
+  }
+  throw new Error(`${label} escapes the trusted provider root.`);
 }
 
 function assertAnonymousLeetCodeManifest(manifest: OjProviderManifestV1): void {
