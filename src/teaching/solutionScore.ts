@@ -78,7 +78,7 @@ export async function requestMimoSolutionScore(
         {
           role: "system",
           content:
-            "你是 MiMo，一个算法学习评分教练。只返回一个合法 JSON 对象，不要 markdown。所有 JSON 字符串值使用简体中文。"
+            "你是一个算法学习评分教练。只返回一个合法 JSON 对象，不要 markdown。所有 JSON 字符串值使用简体中文。"
         },
         {
           role: "user",
@@ -97,7 +97,7 @@ export async function requestMimoSolutionScore(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const preview = text.slice(0, 240).replace(/\s+/g, " ").trim();
-    throw new Error(`MiMo solution score returned invalid JSON: ${message}. Preview: ${preview || "<empty>"}`);
+    throw new Error(`AI solution score returned invalid JSON: ${message}. Preview: ${preview || "<empty>"}`);
   }
 }
 
@@ -200,11 +200,24 @@ function parseRecommendation(value: unknown): TeachingRecommendation | undefined
     return undefined;
   }
 
-  const record = requireRecord(value, "recommendation");
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const problemId = optionalNonEmptyString(record.problem_id) ?? optionalNonEmptyString(record.problemId);
+  if (!problemId) {
+    return undefined;
+  }
+
   return {
-    problemId: requireString(record.problem_id, "recommendation.problem_id"),
-    reason: requireString(record.reason, "recommendation.reason")
+    problemId,
+    reason: optionalNonEmptyString(record.reason) ?? optionalNonEmptyString(record.rationale) ?? "模型未给出推荐理由。"
   };
+}
+
+function optionalNonEmptyString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : undefined;
 }
 
 function parseOjStatus(value: unknown): OjVerdict["status"] {

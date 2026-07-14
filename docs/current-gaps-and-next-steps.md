@@ -37,6 +37,7 @@ Status: internal project note after the DeepSeek autocomplete and Luogu training
 - Settings are mostly global. Workspace/folder-specific model routing should be supported deliberately, with clear precedence and UI copy.
 - Provider names should be neutralized across CLI and UI. Runtime code should stop saying `mimo` for generic OpenAI-compatible requests.
 - Model fetching exists, but provider-specific filtering and "recommended for autocomplete / recommended for analysis" labels need more real-world tuning.
+- Codex OAuth sign-in is not implemented. It should be added as an authentication option alongside the existing API-key flow.
 
 ### Problem Import And Problem Bank
 
@@ -82,6 +83,23 @@ Status: internal project note after the DeepSeek autocomplete and Luogu training
 - Treat `我已完成` as a session review: summarize what happened, update Student Skill, score learning value, then archive.
 - Keep `我放弃了` as a lesson report: standard idea, key pain point, minimal repair path, hidden reference answer, remediation practice.
 - Improve Markdown problem import with validation warnings, examples, and generated code-file creation in one flow.
+
+### Codex OAuth
+
+- Add Codex OAuth as an optional authentication method alongside API-key configuration.
+- Use the documented Codex app-server browser or device-code login flow.
+- Show signed-in, signed-out, login-in-progress, expired-session, and login-failed states in the configuration UI.
+- Provide explicit sign-in, retry, and logout actions.
+- Preserve the existing API-key and OpenAI-compatible provider paths; OAuth must not become a required dependency.
+- Treat API keys and completed OAuth sessions as user-provided credentials. Credential provenance is outside this project's scope.
+- Keep authentication credentials out of source control, packaged VSIX contents, logs, and diagnostics.
+
+OAuth acceptance criteria:
+
+1. A user can complete OAuth sign-in from the extension and see the connected account state.
+2. The authenticated session can be used for the supported Codex model route.
+3. Logout clears the active session and the UI returns to the signed-out state.
+4. Existing API-key configuration and model calls continue to work unchanged.
 
 ### Self-Evolution Evaluation
 

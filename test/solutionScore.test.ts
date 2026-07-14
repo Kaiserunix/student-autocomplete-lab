@@ -42,6 +42,76 @@ describe("solution score", () => {
     expect(report.painPoints[0].label).toBe("bruteforce_no_growth");
   });
 
+  test("keeps usable scores when the model omits a concrete recommendation problem", () => {
+    const report = parseSolutionScoreReport(
+      JSON.stringify({
+        oj_result: "UNKNOWN",
+        learning_score: 90,
+        rubric: {
+          correctness: 95,
+          complexity_match: 100,
+          idea_growth: 80,
+          code_quality: 90,
+          independence: 100
+        },
+        complexity_assessment: {
+          observed: "O(n)",
+          expected: "O(n)",
+          verdict: "matched",
+          reason: "复杂度符合题目要求。"
+        },
+        pain_points: [
+          {
+            label: "needs_teacher_review",
+            confidence: 0.4,
+            evidence: "模型没有足够证据给出下一题。"
+          }
+        ],
+        summary: "评分内容可用，但没有具体推荐题号。",
+        next_action: "继续完成当前题。",
+        recommendation: {
+          reason: "先复盘当前题。"
+        }
+      })
+    );
+
+    expect(report.learningScore).toBe(90);
+    expect(report.recommendation).toBeUndefined();
+  });
+
+  test("accepts camelCase recommendation ids and fallback recommendation reasons", () => {
+    const report = parseSolutionScoreReport(
+      JSON.stringify({
+        oj_result: "AC",
+        learning_score: 76,
+        rubric: {
+          correctness: 90,
+          complexity_match: 70,
+          idea_growth: 70,
+          code_quality: 80,
+          independence: 70
+        },
+        complexity_assessment: {
+          observed: "O(n^2)",
+          expected: "O(n^2)",
+          verdict: "acceptable_bruteforce",
+          reason: "本题数据范围允许。"
+        },
+        pain_points: [],
+        summary: "可以进入同类练习。",
+        next_action: "做下一题。",
+        recommendation: {
+          problemId: "P1428"
+        }
+      })
+    );
+
+    expect(report.recommendation).toEqual({
+      problemId: "P1428",
+      reason: "模型未给出推荐理由。"
+    });
+  });
+
   test("calls MiMo with AC scoring rubric and attempt stats", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
     const fakeFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {

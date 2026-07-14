@@ -89,10 +89,19 @@ function parseRecommendation(value: unknown): TeachingRecommendation | undefined
     return undefined;
   }
 
-  const record = requireRecord(value, "recommendation");
+  if (typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const record = value as Record<string, unknown>;
+  const problemId = optionalString(record.problem_id ?? record.problemId);
+  if (!problemId) {
+    return undefined;
+  }
+
   return {
-    problemId: requireString(record.problem_id, "recommendation.problem_id"),
-    reason: requireString(record.reason, "recommendation.reason")
+    problemId,
+    reason: optionalString(record.reason ?? record.rationale) ?? "模型未给出推荐理由。"
   };
 }
 
