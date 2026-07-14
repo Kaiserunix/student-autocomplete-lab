@@ -403,7 +403,8 @@ describe("problem bank webview script", () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
     expect(source).toContain('actions.className = "detailActions";');
-    expect(source).toContain('goCoachButton.textContent = "去 AI 教练提问";');
+    expect(source).toContain('goCoachButton.textContent = "进入作答现场";');
+    expect(source).toContain('goCoachButton.className = "posterPrimaryAction";');
     expect(source).toContain('id="coachHint"');
     expect(source).not.toContain('goCoachButton.addEventListener("click", () => requestAiCoach');
     expect(source).not.toContain('deleteButton.addEventListener("click", () => requestAiCoach');

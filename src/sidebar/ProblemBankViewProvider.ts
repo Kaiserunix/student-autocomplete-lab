@@ -202,9 +202,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       if (auth.status === "signed-in") {
         try {
           await this.refreshCodexModels();
-        } catch {
-          // The state below carries the sanitized model-list error.
-        }
+        } catch {}
       }
       return this.problemBankState();
     }
@@ -573,9 +571,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     } else if (status === "signed-in") {
       try {
         await this.refreshCodexModels();
-      } catch {
-        // The sanitized model error is included in the next state update.
-      }
+      } catch {}
     }
     if (this.webview) {
       await this.webview.postMessage(await this.problemBankState());
@@ -3093,6 +3089,30 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       grid-template-columns: minmax(0, 1fr) 92px;
     }
 
+    .sessionContext {
+      display: grid;
+      gap: 6px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .sessionContextItem {
+      border-left: 1px solid var(--dossierRule);
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+      padding-left: 7px;
+    }
+
+    .sessionContextItem strong {
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 500;
+      line-height: 1.35;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .sessionStatus {
       border-left: 2px solid var(--dossierAmber);
       color: var(--vscode-descriptionForeground);
@@ -3116,6 +3136,16 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     .traceStep:first-child {
+      border-top-color: var(--dossierMint);
+      color: var(--dossierMint);
+    }
+
+    .traceStep.isActive {
+      border-top-color: var(--dossierCyan);
+      color: var(--vscode-foreground);
+    }
+
+    .traceStep.isComplete {
       border-top-color: var(--dossierMint);
       color: var(--dossierMint);
     }
@@ -3248,6 +3278,16 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       box-shadow: inset 2px 0 0 var(--dossierCyan);
     }
 
+    .coachPanel > .panelHeader {
+      align-items: start;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .coachPanel #aiProvider {
+      overflow-wrap: anywhere;
+    }
+
     .coachProblem,
     .aiResponse,
     .coachAskBox {
@@ -3319,6 +3359,66 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       box-shadow: inset 2px 0 0 var(--dossierMint);
     }
 
+    .codexOAuthHeading {
+      align-items: start;
+      display: grid;
+      gap: 4px;
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+
+    .codexOAuthHeading .hint {
+      grid-column: 1 / -1;
+    }
+
+    .connectionStamp {
+      border: 1px solid var(--dossierRule);
+      color: var(--vscode-descriptionForeground);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.06em;
+      padding: 2px 5px;
+    }
+
+    .codexOAuthPanel.isConnected .connectionStamp {
+      border-color: var(--dossierMint);
+      color: var(--dossierMint);
+    }
+
+    #ojSubmissionStatus[data-submission-state="preview"] {
+      border-left-color: var(--dossierAmber);
+    }
+
+    #ojSubmissionStatus[data-submission-state="official"] {
+      border-left-color: var(--dossierMint);
+    }
+
+    #ojSubmissionStatus[data-submission-state="transport"] {
+      border-left-color: var(--dossierCyan);
+    }
+
+    .attemptEvidenceRail,
+    .emptyPosterActions {
+      display: grid;
+      gap: 6px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .attemptEvidenceItem {
+      border-top: 1px solid var(--dossierRule);
+      display: grid;
+      gap: 2px;
+      padding-top: 5px;
+    }
+
+    .dossierTag.amber {
+      border-color: color-mix(in srgb, var(--dossierAmber) 65%, var(--line));
+      color: var(--dossierAmber);
+    }
+
+    .posterPrimaryAction {
+      min-height: 38px;
+    }
+
     .learningDossier .dossierHeading {
       background: color-mix(in srgb, var(--dossierMint) 7%, transparent);
     }
@@ -3360,6 +3460,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         grid-template-columns: 1fr;
       }
 
+      .sessionContext,
+      .attemptEvidenceRail,
+      .emptyPosterActions {
+        grid-template-columns: 1fr;
+      }
+
       .traceStep {
         border-left: 1px solid var(--dossierRule);
         border-top: 0;
@@ -3383,6 +3489,20 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         <h1 id="appTitle">AI 做题陪练</h1>
         <span id="appSubtitle" class="stateStamp">SESSION READY</span>
       </div>
+      <div class="sessionContext">
+        <div class="sessionContextItem">
+          <span class="evidenceCode">CURRENT PROBLEM</span>
+          <strong id="sessionProblemTitle">NO PROBLEM POSTED</strong>
+        </div>
+        <div class="sessionContextItem">
+          <span class="evidenceCode">ACTIVE EDITOR</span>
+          <strong id="sessionEditorState">NO FILE DETECTED</strong>
+        </div>
+        <div class="sessionContextItem">
+          <span class="evidenceCode">ATTEMPT TRACE</span>
+          <strong id="sessionAttemptState">0 COACH TURNS</strong>
+        </div>
+      </div>
       <div class="topbarTools">
         <p id="status" class="status sessionStatus" role="status" aria-live="polite">正在加载已导入题目...</p>
         <div class="languageSwitch">
@@ -3395,9 +3515,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       </div>
       <div id="stats" class="stats"></div>
       <div class="sessionTrace" aria-label="作答路径">
-        <span class="traceStep">01 / UNDERSTAND · 理解</span>
-        <span class="traceStep">02 / IMPLEMENT · 实现</span>
-        <span class="traceStep">03 / VERIFY · 验证</span>
+        <span id="traceUnderstand" class="traceStep">01 / UNDERSTAND · 理解</span>
+        <span id="traceImplement" class="traceStep">02 / IMPLEMENT · 实现</span>
+        <span id="traceVerify" class="traceStep">03 / VERIFY · 验证</span>
       </div>
     </header>
 
@@ -3581,7 +3701,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
                 <button id="ojLogin" class="secondary" type="button">登录 Codeforces</button>
                 <button id="ojPreviewSubmit" type="button">提交前确认</button>
               </div>
-              <div id="ojSubmissionStatus" class="aiResponse">
+              <div id="ojSubmissionStatus" class="aiResponse" data-submission-state="idle">
                 <span class="hint">确认后只会提交一次；网络超时或结果不明时不会自动重试提交。</span>
               </div>
             </div>
@@ -3608,8 +3728,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
                   </select>
                 </div>
                 <div id="codexOAuthPanel" class="codexOAuthPanel" hidden>
-                  <div>
+                  <div class="codexOAuthHeading">
                     <strong>Codex OAuth</strong>
+                    <span id="codexConnectionStamp" class="connectionStamp">AUTH / CHECKING</span>
                     <div id="codexAuthStatus" class="hint">正在读取 Codex 登录状态…</div>
                   </div>
                   <div class="codexOAuthActions">
@@ -3797,6 +3918,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const codexTeachingModel = document.getElementById("codexTeachingModel");
     const codexAutocompleteModel = document.getElementById("codexAutocompleteModel");
     const codexModelHint = document.getElementById("codexModelHint");
+    const codexConnectionStamp = document.getElementById("codexConnectionStamp");
     const internalTestPanel = document.getElementById("internalTestPanel");
     const internalTestMetrics = document.getElementById("internalTestMetrics");
     const internalTestEventsPath = document.getElementById("internalTestEventsPath");
@@ -4171,6 +4293,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     function renderAll() {
       applyUiLanguage();
+      renderSessionMasthead();
       renderStats();
       renderAiConfig();
       renderCoach();
@@ -4335,6 +4458,15 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       const auth = view.auth || { status: "starting" };
       const signedIn = auth.status === "signed-in";
       const pending = auth.status === "login-pending";
+      codexOAuthPanel.dataset.authState = auth.status;
+      codexOAuthPanel.classList.toggle("isConnected", signedIn);
+      codexConnectionStamp.textContent = signedIn
+        ? "AUTH / CONNECTED"
+        : pending
+          ? "AUTH / PENDING"
+          : auth.status === "error" || auth.status === "unavailable"
+            ? "AUTH / ERROR"
+            : "AUTH / SIGNED OUT";
       codexBrowserLogin.hidden = signedIn || pending;
       codexDeviceLogin.hidden = signedIn || pending;
       codexCancelLogin.hidden = !pending;
@@ -4662,10 +4794,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     function renderCoach() {
       const problem = selectedCoachProblem();
       const isArchivedCoachProblem = Boolean(selectedArchivedProblem());
+      renderSessionMasthead();
       renderAiStatus();
       coachSelection.innerHTML = "";
 
       if (!problem) {
+        coachSelection.appendChild(textSpan("ATTEMPT / NONE", "evidenceCode"));
         coachSelection.appendChild(textSpan("还没有选择题目", "aiResponseTitle"));
         coachSelection.appendChild(textSpan("先导入初始诊断或输入洛谷题号；AI 提示会读取当前编辑器代码和当前选中题面。", "hint"));
         const emptyMeta = document.createElement("div");
@@ -4680,14 +4814,31 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         return;
       }
 
+      const threadLength = coachThread(keyOf(problem)).length;
+      coachSelection.appendChild(textSpan("ATTEMPT / " + String(threadLength + 1).padStart(2, "0"), "evidenceCode"));
       coachSelection.appendChild(textSpan(problem.id + " · " + problem.title, "aiResponseTitle"));
       const activeEditor = state.activeEditor || {};
+      const evidenceRail = document.createElement("div");
+      evidenceRail.className = "attemptEvidenceRail";
+      [
+        ["BRIEF", problem.statement ? "READY" : "SUMMARY"],
+        ["EDITOR", activeEditor.relativePath || activeEditor.fileName ? "OPEN" : "MISSING"],
+        ["COACH", threadLength + " TURNS"],
+        ["MODE", isArchivedCoachProblem ? "REVIEW" : "CODING"]
+      ].forEach(([label, value]) => {
+        const item = document.createElement("div");
+        item.className = "attemptEvidenceItem";
+        item.appendChild(textSpan(label, "evidenceCode"));
+        item.appendChild(textSpan(value, "mini"));
+        evidenceRail.appendChild(item);
+      });
+      coachSelection.appendChild(evidenceRail);
       const metaGrid = document.createElement("div");
       metaGrid.className = "coachMetaGrid";
       [
         [isArchivedCoachProblem ? "复盘归档题" : "当前练习题", problem.statement ? "完整题面已就绪" : "题单摘要，先下载题面更准"],
         ["当前文件", activeEditor.relativePath || activeEditor.fileName || "未检测到"],
-        ["会话", "session " + coachThread(keyOf(problem)).length + " 轮"],
+        ["会话", "session " + threadLength + " 轮"],
         ["自动补全", "补全不读题面"],
         ["AI 提示", "提示才读题面和代码"]
       ].forEach(([label, value]) => metaGrid.appendChild(coachMetaItem(label, value)));
@@ -4981,6 +5132,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
       setCoachBusy(true);
       ojSubmissionStatus.innerHTML = "";
+      ojSubmissionStatus.dataset.submissionState = "checking";
       ojSubmissionStatus.appendChild(textSpan("正在生成提交预览", "aiResponseTitle"));
       ojSubmissionStatus.appendChild(textSpan("此时只检查链接、当前文件和工具状态，不会发送代码。", "hint"));
       requestOjSubmissionPreview(keyOf(problem), problemUrl, ojCodeforcesHandle.value.trim());
@@ -5011,6 +5163,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       coachOjVerdict.value = "UNKNOWN";
       state.ojVerdict = "UNKNOWN";
       ojSubmissionStatus.innerHTML = "";
+      ojSubmissionStatus.dataset.submissionState = "preview";
+      ojSubmissionStatus.appendChild(textSpan("SUBMIT PREVIEW / 尚未发送", "evidenceCode"));
       ojSubmissionStatus.appendChild(textSpan("提交前确认", "aiResponseTitle"));
       ojSubmissionStatus.appendChild(responseBlock("目标", [
         "平台：Codeforces",
@@ -5043,6 +5197,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     function renderOjSubmissionResult(data) {
       const result = data.result || {};
       ojSubmissionStatus.innerHTML = "";
+      ojSubmissionStatus.dataset.submissionState = result.verdict ? "official" : "transport";
+      if (result.verdict) {
+        ojSubmissionStatus.appendChild(textSpan("OFFICIAL VERDICT / 平台结果", "evidenceCode"));
+      } else {
+        ojSubmissionStatus.appendChild(textSpan("SUBMISSION TRANSPORT / 等待平台结果", "evidenceCode"));
+      }
       ojSubmissionStatus.appendChild(textSpan("真实 OJ 提交结果", "aiResponseTitle"));
       ojSubmissionStatus.appendChild(textSpan(result.message || "提交流程已结束。", "hint"));
       const details = [
@@ -5162,6 +5322,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       const entries = Object.values(skill.skills || {}).sort(
         (left, right) => skillStatusOrder(left.status) - skillStatusOrder(right.status) || left.name.localeCompare(right.name)
       );
+      const evidenceSequence = new Map(entries.map((entry, index) => [entry.name, index]));
       const counts = countSkillEntries(entries);
       studentSkillRevision.textContent = "rev " + (skill.revision ?? 0) + " · " + formatDateTime(skill.updatedAt);
 
@@ -5193,13 +5354,13 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         )
       );
 
-      appendSkillGroup("已启用 Skill", entries.filter((entry) => entry.status === "active"), "active");
-      appendSkillGroup("候选 Skill", entries.filter((entry) => entry.status === "candidate"), "candidate");
-      appendSkillGroup("已禁用 Skill", entries.filter((entry) => entry.status === "disabled"), "disabled");
+      appendSkillGroup("已启用 Skill", entries.filter((entry) => entry.status === "active"), "active", evidenceSequence);
+      appendSkillGroup("候选 Skill", entries.filter((entry) => entry.status === "candidate"), "candidate", evidenceSequence);
+      appendSkillGroup("已禁用 Skill", entries.filter((entry) => entry.status === "disabled"), "disabled", evidenceSequence);
       renderStudentSkillVersions();
     }
 
-    function appendSkillGroup(title, entries, status) {
+    function appendSkillGroup(title, entries, status, evidenceSequence) {
       const group = document.createElement("details");
       group.className = "skillGroup";
       group.open = status !== "disabled";
@@ -5216,15 +5377,20 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         empty.textContent = "暂无记录。";
         list.appendChild(empty);
       } else {
-        entries.forEach((entry) => list.appendChild(renderSkillEntry(entry)));
+        entries.forEach((entry, index) => {
+          list.appendChild(renderSkillEntry(entry, evidenceSequence.get(entry.name) ?? index));
+        });
       }
       group.appendChild(list);
       studentSkillPanel.appendChild(group);
     }
 
-    function renderSkillEntry(entry) {
+    function renderSkillEntry(entry, index) {
       const card = document.createElement("div");
       card.className = "skillCard " + (entry.status || "candidate");
+      card.dataset.evidenceStatus = entry.status || "candidate";
+      card.appendChild(textSpan("E-" + String(index + 1).padStart(2, "0"), "evidenceCode"));
+      const latestExample = latestSkillExample(entry);
 
       const top = document.createElement("div");
       top.className = "skillTop";
@@ -5239,6 +5405,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           "mini"
         )
       );
+      if (latestExample?.problemId) {
+        card.appendChild(textSpan("最近题目 " + latestExample.problemId, "mini"));
+      }
 
       if (entry.disabledReason) {
         card.appendChild(responseBlock("禁用原因", entry.disabledReason));
@@ -5258,7 +5427,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         card.appendChild(rules);
       }
 
-      const latestExample = latestSkillExample(entry);
       if (latestExample) {
         card.appendChild(responseBlock("最近证据", latestExample.evidence || ""));
       }
@@ -6127,6 +6295,24 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       return "已完成";
     }
 
+    function renderSessionMasthead() {
+      const problem = selectedCoachProblem();
+      const editor = state.activeEditor || {};
+      const turnCount = problem ? coachThread(keyOf(problem)).length : 0;
+      const archived = Boolean(selectedArchivedProblem());
+      setElementText("sessionProblemTitle", problem ? problem.id + " · " + problem.title : "NO PROBLEM POSTED");
+      setElementText("sessionEditorState", editor.relativePath || editor.fileName || "NO FILE DETECTED");
+      setElementText("sessionAttemptState", turnCount + " COACH TURNS" + (archived ? " · ARCHIVED" : ""));
+      setElementText("appSubtitle", archived ? "REVIEW MODE" : problem ? "ATTEMPT ACTIVE" : "SESSION READY");
+      const hasProblem = Boolean(problem);
+      const hasEditor = Boolean(editor.relativePath || editor.fileName);
+      const hasEvidence = turnCount > 0 || Boolean(state.ojVerdict && state.ojVerdict !== "UNKNOWN");
+      traceUnderstand.className = "traceStep" + (hasProblem ? " isComplete" : " isActive");
+      traceImplement.className = "traceStep" + (hasEditor ? " isComplete" : hasProblem ? " isActive" : "");
+      traceVerify.className = "traceStep" + (hasEvidence ? " isComplete" : hasEditor ? " isActive" : "");
+      sessionMasthead.dataset.sessionState = archived ? "review" : hasEditor ? "coding" : hasProblem ? "briefing" : "empty";
+    }
+
     function renderStats() {
       const luoguCount = state.problems.filter((problem) => problem.platform === "luogu").length;
       const manualCount = state.problems.filter((problem) => problem.platform === "manual").length;
@@ -6300,20 +6486,44 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       problemDetail.innerHTML = "";
 
       if (!problem) {
+        problemDetail.appendChild(textSpan("POSTER / EMPTY", "evidenceCode"));
         const empty = document.createElement("p");
         empty.className = "empty";
-        empty.textContent = "导入一道题后，这里显示题面、样例和题目来源。";
+        empty.textContent = "还没有张贴当前题目。选择一份 Markdown 题面，或者从洛谷取回题目后再进入作答现场。";
         problemDetail.appendChild(empty);
+        const emptyActions = document.createElement("div");
+        emptyActions.className = "emptyPosterActions";
+        const markdownButton = document.createElement("button");
+        markdownButton.className = "posterPrimaryAction";
+        markdownButton.type = "button";
+        markdownButton.textContent = "选择 Markdown 题目";
+        markdownButton.addEventListener("click", () => document.getElementById("importManualMarkdownFile").click());
+        const luoguButton = document.createElement("button");
+        luoguButton.className = "secondary";
+        luoguButton.type = "button";
+        luoguButton.textContent = "从洛谷获取";
+        luoguButton.addEventListener("click", () => {
+          luoguPid.focus();
+          setStatus("输入洛谷题号，或展开搜索按标题查找。");
+        });
+        emptyActions.appendChild(markdownButton);
+        emptyActions.appendChild(luoguButton);
+        problemDetail.appendChild(emptyActions);
         return;
       }
 
       const header = document.createElement("div");
       header.className = "detailTitle";
+      header.appendChild(textSpan("BRIEF / ACTIVE", "evidenceCode"));
       header.appendChild(textSpan(problem.id + " · " + problem.title, "problemTitle"));
 
       const meta = document.createElement("div");
       meta.className = "tagRow";
       meta.appendChild(textSpan(platformLabel(problem.platform), "tag"));
+      if (problem.difficulty !== undefined) {
+        meta.appendChild(textSpan("难度 " + problem.difficulty, "tag dossierTag amber"));
+      }
+      (problem.tags || []).slice(0, 5).forEach((tag) => meta.appendChild(textSpan(String(tag), "tag")));
       if (problem.sourceSetId) {
         meta.appendChild(textSpan("来自题单 " + problem.sourceSetId, "tag"));
       }
@@ -6336,18 +6546,19 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         button.addEventListener("click", () => importLuogu(problem.id, true));
         problemDetail.appendChild(button);
       } else {
-        appendSection("题面", problem.statement || "暂无题面。");
+        appendBriefSection("BRIEF / 01", "题面", problem.statement || "暂无题面。");
       }
 
       if (problem.inputFormat) {
-        appendSection("输入格式", problem.inputFormat);
+        appendBriefSection("BRIEF / 02", "输入格式", problem.inputFormat);
       }
       if (problem.outputFormat) {
-        appendSection("输出格式", problem.outputFormat);
+        appendBriefSection("BRIEF / 03", "输出格式", problem.outputFormat);
       }
       if (problem.samples?.length) {
         const title = document.createElement("h2");
-        title.textContent = "样例";
+        title.appendChild(textSpan("BRIEF / 04", "evidenceCode"));
+        title.appendChild(document.createTextNode("样例"));
         problemDetail.appendChild(title);
 
         const grid = document.createElement("div");
@@ -6363,19 +6574,22 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         });
         problemDetail.appendChild(grid);
       }
+      if (problem.hint) {
+        appendBriefSection("BRIEF / 05", "提示", problem.hint);
+      }
 
       const actions = document.createElement("div");
       actions.className = "detailActions";
 
       const goCoachButton = document.createElement("button");
-      goCoachButton.className = "secondary";
+      goCoachButton.className = "posterPrimaryAction";
       goCoachButton.type = "button";
-      goCoachButton.textContent = "去 AI 教练提问";
+      goCoachButton.textContent = "进入作答现场";
       goCoachButton.addEventListener("click", () => {
         switchPage("ai");
         renderCoach();
         coachQuestion.focus();
-        setStatus("已切到 AI 教练。输入问题后点发送，或直接用下方教学按钮。");
+        setStatus("已进入作答现场。可以先自己写，也可以请求一个方向。");
       });
       actions.appendChild(goCoachButton);
 
@@ -6389,9 +6603,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       problemDetail.appendChild(actions);
     }
 
-    function appendSection(titleText, bodyText) {
+    function appendBriefSection(code, titleText, bodyText) {
       const title = document.createElement("h2");
-      title.textContent = titleText;
+      title.appendChild(textSpan(code, "evidenceCode"));
+      title.appendChild(document.createTextNode(titleText));
       const block = markdownBlock(bodyText, "textBlock markdownBody");
       problemDetail.appendChild(title);
       problemDetail.appendChild(block);
