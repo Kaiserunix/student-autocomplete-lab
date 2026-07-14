@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>OJ Console · 本地提交控制台</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body data-session-token="__OJ_CONSOLE_TOKEN__">
+  <div class="backdrop" aria-hidden="true">
+    <div class="backdrop-grid"></div>
+    <div class="signal signal-a"></div>
+    <div class="signal signal-b"></div>
+  </div>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="OJ Console 首页">
+      <span class="brand-mark">OJ</span>
+      <span class="brand-copy"><strong>CONSOLE</strong><small>LOCAL SUBMISSION BRIDGE</small></span>
+    </a>
+    <div class="system-strip" aria-label="本地服务状态">
+      <span class="system-item"><i class="status-dot" id="serverDot"></i><b id="serverStatus">CONNECTING</b></span>
+      <span class="system-item"><em>TOOL</em><b id="toolStatus">CHECKING</b></span>
+      <span class="system-item"><em>MODE</em><b id="headerMode">DEMO</b></span>
+      <time class="system-clock" id="clock">--:--:--</time>
+    </div>
+  </header>
+  <main class="page-shell">
+    <section class="hero reveal reveal-one">
+      <div class="hero-copy">
+        <p class="kicker"><span>LOCAL / CF</span> 一次确认，一次提交</p>
+        <h1>把提交动作<br><span>留在本地。</span></h1>
+        <p class="hero-note">选择源码，核对目标，再触发一次性任务。默认演示模式不会访问 Codeforces，也不会读取或保存你的登录凭据。</p>
+      </div>
+      <div class="mode-console" aria-label="提交模式">
+        <div class="mode-heading"><span>OPERATING MODE</span><span id="modeSequence">00 / SAFE</span></div>
+        <div class="mode-switch" role="group" aria-label="选择提交模式">
+          <button class="mode-button is-active" type="button" data-mode="demo" aria-pressed="true">
+            <span>DEMO</span><small>确定性模拟判题</small>
+          </button>
+          <button class="mode-button" type="button" data-mode="real" aria-pressed="false">
+            <span>REAL</span><small>调用本机 oj 一次</small>
+          </button>
+        </div>
+        <p class="mode-warning" id="modeWarning">SAFE CHANNEL · 不产生远程提交</p>
+      </div>
+    </section>
+    <section class="workspace reveal reveal-two">
+      <aside class="control-rail">
+        <div class="rail-heading">
+          <span>INPUT CHANNEL</span>
+          <b>01—03</b>
+        </div>
+        <section class="control-block" aria-labelledby="sourceHeading">
+          <div class="block-title">
+            <span class="step-index">01</span>
+            <div><h2 id="sourceHeading">选择源码</h2><p>只上传到当前本地进程</p></div>
+          </div>
+          <label class="drop-zone" id="dropZone" for="fileInput" tabindex="0">
+            <input id="fileInput" type="file" accept=".c,.cc,.cpp,.cxx,.py,.py3,.java,.kt,.rs,.go,.js,.ts,.cs,.swift">
+            <span class="drop-glyph">↗</span>
+            <strong id="filePrompt">拖入或选择文件</strong>
+            <small>最大 1 MiB · 不展示源码内容</small>
+          </label>
+          <div class="source-ticket is-hidden" id="sourceTicket">
+            <span class="ticket-state">SOURCE READY</span>
+            <strong id="sourceName">—</strong>
+            <p id="sourceMeta">—</p>
+            <code id="sourceDigest">—</code>
+          </div>
+        </section>
+        <section class="control-block" aria-labelledby="targetHeading">
+          <div class="block-title">
+            <span class="step-index">02</span>
+            <div><h2 id="targetHeading">指定目标</h2><p>当前原型仅支持 Codeforces</p></div>
+          </div>
+          <label class="field-label" for="problemUrl">PROBLEM URL</label>
+          <input class="text-field" id="problemUrl" type="url" value="https://codeforces.com/contest/4/problem/A" autocomplete="off" spellcheck="false">
+          <label class="field-label" for="handle">PUBLIC HANDLE <span>可选</span></label>
+          <input class="text-field" id="handle" type="text" placeholder="用于公开判题轮询" autocomplete="off" spellcheck="false">
+        </section>
+        <section class="control-block" aria-labelledby="policyHeading">
+          <div class="block-title">
+            <span class="step-index">03</span>
+            <div><h2 id="policyHeading">设置策略</h2><p>预览不会触发提交</p></div>
+          </div>
+          <div id="demoControls">
+            <label class="field-label" for="scenario">DEMO VERDICT</label>
+            <select class="text-field select-field" id="scenario">
+              <option value="accepted">Accepted</option>
+              <option value="wrong_answer">Wrong Answer</option>
+              <option value="compile_error">Compile Error</option>
+              <option value="unknown">Unknown / Timeout</option>
+              <option value="login_required">Login Required</option>
+            </select>
+          </div>
+          <div class="real-gate is-hidden" id="realGate">
+            <div class="gate-state"><i></i><span id="gateState">REAL MODE LOCKED</span></div>
+            <label class="field-label" for="unlockPhrase">UNLOCK PHRASE</label>
+            <code class="unlock-copy" id="unlockCopy">我确认本次操作可能向 Codeforces 真实提交代码</code>
+            <input class="text-field phrase-field" id="unlockPhrase" type="text" placeholder="输入设计中的完整确认短语" autocomplete="off">
+            <div class="gate-actions">
+              <button class="secondary-button" id="unlockButton" type="button">解锁真实模式</button>
+              <button class="secondary-button" id="loginButton" type="button" disabled>打开登录终端</button>
+            </div>
+          </div>
+          <button class="primary-button" id="previewButton" type="button" disabled>
+            <span>生成安全预览</span><b>PREVIEW →</b>
+          </button>
+        </section>
+      </aside>
+      <section class="operation-panel" aria-labelledby="operationHeading">
+        <div class="panel-heading">
+          <div><p>SUBMISSION PIPELINE</p><h2 id="operationHeading">任务控制台</h2></div>
+          <span class="session-badge">EPHEMERAL SESSION</span>
+        </div>
+        <div class="empty-stage" id="emptyStage">
+          <div class="radar" aria-hidden="true"><i></i><i></i><span>LOCAL</span></div>
+          <p>等待安全预览</p>
+          <small>选择源码并核对目标后，提交事实会固定在这里。</small>
+        </div>
+        <section class="preview-card is-hidden" id="previewCard" aria-labelledby="previewHeading">
+          <div class="card-band"><span>IMMUTABLE PREVIEW</span><time id="previewExpiry">—</time></div>
+          <div class="preview-header">
+            <div><p>READY FOR CONFIRMATION</p><h3 id="previewHeading">提交事实核对</h3></div>
+            <span class="preview-mode" id="previewMode">DEMO</span>
+          </div>
+          <dl class="fact-grid">
+            <div><dt>TARGET</dt><dd id="previewTarget">—</dd></div>
+            <div><dt>SOURCE</dt><dd id="previewSource">—</dd></div>
+            <div><dt>LANG / SIZE</dt><dd id="previewSourceMeta">—</dd></div>
+            <div><dt>DIGEST</dt><dd><code id="previewDigest">—</code></dd></div>
+            <div><dt>SCENARIO</dt><dd id="previewScenario">—</dd></div>
+            <div><dt>HANDLE</dt><dd id="previewHandle">—</dd></div>
+          </dl>
+          <div class="confirm-strip">
+            <div><strong id="confirmTitle">只运行一次演示任务</strong><small id="confirmNote">确认记录两分钟内有效，使用后立即失效。</small></div>
+            <button class="confirm-button" id="confirmButton" type="button">确认并执行一次</button>
+          </div>
+        </section>
+        <section class="pipeline-card" aria-labelledby="pipelineHeading">
+          <div class="section-cap"><h3 id="pipelineHeading">状态轨道</h3><span id="jobIdentity">NO ACTIVE JOB</span></div>
+          <ol class="timeline" id="timeline">
+            <li data-stage="created"><i></i><span>CREATED</span><small>任务创建</small></li>
+            <li data-stage="submitting"><i></i><span>SUBMITTING</span><small>调用适配器</small></li>
+            <li data-stage="queued"><i></i><span>QUEUED</span><small>进入队列</small></li>
+            <li data-stage="judging"><i></i><span>JUDGING</span><small>等待判题</small></li>
+            <li data-stage="final"><i></i><span>FINAL</span><small>归一化结果</small></li>
+          </ol>
+          <div class="result-panel is-hidden" id="resultPanel">
+            <span class="result-code" id="resultCode">—</span>
+            <div><p id="resultState">WAITING</p><strong id="resultMessage">任务尚未开始。</strong></div>
+            <a class="result-link is-hidden" id="resultLink" href="#" target="_blank" rel="noreferrer">查看公开提交 ↗</a>
+          </div>
+        </section>
+        <section class="activity-card" aria-labelledby="activityHeading">
+          <div class="section-cap"><h3 id="activityHeading">本地活动</h3><span>SAFE METADATA ONLY</span></div>
+          <ol class="activity-log" id="activityLog">
+            <li><time>BOOT</time><span>等待本地服务状态。</span></li>
+          </ol>
+        </section>
+      </section>
+    </section>
+    <footer class="footer reveal reveal-three">
+      <p><span>NO COOKIE IMPORT</span><span>NO CAPTCHA AUTOMATION</span><span>NO AUTO RETRY</span></p>
+      <small>OJ Console Prototype · Codeforces only · session data disappears on shutdown</small>
+    </footer>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="/app.js" defer></script>
+</body>
+</html>

@@ -1,14 +1,17 @@
 import { randomBytes } from "node:crypto";
+import { spawn } from "node:child_process";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import path from "node:path";
 import { createOjConsoleApi, type OjConsoleApiOptions } from "./api";
+import { createOjConsoleRequestHandler } from "./frontend";
 
 export interface StartOjConsoleServerOptions {
   runtimeRoot?: string;
   port?: number;
   token?: string;
   output?: (line: string) => void;
+  frontendRoot?: string;
   api?: Partial<Omit<OjConsoleApiOptions, "token" | "runtimeRoot" | "startedAt">>;
 }
 
@@ -32,6 +35,7 @@ export async function startOjConsoleServer(
   const token = options.token ?? randomBytes(32).toString("hex");
   const startedAt = new Date().toISOString();
   const output = options.output ?? ((line: string) => console.log(line));
+  const frontendRoot = path.resolve(options.frontendRoot ?? path.join(process.cwd(), "prototypes", "oj-console", "frontend"));
 
   await mkdir(runtimeRoot, { recursive: true, mode: 0o700 });
   await Promise.all([
@@ -40,11 +44,16 @@ export async function startOjConsoleServer(
   ]);
   await mkdir(sessionRoot, { recursive: true, mode: 0o700 });
 
-  const httpServer = createServer(createOjConsoleApi({
+  const api = createOjConsoleApi({
     ...options.api,
     token,
     runtimeRoot: sessionRoot,
     startedAt
+  });
+  const httpServer = createServer(createOjConsoleRequestHandler({
+    root: frontendRoot,
+    token,
+    api
   }));
 
   try {
@@ -128,6 +137,9 @@ function closeServer(server: Server): Promise<void> {
 
 if (require.main === module) {
   void startOjConsoleServer().then((server) => {
+    if (process.argv.includes("--open")) {
+      openLocalConsole(server.baseUrl);
+    }
     let stopping = false;
     const stop = () => {
       if (stopping) {
@@ -142,4 +154,16 @@ if (require.main === module) {
     console.error(error instanceof Error ? error.message : "OJ Console 后端启动失败。");
     process.exitCode = 1;
   });
+}
+
+function openLocalConsole(baseUrl: string): void {
+  if (process.platform !== "win32" || !/^http:\/\/127\.0\.0\.1:\d+$/.test(baseUrl)) {
+    return;
+  }
+  const child = spawn(
+    "powershell.exe",
+    ["-NoProfile", "-NonInteractive", "-Command", `Start-Process -FilePath '${baseUrl}'`],
+    { detached: true, stdio: "ignore", windowsHide: true }
+  );
+  child.unref();
 }

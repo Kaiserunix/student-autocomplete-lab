@@ -71,4 +71,37 @@ describe("OJ console server", () => {
     await expect(stat(server.descriptorPath)).rejects.toMatchObject({ code: "ENOENT" });
     await expect(stat(server.sessionRoot)).rejects.toMatchObject({ code: "ENOENT" });
   });
+
+  test("serves a token-injected console shell without exposing the token in static assets", async () => {
+    const runtimeRoot = await mkdtemp(path.join(tmpdir(), "oj-console-frontend-"));
+    const server = await startOjConsoleServer({
+      runtimeRoot,
+      port: 0,
+      token: "a".repeat(64),
+      output: () => undefined,
+      api: {
+        checkTool: async () => ({ available: false, message: "not installed" })
+      }
+    });
+    servers.push(server);
+
+    const page = await fetch(server.baseUrl);
+    const html = await page.text();
+    expect(page.status).toBe(200);
+    expect(page.headers.get("content-type")).toContain("text/html");
+    expect(page.headers.get("content-security-policy")).toContain("default-src 'self'");
+    expect(page.headers.get("x-content-type-options")).toBe("nosniff");
+    expect(html).toContain("OJ Console");
+    expect(html).toContain(server.token);
+
+    for (const asset of ["/app.js", "/styles.css"]) {
+      const response = await fetch(`${server.baseUrl}${asset}`);
+      const body = await response.text();
+      expect(response.status).toBe(200);
+      expect(body).not.toContain(server.token);
+    }
+
+    const traversal = await fetch(`${server.baseUrl}/%2e%2e/package.json`);
+    expect(traversal.status).toBe(404);
+  });
 });
