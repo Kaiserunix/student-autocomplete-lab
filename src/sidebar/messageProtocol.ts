@@ -10,6 +10,7 @@ export type CoachResponseLanguage = "zh" | "en" | "raw";
 export const webviewCommandNames = [
   "archiveProblem",
   "cancelCodexLogin",
+  "confirmOjSubmission",
   "copyInternalTestSummary",
   "deleteProblem",
   "disableStudentSkill",
@@ -25,6 +26,8 @@ export const webviewCommandNames = [
   "requestAiCoach",
   "requestAutocompletePreview",
   "requestOptimizationReview",
+  "requestOjLogin",
+  "requestOjSubmissionPreview",
   "requestSolutionScore",
   "requestSubmissionJudge",
   "refreshCodexModels",
@@ -75,6 +78,14 @@ export type WebviewMessage =
       archiveOnComplete?: boolean;
     }
   | { command: "requestOptimizationReview"; problemKey: string; studentRequest?: string }
+  | { command: "requestOjLogin" }
+  | {
+      command: "requestOjSubmissionPreview";
+      problemKey: string;
+      problemUrl: string;
+      codeforcesHandle?: string;
+    }
+  | { command: "confirmOjSubmission"; confirmationId: string }
   | { command: "requestSubmissionJudge"; problemKey: string }
   | { command: "requestAutocompletePreview" }
   | { command: "copyInternalTestSummary" }

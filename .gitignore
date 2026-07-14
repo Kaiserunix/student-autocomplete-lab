@@ -4,6 +4,7 @@ secrets/
 node_modules/
 dist/
 .runtime/
+.superpowers/
 .student-autocomplete/
 .student-autocomplete-smoke/
 /practice/

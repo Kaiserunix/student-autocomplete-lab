@@ -33,9 +33,12 @@ export const codexOAuthControlIds = [
   "codexAutocompleteModel"
 ] as const;
 
+export const ojActionButtonIds = ["ojLogin", "ojPreviewSubmit"] as const;
+
 export type SidebarPageId = (typeof sidebarPageIds)[number];
 export type CoachButtonId = (typeof primaryCoachButtonIds)[number];
 export type ProblemImportButtonId = (typeof problemImportButtonIds)[number];
+export type OjActionButtonId = (typeof ojActionButtonIds)[number];
 
 export function disabledReasonForCoachAction(input: {
   hasProblem: boolean;

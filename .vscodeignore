@@ -1,4 +1,5 @@
 .vscode/**
+.superpowers/**
 .runtime/**
 secrets/**
 .student-autocomplete/**
@@ -6,12 +7,14 @@ secrets/**
 practice/**
 fixtures/**
 extension/**
+prototypes/**
 scripts/**
 docs/superpowers/**
 MANUAL-ACCEPTANCE.md
 test/**
 src/**
 dist/test/**
+dist/prototypes/**
 dist/vitest.config.*
 *.map
 **/*.map
@@ -21,4 +24,5 @@ node_modules/**
 .gitignore
 package-lock.json
 tsconfig.json
+tsconfig.oj-console.json
 vitest.config.*

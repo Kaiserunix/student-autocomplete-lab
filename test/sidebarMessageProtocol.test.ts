@@ -42,6 +42,8 @@ describe("sidebar message protocol", () => {
       "autocompletePreview",
       "coachFollowUp",
       "internalTestSummary",
+      "ojSubmissionPreview",
+      "ojSubmissionResult",
       "optimizationReport",
       "problemBankState",
       "problemRecommendation",

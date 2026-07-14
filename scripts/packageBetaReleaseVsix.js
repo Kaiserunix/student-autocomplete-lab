@@ -25,6 +25,7 @@ const allowedTopLevelRuntime = [
   "recommendation",
   "release",
   "sidebar",
+  "submission",
   "storage"
 ];
 
@@ -84,6 +85,7 @@ async function main() {
   await copyReleaseRuntime();
   await copyIfExists("resources");
   await copyIfExists("LICENSE");
+  await copyIfExists("THIRD_PARTY_NOTICES.md");
   await copyReleaseReadme();
   await writeReleasePackageJson();
   await patchReleaseRuntime();
@@ -131,7 +133,7 @@ async function writeReleasePackageJson() {
   packageJson.displayName = releaseDisplayName;
   packageJson.description = "Clean beta-release package for the Student Autocomplete Lab VS Code algorithm coach.";
   packageJson.private = false;
-  packageJson.files = ["dist/**", "resources/**", "README.md", "LICENSE"];
+  packageJson.files = ["dist/**", "resources/**", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"];
   delete packageJson.repository;
   delete packageJson.scripts;
   delete packageJson.devDependencies;

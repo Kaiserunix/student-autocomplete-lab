@@ -2,7 +2,7 @@
 
 Student Autocomplete Lab is a Chinese-first VS Code algorithm coach for students practicing Luogu, LeetCode, and similar contest-style problems. Beta English support covers the main sidebar shell, explicit English AI-output mode, and English Markdown problem import.
 
-It is not an automatic problem solver or OJ submitter. The beta goal is a restrained loop: safe short autocomplete for the student's own code, explicit AI coaching only after the student asks, and a local `学习画像` that records repeated pain points, useful skills, user corrections, and rollbackable versions.
+It is not an automatic problem solver or unattended OJ submitter. The beta goal is a restrained loop: safe short autocomplete for the student's own code, explicit AI coaching only after the student asks, and a local `学习画像` that records repeated pain points, useful skills, user corrections, and rollbackable versions. An experimental Codeforces path can submit the active saved file only after a short-lived, explicit user confirmation.
 
 This repository is prepared as an MIT-licensed open-source beta candidate. Public code, docs, tests, and summarized experiment evidence belong in git; API keys, raw runtime traces, full problem-statement caches, and personal learning ledgers stay ignored.
 
@@ -30,6 +30,8 @@ This repository is prepared as an MIT-licensed open-source beta candidate. Publi
 - `docs/requirements.md`: product requirements and guardrails.
 - `docs/codex-start-prompt.md`: prompt to give Codex for the first build attempt.
 - `docs/beta-v2-final-goals.md`: final beta target, including Student Skill distillation requirements.
+- `docs/superpowers/specs/2026-07-12-oj-submission-design.md`: approved hybrid architecture for user-confirmed real OJ submission and interactive login.
+- `docs/superpowers/specs/2026-07-14-oj-console-prototype-design.md`: implemented standalone localhost OJ console design and verification record.
 - `docs/large-scale-growth-simulation.md`: costed plan for the 200-problem / 1000-code growth simulation.
 - `docs/open-source-release.md`: release notes, open-source scope, model rationale, and package command.
 - `docs/release-lanes.md`: three VSIX lanes: beta, clean beta release, and private internal test.
@@ -53,6 +55,47 @@ It starts with:
 8. Safe autocomplete prompt/filter modules that do not include problem statements.
 
 LeetCode support is planned as an adapter. Until a stable GraphQL path is wired, LeetCode problems should use the manual Markdown-file import path.
+
+Current real OJ scope is deliberately narrow: Codeforces submission is experimental; Luogu, LeetCode, AtCoder, Kattis, and other judges are not implemented by this slice. The approved design keeps explicit confirmation, per-platform isolation, and human-operated verification without browser-cookie scraping or CAPTCHA bypass.
+
+## Experimental Codeforces Submission
+
+当前仅实验性支持 Codeforces。该功能调用用户自己安装的 [`online-judge-tools/oj`](https://github.com/online-judge-tools/oj)；它不会打包进 VSIX，也不会由扩展静默安装。请先按上游说明安装，例如：
+
+```powershell
+python -m pip install --user online-judge-tools
+```
+
+使用方法：
+
+1. 在 `AI 教练` 页展开 `OJ 提交（Codeforces 实验）`。
+2. 点击 `登录 Codeforces`，在可见终端里正常完成登录和网站要求的人工验证。
+3. 选择本地题目、打开并保存要提交的源文件，再粘贴 Codeforces 题目链接。
+4. 可选填写公开 handle，以便通过 Codeforces 公共 API 查询这一次提交的判题结果。
+5. 点击 `提交前确认`，核对规范化链接、文件路径、语言和代码大小，然后点击 `确认并提交一次`。
+
+每次提交都必须明确确认。确认记录两分钟后失效，并与当前文件版本绑定；代码变化后必须重新预览。扩展不会自动重试提交，不会绕过图形验证，不会抓取浏览器 Cookie，也不会记录 `oj` 的原始输出或其中显示的源码预览。若网络结果不明，请先到 Codeforces 检查，避免手动重复提交。
+
+本项目与 Codeforces、online-judge-tools 均无隶属或背书关系。第三方许可见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+
+## Standalone OJ Console Prototype
+
+无需打开 VS Code，可以直接启动本地深色工具控制台：
+
+```powershell
+npm run prototype:oj
+```
+
+该命令只监听 `127.0.0.1`，生成当前进程专用的随机令牌，并打开浏览器。选择源码后，默认 `DEMO` 模式可以体验预览、一次性确认、排队、判题和 AC/WA/CE/UNKNOWN 状态；演示模式不会访问 Codeforces。
+
+若只想启动后端，或先用 PowerShell 客户端试流程：
+
+```powershell
+npm run prototype:oj:backend
+npm run prototype:oj:try -- -SourcePath prototypes/oj-console/examples/demo-source.cpp -Yes
+```
+
+真实模式默认锁定，只有安装并登录 `online-judge-tools/oj` 后才可使用。它仍然要求完整解锁短语、不可复用的提交确认，并且不会自动重试。登录由可见 PowerShell 终端接管；浏览器 Cookie、账号密码、图形验证绕过和验证码自动化不属于本原型。
 
 ## Development
 
