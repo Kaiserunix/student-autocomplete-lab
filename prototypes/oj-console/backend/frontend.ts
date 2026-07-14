@@ -18,6 +18,10 @@ const assets = new Map<string, { fileName: string; contentType: string }>([
 export function createOjConsoleRequestHandler(options: OjConsoleFrontendOptions): RequestListener {
   return (request, response) => {
     setSecurityHeaders(response);
+    if (!isLocalHost(request.headers.host)) {
+      sendText(response, 403, "Local Host Required\n");
+      return;
+    }
     const url = new URL(request.url ?? "/", "http://127.0.0.1");
     if (url.pathname.startsWith("/api/")) {
       options.api(request, response);
@@ -27,6 +31,18 @@ export function createOjConsoleRequestHandler(options: OjConsoleFrontendOptions)
       sendText(response, 500, "本地控制台页面读取失败。\n");
     });
   };
+}
+
+function isLocalHost(value: string | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+  try {
+    const hostname = new URL(`http://${value}`).hostname;
+    return hostname === "127.0.0.1" || hostname === "localhost";
+  } catch {
+    return false;
+  }
 }
 
 async function serveAsset(

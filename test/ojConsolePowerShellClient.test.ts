@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -52,5 +52,32 @@ describe("OJ console PowerShell client", () => {
     expect(result.stdout).toMatch(/digest=[a-f0-9]{12}/);
     expect(result.stdout).toContain("state=accepted");
     expect(result.stdout).toContain("verdict=AC");
+  });
+
+  test("rejects a runtime descriptor that could send source bytes away from localhost", async () => {
+    const runtimeRoot = await mkdtemp(path.join(tmpdir(), "oj-console-descriptor-"));
+    const descriptorPath = path.join(runtimeRoot, "server.json");
+    await writeFile(descriptorPath, JSON.stringify({
+      baseUrl: "https://localhost",
+      token: "a".repeat(64)
+    }), "utf8");
+    const scriptPath = path.resolve("prototypes/oj-console/scripts/try-backend.ps1");
+    const sourcePath = path.resolve("prototypes/oj-console/examples/demo-source.cpp");
+
+    await expect(execFileAsync("powershell.exe", [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      scriptPath,
+      "-RuntimeDescriptorPath",
+      descriptorPath,
+      "-SourcePath",
+      sourcePath,
+      "-Yes"
+    ], { cwd: process.cwd(), timeout: 20_000, windowsHide: true })).rejects.toMatchObject({
+      code: 1,
+      stderr: expect.stringContaining("Runtime descriptor must point to http://127.0.0.1")
+    });
   });
 });

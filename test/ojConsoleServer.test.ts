@@ -1,4 +1,5 @@
 import { mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
@@ -94,6 +95,10 @@ describe("OJ console server", () => {
     expect(html).toContain("OJ Console");
     expect(html).toContain(server.token);
 
+    const rebound = await getWithHost(server.baseUrl, "attacker.example");
+    expect(rebound.status).toBe(403);
+    expect(rebound.body).not.toContain(server.token);
+
     for (const asset of ["/app.js", "/styles.css"]) {
       const response = await fetch(`${server.baseUrl}${asset}`);
       const body = await response.text();
@@ -105,3 +110,25 @@ describe("OJ console server", () => {
     expect(traversal.status).toBe(404);
   });
 });
+
+function getWithHost(baseUrl: string, host: string): Promise<{ status: number; body: string }> {
+  const url = new URL(baseUrl);
+  return new Promise((resolve, reject) => {
+    const request = httpRequest({
+      hostname: url.hostname,
+      port: Number(url.port),
+      path: "/",
+      method: "GET",
+      headers: { host }
+    }, (response) => {
+      const chunks: Buffer[] = [];
+      response.on("data", (chunk: Buffer) => chunks.push(chunk));
+      response.on("end", () => resolve({
+        status: response.statusCode ?? 0,
+        body: Buffer.concat(chunks).toString("utf8")
+      }));
+    });
+    request.on("error", reject);
+    request.end();
+  });
+}

@@ -31,23 +31,29 @@ try {
 
   $sourceFile = Get-Item -LiteralPath $SourcePath
   $descriptor = Get-Content -LiteralPath $RuntimeDescriptorPath -Raw | ConvertFrom-Json
-  if ([string]::IsNullOrWhiteSpace([string]$descriptor.baseUrl) -or [string]::IsNullOrWhiteSpace([string]$descriptor.token)) {
+  if ([string]::IsNullOrWhiteSpace([string]$descriptor.baseUrl) -or [string]$descriptor.token -notmatch '^[a-f0-9]{64}$') {
     throw "Runtime descriptor is invalid."
   }
+  [Uri]$baseUri = $null
+  $validBaseUri = [Uri]::TryCreate([string]$descriptor.baseUrl, [UriKind]::Absolute, [ref]$baseUri)
+  if (-not $validBaseUri -or $baseUri.Scheme -cne "http" -or $baseUri.Host -cne "127.0.0.1" -or $baseUri.Port -le 0 -or $baseUri.AbsolutePath -cne "/" -or -not [string]::IsNullOrEmpty($baseUri.Query) -or -not [string]::IsNullOrEmpty($baseUri.Fragment)) {
+    throw "Runtime descriptor must point to http://127.0.0.1 on a local port."
+  }
+  $baseUrl = $baseUri.GetLeftPart([UriPartial]::Authority)
 
   $headers = @{ "X-OJ-Console-Token" = [string]$descriptor.token }
   $uploadHeaders = @{
     "X-OJ-Console-Token" = [string]$descriptor.token
     "X-Source-Name" = $sourceFile.Name
   }
-  $source = Invoke-RestMethod -Uri "$($descriptor.baseUrl)/api/source" -Method Post -Headers $uploadHeaders -ContentType "application/octet-stream" -Body ([IO.File]::ReadAllBytes($sourceFile.FullName))
+  $source = Invoke-RestMethod -Uri "$baseUrl/api/source" -Method Post -Headers $uploadHeaders -ContentType "application/octet-stream" -Body ([IO.File]::ReadAllBytes($sourceFile.FullName))
   $previewRequest = @{
     sourceId = $source.sourceId
     problemUrl = $ProblemUrl
     mode = "demo"
     scenario = $Scenario
   } | ConvertTo-Json
-  $preview = Invoke-RestMethod -Uri "$($descriptor.baseUrl)/api/preview" -Method Post -Headers $headers -ContentType "application/json" -Body $previewRequest
+  $preview = Invoke-RestMethod -Uri "$baseUrl/api/preview" -Method Post -Headers $headers -ContentType "application/json" -Body $previewRequest
 
   Write-Output "[preview] mode=$($preview.mode) scenario=$($preview.scenario)"
   Write-Output "[source] name=$($preview.source.fileName) language=$($preview.source.language) bytes=$($preview.source.byteSize) digest=$($preview.source.digest)"
@@ -61,12 +67,12 @@ try {
   }
 
   $confirmRequest = @{ confirmationId = $preview.confirmationId } | ConvertTo-Json
-  $confirmation = Invoke-RestMethod -Uri "$($descriptor.baseUrl)/api/confirm" -Method Post -Headers $headers -ContentType "application/json" -Body $confirmRequest
+  $confirmation = Invoke-RestMethod -Uri "$baseUrl/api/confirm" -Method Post -Headers $headers -ContentType "application/json" -Body $confirmRequest
   $deadline = [DateTime]::UtcNow.AddSeconds(15)
   $terminalStates = @("accepted", "rejected", "unknown", "failed")
   do {
     $encodedJobId = [Uri]::EscapeDataString([string]$confirmation.jobId)
-    $job = Invoke-RestMethod -Uri "$($descriptor.baseUrl)/api/submissions/$encodedJobId" -Method Get -Headers $headers
+    $job = Invoke-RestMethod -Uri "$baseUrl/api/submissions/$encodedJobId" -Method Get -Headers $headers
     if ($terminalStates -contains [string]$job.state) {
       break
     }
