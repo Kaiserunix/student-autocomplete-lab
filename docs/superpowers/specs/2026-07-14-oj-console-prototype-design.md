@@ -2,7 +2,7 @@
 
 Date: 2026-07-14
 
-Status: approved for implementation. The user selected the tool-console layout and requested backend-first delivery.
+Status: backend-first slice implemented and verified; tool-console frontend in progress.
 
 ## 1. Purpose
 
@@ -251,3 +251,28 @@ The complete prototype is ready when the B-layout browser console completes the 
 ## 15. Evaluation And Disposal
 
 After the user tries it, record whether the state model, confirmation boundary, login terminal, and console layout feel correct. Then either absorb validated behavior into the extension and delete the prototype, or keep a narrowly documented diagnostic harness. Do not leave an unowned second product surface.
+
+## 16. Implementation Record
+
+On 2026-07-14, the backend-first slice was completed on `codex/oj-login-prototype`.
+
+Implemented units:
+
+- bounded in-memory source storage and safe metadata;
+- exact real-mode unlock and one-use confirmation records;
+- deterministic demo jobs for AC, WA, CE, UNKNOWN, and login-required;
+- one-shot real `oj` runner with bounded verdict polling and temporary-file cleanup;
+- fixed visible PowerShell login launcher;
+- token-authenticated localhost API with strict origin, type, and size checks;
+- localhost server lifecycle, random session descriptor, stale cleanup, and graceful cleanup;
+- PowerShell trial client and a C++ demo source.
+
+Verified outcomes:
+
+- the isolated backend suite passed 26 tests;
+- the prototype TypeScript build passed;
+- `npm run prototype:oj:backend` started a real localhost process;
+- `npm run prototype:oj:try -- -SourcePath prototypes/oj-console/examples/demo-source.cpp -Yes` completed a demo submission with `state=accepted`, `verdict=AC`, and a non-empty 12-character source digest;
+- no authenticated remote submission was attempted.
+
+The completed backend construction checklist was removed after these results were recorded. The persistent design and this implementation record are the source of truth.
