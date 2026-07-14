@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process";
+import { mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { afterEach, describe, expect, test } from "vitest";
@@ -14,7 +16,9 @@ afterEach(async () => {
 
 describe("OJ console PowerShell client", () => {
   test("runs a complete confirmed demo submission against the local backend", async () => {
+    const runtimeRoot = await mkdtemp(path.join(tmpdir(), "oj-console-powershell-"));
     const server = await startOjConsoleServer({
+      runtimeRoot,
       port: 0,
       output: () => undefined,
       api: {
