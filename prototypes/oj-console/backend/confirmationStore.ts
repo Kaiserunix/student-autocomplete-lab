@@ -69,17 +69,7 @@ export class PrototypeConfirmationStore {
   }
 
   public consume(confirmationId: string, source: SourceRecord): ConsumedPrototypeConfirmation {
-    const stored = this.records.get(confirmationId);
-    if (!stored) {
-      if (this.consumed.has(confirmationId)) {
-        throw new OjConsoleError("confirmation_consumed", "这次提交确认已经使用，请重新预览。", 409);
-      }
-      throw new OjConsoleError("confirmation_missing", "找不到这次提交确认，请重新预览。", 404);
-    }
-    if (this.now() > Date.parse(stored.preview.expiresAt)) {
-      this.records.delete(confirmationId);
-      throw new OjConsoleError("confirmation_expired", "这次提交确认已过期，请重新预览。", 409);
-    }
+    const stored = this.requirePending(confirmationId);
     if (
       stored.preview.source.sourceId !== source.metadata.sourceId ||
       stored.preview.source.digest !== source.metadata.digest ||
@@ -97,8 +87,27 @@ export class PrototypeConfirmationStore {
     };
   }
 
+  public sourceIdFor(confirmationId: string): string {
+    return this.requirePending(confirmationId).preview.source.sourceId;
+  }
+
   public stats(): { pending: number; consumed: number } {
     return { pending: this.records.size, consumed: this.consumed.size };
+  }
+
+  private requirePending(confirmationId: string): StoredConfirmation {
+    const stored = this.records.get(confirmationId);
+    if (!stored) {
+      if (this.consumed.has(confirmationId)) {
+        throw new OjConsoleError("confirmation_consumed", "这次提交确认已经使用，请重新预览。", 409);
+      }
+      throw new OjConsoleError("confirmation_missing", "找不到这次提交确认，请重新预览。", 404);
+    }
+    if (this.now() > Date.parse(stored.preview.expiresAt)) {
+      this.records.delete(confirmationId);
+      throw new OjConsoleError("confirmation_expired", "这次提交确认已过期，请重新预览。", 409);
+    }
+    return stored;
   }
 }
 
