@@ -50,7 +50,7 @@ try {
   $preview = Invoke-RestMethod -Uri "$($descriptor.baseUrl)/api/preview" -Method Post -Headers $headers -ContentType "application/json" -Body $previewRequest
 
   Write-Output "[preview] mode=$($preview.mode) scenario=$($preview.scenario)"
-  Write-Output "[source] name=$($preview.source.fileName) language=$($preview.source.language) bytes=$($preview.source.byteSize) sha256=$($preview.source.sha256)"
+  Write-Output "[source] name=$($preview.source.fileName) language=$($preview.source.language) bytes=$($preview.source.byteSize) digest=$($preview.source.digest)"
   Write-Output "[target] $($preview.target.canonicalUrl)"
 
   if (-not $Yes) {

@@ -45,6 +45,7 @@ describe("OJ console PowerShell client", () => {
 
     expect(result.stdout).toContain("[preview]");
     expect(result.stdout).toContain("mode=demo");
+    expect(result.stdout).toMatch(/digest=[a-f0-9]{12}/);
     expect(result.stdout).toContain("state=accepted");
     expect(result.stdout).toContain("verdict=AC");
   });
