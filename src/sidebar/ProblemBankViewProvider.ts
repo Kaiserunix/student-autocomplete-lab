@@ -2129,6 +2129,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       --warn: var(--vscode-editorWarning-foreground, #d7a542);
       --danger: var(--vscode-errorForeground, #f14c4c);
       --focusGlow: color-mix(in srgb, var(--vscode-focusBorder) 30%, transparent);
+      --dossierCyan: color-mix(in srgb, var(--vscode-textLink-foreground) 82%, #57d7e5);
+      --dossierAmber: color-mix(in srgb, var(--vscode-editorWarning-foreground) 82%, #eebf68);
+      --dossierMint: color-mix(in srgb, var(--vscode-testing-iconPassed) 82%, #7bd7ae);
+      --dossierInk: color-mix(in srgb, var(--vscode-editor-background) 92%, #071016);
+      --dossierRule: color-mix(in srgb, var(--dossierCyan) 32%, var(--line));
+      --mono: var(--vscode-editor-font-family, ui-monospace, SFMono-Regular, Consolas, monospace);
     }
 
     * {
@@ -3020,17 +3026,365 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       font-size: 11px;
       overflow-wrap: anywhere;
     }
+
+    .dossierApp {
+      background:
+        linear-gradient(90deg, transparent 0 9px, color-mix(in srgb, var(--dossierCyan) 7%, transparent) 9px 10px, transparent 10px),
+        var(--vscode-sideBar-background);
+      gap: 12px;
+      min-height: 100vh;
+      padding: 10px 10px 18px;
+    }
+
+    .sessionMasthead {
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--dossierCyan) 12%, transparent), transparent 42%),
+        var(--dossierInk);
+      border: 1px solid var(--dossierRule);
+      clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
+      display: grid;
+      gap: 9px;
+      padding: 12px 13px 13px;
+      position: relative;
+    }
+
+    .sessionMasthead::after {
+      background: var(--dossierCyan);
+      content: "";
+      height: 1px;
+      opacity: 0.75;
+      position: absolute;
+      right: 13px;
+      top: 10px;
+      width: 34px;
+    }
+
+    .mastheadEyebrow,
+    .dossierEyebrow,
+    .evidenceCode,
+    .stateStamp {
+      color: var(--dossierCyan);
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .mastheadTitle {
+      align-items: end;
+      display: flex;
+      gap: 8px;
+      justify-content: space-between;
+    }
+
+    .mastheadTitle h1 {
+      font-size: 17px;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+    }
+
+    .mastheadTitle .stateStamp {
+      color: var(--dossierMint);
+      flex: 0 0 auto;
+    }
+
+    .sessionMasthead .topbarTools {
+      grid-template-columns: minmax(0, 1fr) 92px;
+    }
+
+    .sessionStatus {
+      border-left: 2px solid var(--dossierAmber);
+      color: var(--vscode-descriptionForeground);
+      min-height: 28px;
+      padding: 5px 7px;
+    }
+
+    .sessionTrace {
+      display: grid;
+      gap: 5px;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .traceStep {
+      border-top: 1px solid var(--dossierRule);
+      color: var(--vscode-descriptionForeground);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.05em;
+      padding-top: 5px;
+    }
+
+    .traceStep:first-child {
+      border-top-color: var(--dossierMint);
+      color: var(--dossierMint);
+    }
+
+    .dossierTabs {
+      background: color-mix(in srgb, var(--dossierInk) 90%, transparent);
+      border-color: var(--dossierRule);
+      border-radius: 0;
+      clip-path: polygon(0 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%);
+      padding: 3px;
+    }
+
+    .dossierTabs .tabButton {
+      border-radius: 0;
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 0.03em;
+      min-height: 34px;
+    }
+
+    .dossierTabs .tabButton.active {
+      background: color-mix(in srgb, var(--dossierCyan) 18%, var(--vscode-button-background));
+      box-shadow: inset 0 -2px 0 var(--dossierCyan);
+    }
+
+    .dossierPanel,
+    .problemPoster,
+    .submissionDocket,
+    .accountModelDrawer,
+    .learningDossier {
+      border-color: var(--dossierRule);
+      border-radius: 0;
+      clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px, 100% 100%, 0 100%);
+      position: relative;
+    }
+
+    .dossierPanel::before,
+    .problemPoster::before,
+    .learningDossier::before {
+      background: var(--dossierCyan);
+      content: "";
+      height: 18px;
+      left: 0;
+      position: absolute;
+      top: 0;
+      width: 2px;
+      z-index: 2;
+    }
+
+    .page {
+      animation: dossier-enter 140ms ease-out;
+    }
+
+    @keyframes dossier-enter {
+      from {
+        opacity: 0;
+        transform: translateY(3px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+      }
+    }
+
+    .problemPoster {
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--dossierAmber) 8%, transparent), transparent 92px),
+        var(--surface);
+      border: 1px solid color-mix(in srgb, var(--dossierAmber) 48%, var(--line));
+      display: grid;
+      gap: 0;
+    }
+
+    .posterHeading,
+    .dossierHeading {
+      align-items: start;
+      border-bottom: 1px solid var(--dossierRule);
+      display: flex;
+      gap: 10px;
+      justify-content: space-between;
+      padding: 10px 11px 9px;
+    }
+
+    .posterHeading .dossierEyebrow,
+    .submissionDocket .dossierEyebrow {
+      color: var(--dossierAmber);
+    }
+
+    .posterPin {
+      border: 1px solid var(--dossierAmber);
+      color: var(--dossierAmber);
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+      padding: 2px 5px;
+    }
+
+    .problemPoster .detail {
+      border: 0;
+      border-radius: 0;
+    }
+
+    .ledgerPanel,
+    .skillCard,
+    .resultBlock,
+    .versionItem,
+    .presetItem {
+      border-radius: 0;
+    }
+
+    .ledgerPanel > .panelHeader,
+    .ledgerPanel > summary,
+    .dossierPanel > .panelHeader,
+    .dossierPanel > summary {
+      font-family: var(--mono);
+      letter-spacing: 0.025em;
+    }
+
+    .coachPanel {
+      box-shadow: inset 2px 0 0 var(--dossierCyan);
+    }
+
+    .coachProblem,
+    .aiResponse,
+    .coachAskBox {
+      border-radius: 0;
+      clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%);
+    }
+
+    .aiResponse {
+      border-left-color: var(--dossierCyan);
+    }
+
+    .coachActions {
+      counter-reset: attempt-action;
+    }
+
+    .coachActions button {
+      border-radius: 0;
+      min-height: 38px;
+      position: relative;
+    }
+
+    .coachActions button:not(:first-child)::before {
+      color: var(--vscode-descriptionForeground);
+      content: "0" counter(attempt-action);
+      counter-increment: attempt-action;
+      font-family: var(--mono);
+      font-size: 9px;
+      margin-right: 5px;
+    }
+
+    .submissionDocket {
+      border: 1px solid color-mix(in srgb, var(--dossierAmber) 46%, var(--line));
+      display: grid;
+      overflow: hidden;
+    }
+
+    .submissionDocket .dossierHeading {
+      background: color-mix(in srgb, var(--dossierAmber) 8%, transparent);
+      border-bottom-color: color-mix(in srgb, var(--dossierAmber) 42%, var(--line));
+    }
+
+    .submissionDocket > details,
+    .accountModelDrawer {
+      border: 0;
+      border-radius: 0;
+    }
+
+    .accountModelDrawer {
+      border: 1px solid var(--dossierRule);
+    }
+
+    .accountModelDrawer > summary {
+      align-items: center;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .accountModelDrawer > summary::after {
+      color: var(--dossierMint);
+      content: "ACCOUNT / MODEL";
+      font-family: var(--mono);
+      font-size: 9px;
+      letter-spacing: 0.08em;
+    }
+
+    .codexOAuthPanel {
+      border-color: color-mix(in srgb, var(--dossierMint) 55%, var(--line));
+      border-radius: 0;
+      box-shadow: inset 2px 0 0 var(--dossierMint);
+    }
+
+    .learningDossier .dossierHeading {
+      background: color-mix(in srgb, var(--dossierMint) 7%, transparent);
+    }
+
+    .learningDossier .dossierEyebrow {
+      color: var(--dossierMint);
+    }
+
+    .skillCard {
+      box-shadow: inset 2px 0 0 var(--dossierRule);
+      position: relative;
+    }
+
+    .skillCard.active,
+    .skillCard.mastered {
+      box-shadow: inset 2px 0 0 var(--dossierMint);
+    }
+
+    .skillCard.disabled {
+      box-shadow: inset 2px 0 0 var(--vscode-disabledForeground);
+    }
+
+    .evidenceCode {
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    @media (max-width: 360px) {
+      .dossierApp {
+        padding: 8px 7px 14px;
+      }
+
+      .mastheadTitle {
+        align-items: start;
+        flex-direction: column;
+      }
+
+      .sessionTrace {
+        grid-template-columns: 1fr;
+      }
+
+      .traceStep {
+        border-left: 1px solid var(--dossierRule);
+        border-top: 0;
+        padding-left: 6px;
+        padding-top: 0;
+      }
+
+      .posterHeading,
+      .dossierHeading {
+        align-items: start;
+        flex-direction: column;
+      }
+    }
   </style>
 </head>
 <body>
-  <main class="app">
-    <header class="topbar">
-      <div class="title">
+  <main class="app dossierApp" data-design="competition-dossier">
+    <header id="sessionMasthead" class="topbar sessionMasthead">
+      <span class="mastheadEyebrow">STUDENT AUTOCOMPLETE / LIVE DOSSIER</span>
+      <div class="title mastheadTitle">
         <h1 id="appTitle">AI 做题陪练</h1>
-        <span id="appSubtitle" class="mini">AI / 补全 / 痛点</span>
+        <span id="appSubtitle" class="stateStamp">SESSION READY</span>
       </div>
       <div class="topbarTools">
-        <p id="status" class="status">正在加载已导入题目...</p>
+        <p id="status" class="status sessionStatus" role="status" aria-live="polite">正在加载已导入题目...</p>
         <div class="languageSwitch">
           <label id="uiLanguageLabel" class="mini" for="uiLanguage">界面</label>
           <select id="uiLanguage">
@@ -3040,16 +3394,34 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         </div>
       </div>
       <div id="stats" class="stats"></div>
+      <div class="sessionTrace" aria-label="作答路径">
+        <span class="traceStep">01 / UNDERSTAND · 理解</span>
+        <span class="traceStep">02 / IMPLEMENT · 实现</span>
+        <span class="traceStep">03 / VERIFY · 验证</span>
+      </div>
     </header>
 
-    <nav class="pageTabs" aria-label="主界面">
-      <button id="tabAi" class="tabButton active" type="button">AI 教练</button>
-      <button id="tabProblem" class="tabButton" type="button">题目</button>
-      <button id="tabSkill" class="tabButton" type="button">学习画像</button>
+    <nav class="pageTabs dossierTabs" role="tablist" aria-label="主工作区">
+      <button id="tabAi" class="tabButton active" type="button" role="tab" aria-controls="aiPage" aria-selected="true" tabindex="0">作答现场</button>
+      <button id="tabProblem" class="tabButton" type="button" role="tab" aria-controls="problemPage" aria-selected="false" tabindex="-1">题目张贴板</button>
+      <button id="tabSkill" class="tabButton" type="button" role="tab" aria-controls="skillPage" aria-selected="false" tabindex="-1">学习档案</button>
     </nav>
 
-    <section id="problemPage" class="page" hidden>
-      <details class="panel manualPastePanel" open>
+    <section id="problemPage" class="page" role="tabpanel" aria-labelledby="tabProblem" hidden>
+      <section id="problemPoster" class="problemPoster">
+        <div class="posterHeading">
+          <div>
+            <span class="dossierEyebrow">POSTED PROBLEM / 题目张贴板</span>
+            <h2>当前竞赛简报</h2>
+          </div>
+          <span class="posterPin">PINNED / ACTIVE</span>
+        </div>
+        <section id="problemDetail" class="panel detail">
+          <p class="empty">导入或选择一道题后，这里显示题面、样例和题目来源。</p>
+        </section>
+      </section>
+
+      <details class="panel manualPastePanel ledgerPanel" open>
         <summary>Markdown 文件导入</summary>
         <div class="panelBody manualPasteBody">
           <div class="manualImportHero">
@@ -3067,11 +3439,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         </div>
       </details>
 
-      <section id="problemDetail" class="panel detail">
-        <p class="empty">导入或选择一道题后，这里显示题面、样例和题目来源。</p>
-      </section>
-
-      <section class="panel">
+      <section class="panel ledgerPanel">
         <div class="panelHeader">
           <h2>练习队列</h2>
           <span id="problemCount" class="mini">0 题</span>
@@ -3082,7 +3450,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         <div id="problemList" class="problemList"></div>
       </section>
 
-      <section class="panel">
+      <section class="panel ledgerPanel">
         <div class="panelHeader">
           <h2>已归档</h2>
           <span id="completedCount" class="mini">0 题</span>
@@ -3090,7 +3458,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         <div id="completedList" class="problemList"></div>
       </section>
 
-      <details class="panel">
+      <details class="panel ledgerPanel">
         <summary>题号导入 / 搜索</summary>
         <div class="panelBody">
           <div class="field">
@@ -3112,7 +3480,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         </div>
       </details>
 
-      <details class="panel">
+      <details class="panel ledgerPanel">
         <summary>辅助：初始路线</summary>
         <div class="panelBody">
           <p class="hint">新学生建议先导入诊断题；已经确定要从基础题单开始，可以直接跳过诊断。</p>
@@ -3120,7 +3488,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         </div>
       </details>
 
-      <details class="panel">
+      <details class="panel ledgerPanel">
         <summary>导入题单</summary>
         <div class="panelBody">
           <div class="field">
@@ -3134,10 +3502,13 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       </details>
     </section>
 
-    <section id="aiPage" class="page">
-      <section class="panel coachPanel">
+    <section id="aiPage" class="page" role="tabpanel" aria-labelledby="tabAi">
+      <section class="panel coachPanel dossierPanel">
         <div class="panelHeader">
-          <h2>核心交互</h2>
+          <div>
+            <span class="dossierEyebrow">CURRENT ATTEMPT / 作答现场</span>
+            <h2>当前作答与教练反馈</h2>
+          </div>
           <span id="aiProvider" class="mini">正在检测 API</span>
         </div>
         <div class="panelBody">
@@ -3179,15 +3550,23 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           </div>
         </div>
           <div class="coachActions">
-            <button id="coachHint" type="button">简单提示</button>
-            <button id="coachSpecific" class="secondary" type="button">再具体点</button>
-            <button id="coachFollowUp" class="secondary" type="button">继续聊</button>
-            <button id="coachGiveUp" class="secondary" type="button">我放弃了</button>
-            <button id="coachCompleted" class="secondary" type="button">我已完成</button>
-            <button id="coachAutocomplete" class="secondary" type="button">测试补全</button>
+            <button id="coachHint" type="button">给一个方向</button>
+            <button id="coachSpecific" class="secondary" type="button">再具体一点</button>
+            <button id="coachFollowUp" class="secondary" type="button">继续追问</button>
+            <button id="coachGiveUp" class="secondary" type="button">我卡住了</button>
+            <button id="coachCompleted" class="secondary" type="button">完成并复盘</button>
+            <button id="coachAutocomplete" class="secondary" type="button">检查补全边界</button>
           </div>
-          <details id="ojSubmissionPanel" class="aiConfigBox">
-            <summary>OJ 提交（Codeforces 实验）</summary>
+          <section id="submissionDocket" class="submissionDocket">
+            <div class="dossierHeading">
+              <div>
+                <span class="dossierEyebrow">SUBMIT / 01 · EXPERIMENTAL</span>
+                <h2>提交公文夹</h2>
+              </div>
+              <span class="posterPin">CODEFORCES</span>
+            </div>
+            <details id="ojSubmissionPanel" class="aiConfigBox">
+            <summary>打开真实 OJ 提交流程</summary>
             <div class="panelBody">
               <span class="hint">需要用户自行安装 online-judge-tools。登录在可见终端中完成，扩展不会读取或保存账号、密码、Cookie、验证码。</span>
               <div class="field">
@@ -3206,10 +3585,11 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
                 <span class="hint">确认后只会提交一次；网络超时或结果不明时不会自动重试提交。</span>
               </div>
             </div>
-          </details>
+            </details>
+          </section>
           <div id="aiStatusGrid" class="aiStatusGrid"></div>
-          <details class="aiConfigBox">
-            <summary>AI 接口配置</summary>
+          <details id="accountModelDrawer" class="aiConfigBox accountModelDrawer">
+            <summary>账户与模型</summary>
             <div class="panelBody">
               <div class="aiConfigGrid">
                 <div class="field">
@@ -3315,12 +3695,13 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       </section>
     </section>
 
-    <section id="skillPage" class="page" hidden>
-      <section class="panel">
-        <div class="panelHeader">
+    <section id="skillPage" class="page" role="tabpanel" aria-labelledby="tabSkill" hidden>
+      <section id="learningDossier" class="panel learningDossier">
+        <div class="panelHeader dossierHeading">
           <div>
-            <h2>学习画像</h2>
-            <span class="mini">AI 根据你的做题记录形成的可纠偏教学记忆</span>
+            <span class="dossierEyebrow">LEARNING EVIDENCE / 可纠偏档案</span>
+            <h2>AI 下次会这样教你</h2>
+            <span class="mini">每条判断都应有证据，也允许你说它不准</span>
           </div>
           <span id="studentSkillRevision" class="mini">未加载</span>
         </div>
@@ -3690,10 +4071,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         appTitle: "AI 做题陪练",
         appSubtitle: "AI / 补全 / 痛点",
         uiLanguageLabel: "界面",
-        tabAi: "AI 教练",
-        tabProblem: "题目",
-        tabSkill: "学习画像",
-        coachPanelTitle: "核心交互",
+        tabAi: "作答现场",
+        tabProblem: "题目张贴板",
+        tabSkill: "学习档案",
+        coachPanelTitle: "当前作答与教练反馈",
         coachQuestionLabel: "追问 / 闲聊",
         coachQuestionPlaceholder: "问算法、让它讲简单点、吐槽两句都可以。按 Ctrl+Enter 发送。",
         send: "发送",
@@ -3703,12 +4084,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         responseEn: "English",
         responseRaw: "保留原文",
         ojVerdictLabel: "OJ 结果",
-        hint: "简单提示",
-        specific: "再具体点",
-        followUp: "继续聊",
-        giveUp: "我放弃了",
-        completed: "我已完成",
-        autocompletePreview: "测试补全",
+        hint: "给一个方向",
+        specific: "再具体一点",
+        followUp: "继续追问",
+        giveUp: "我卡住了",
+        completed: "完成并复盘",
+        autocompletePreview: "检查补全边界",
         waitingTitle: "等待 AI 交互",
         waitingHint: "选择题目，打开你的代码文件，然后点“给点提示”。题面只会进入提示分析，不会塞进自动补全提示词。",
         problemTabGuide: "Markdown 文件导入",
@@ -3769,6 +4150,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       tabProblem.className = "tabButton" + (isProblem ? " active" : "");
       tabAi.className = "tabButton" + (isAi ? " active" : "");
       tabSkill.className = "tabButton" + (isSkill ? " active" : "");
+      tabProblem.setAttribute("aria-selected", String(isProblem));
+      tabAi.setAttribute("aria-selected", String(isAi));
+      tabSkill.setAttribute("aria-selected", String(isSkill));
+      tabProblem.tabIndex = isProblem ? 0 : -1;
+      tabAi.tabIndex = isAi ? 0 : -1;
+      tabSkill.tabIndex = isSkill ? 0 : -1;
     }
 
     function importLuogu(pid, createFile) {

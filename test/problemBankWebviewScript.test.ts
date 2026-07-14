@@ -99,7 +99,7 @@ describe("problem bank webview script", () => {
     expect(source).not.toContain("requestDeleteProblem(reason)");
   });
 
-  test("makes the AI coach the first screen and keeps three Chinese UI layers", async () => {
+  test("makes the formal attempt workspace the first screen and keeps three Chinese dossier layers", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
     expect(source).toContain('activePage: "ai"');
@@ -112,10 +112,10 @@ describe("problem bank webview script", () => {
     expect(source).toContain('id="aiPage"');
     expect(source).not.toContain('id="searchPage"');
     expect(source).toContain('id="tabSkill"');
-    expect(source).toContain(">AI 教练<");
-    expect(source).toContain(">题目<");
-    expect(source).toContain(">学习画像<");
-    expect(source).toContain("AI 根据你的做题记录形成的可纠偏教学记忆");
+    expect(source).toContain(">作答现场<");
+    expect(source).toContain(">题目张贴板<");
+    expect(source).toContain(">学习档案<");
+    expect(source).toContain("AI 下次会这样教你");
     expect(source).toContain('id="coachQuestion"');
     expect(source).toContain('id="coachHint"');
     expect(source).toContain('id="coachFollowUp"');
@@ -130,7 +130,7 @@ describe("problem bank webview script", () => {
     expect(source).toContain("追问 / 闲聊");
     expect(source).toContain("吐槽两句都可以");
     expect(source).toContain(">发送<");
-    expect(source).toContain(">继续聊<");
+    expect(source).toContain(">继续追问<");
     expect(source).toContain('function sendCustomFollowUp()');
     expect(source).toContain('document.getElementById("coachSendCustom").addEventListener("click", () => sendCustomFollowUp())');
     expect(source).toContain('document.getElementById("coachFollowUp").addEventListener("click", () => requestAiCoach("followUp"))');
@@ -150,10 +150,10 @@ describe("problem bank webview script", () => {
     expect(source).toContain("renderCoachFollowUp(data)");
     expect(source).toContain("appendCoachFollowUpTurn");
     expect(source).toContain('id="coachOjVerdict"');
-    expect(source).toContain('<details class="aiConfigBox">');
-    expect(source).toContain("<summary>AI 接口配置</summary>");
-    expect(source.indexOf('<div class="field coachAskBox">')).toBeLessThan(source.indexOf('<details class="aiConfigBox">'));
-    expect(source.indexOf('<div id="aiResponse" class="aiResponse">')).toBeLessThan(source.indexOf('<details class="aiConfigBox">'));
+    expect(source).toContain('<details id="accountModelDrawer" class="aiConfigBox accountModelDrawer">');
+    expect(source).toContain("<summary>账户与模型</summary>");
+    expect(source.indexOf('<div class="field coachAskBox">')).toBeLessThan(source.indexOf('id="accountModelDrawer"'));
+    expect(source.indexOf('<div id="aiResponse" class="aiResponse">')).toBeLessThan(source.indexOf('id="accountModelDrawer"'));
     expect(source).toContain('label for="aiBaseUrl">分析接口 Base URL</label>');
     expect(source).toContain('label for="aiAutocompleteBaseUrl">补全接口 Base URL</label>');
     expect(source).toContain('label for="aiApiKey">API Key / 密钥</label>');
@@ -224,7 +224,9 @@ describe("problem bank webview script", () => {
     expect(source).toContain('id="ojLogin"');
     expect(source).toContain('id="ojPreviewSubmit"');
     expect(source).toContain('id="ojSubmissionPanel"');
-    expect(source).toContain("OJ 提交（Codeforces 实验）");
+    expect(source).toContain('id="submissionDocket"');
+    expect(source).toContain("提交公文夹");
+    expect(source).toContain("打开真实 OJ 提交流程");
     expect(source).toContain("提交前确认");
     expect(source).toContain("确认并提交一次");
     expect(source).toContain("不会自动重试提交");
@@ -376,7 +378,7 @@ describe("problem bank webview script", () => {
   test("uses Markdown file import instead of in-panel problem paste", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
-    expect(source).toContain('<details class="panel manualPastePanel" open>');
+    expect(source).toContain('<details class="panel manualPastePanel ledgerPanel" open>');
     expect(source).toContain("<summary>Markdown 文件导入</summary>");
     expect(source).toContain('id="importManualMarkdownFile"');
     expect(source).toContain('command: "importManualMarkdownFile"');

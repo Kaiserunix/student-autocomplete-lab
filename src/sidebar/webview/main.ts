@@ -35,10 +35,18 @@ export const codexOAuthControlIds = [
 
 export const ojActionButtonIds = ["ojLogin", "ojPreviewSubmit"] as const;
 
+export const formalWorkflowControlIds = [
+  ...primaryCoachButtonIds,
+  ...problemImportButtonIds,
+  ...ojActionButtonIds,
+  ...codexOAuthControlIds
+] as const;
+
 export type SidebarPageId = (typeof sidebarPageIds)[number];
 export type CoachButtonId = (typeof primaryCoachButtonIds)[number];
 export type ProblemImportButtonId = (typeof problemImportButtonIds)[number];
 export type OjActionButtonId = (typeof ojActionButtonIds)[number];
+export type FormalWorkflowControlId = (typeof formalWorkflowControlIds)[number];
 
 export function disabledReasonForCoachAction(input: {
   hasProblem: boolean;
