@@ -50,7 +50,8 @@ export function createMimoInlineCompletionProvider(
       }
 
       const linePrefix = document.lineAt(position.line).text.slice(0, position.character);
-      if (!shouldRequestInlineCompletion(linePrefix)) {
+      const isExplicit = context?.triggerKind === vscode.InlineCompletionTriggerKind.Invoke;
+      if (!shouldRequestInlineCompletion(linePrefix, { languageId: document.languageId, explicit: isExplicit })) {
         return [];
       }
 
@@ -66,7 +67,6 @@ export function createMimoInlineCompletionProvider(
         return [new vscode.InlineCompletionItem(cached.suggestion)];
       }
 
-      const isExplicit = context?.triggerKind === vscode.InlineCompletionTriggerKind.Invoke;
       if (!requestGate.beginRequest(isExplicit)) {
         return [];
       }

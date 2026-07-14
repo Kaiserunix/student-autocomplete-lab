@@ -64,20 +64,26 @@ describe("OJ console PowerShell client", () => {
     const scriptPath = path.resolve("prototypes/oj-console/scripts/try-backend.ps1");
     const sourcePath = path.resolve("prototypes/oj-console/examples/demo-source.cpp");
 
-    await expect(execFileAsync("powershell.exe", [
-      "-NoProfile",
-      "-ExecutionPolicy",
-      "Bypass",
-      "-File",
-      scriptPath,
-      "-RuntimeDescriptorPath",
-      descriptorPath,
-      "-SourcePath",
-      sourcePath,
-      "-Yes"
-    ], { cwd: process.cwd(), timeout: 20_000, windowsHide: true })).rejects.toMatchObject({
-      code: 1,
-      stderr: expect.stringContaining("Runtime descriptor must point to http://127.0.0.1")
-    });
+    let failure: unknown;
+    try {
+      await execFileAsync("powershell.exe", [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        scriptPath,
+        "-RuntimeDescriptorPath",
+        descriptorPath,
+        "-SourcePath",
+        sourcePath,
+        "-Yes"
+      ], { cwd: process.cwd(), timeout: 20_000, windowsHide: true });
+    } catch (error) {
+      failure = error;
+    }
+
+    expect(failure).toMatchObject({ code: 1 });
+    const stderr = String((failure as { stderr?: string }).stderr ?? "").replace(/\s+/g, " ");
+    expect(stderr).toContain("Runtime descriptor must point to http://127.0.0.1");
   });
 });
