@@ -4,6 +4,7 @@ import { createWebviewNonce, htmlLanguage, renderWebviewDocumentShell } from "..
 import {
   codexOAuthControlIds,
   disabledReasonForCoachAction,
+  formalWorkflowControlIds,
   ojActionButtonIds,
   primaryCoachButtonIds,
   sidebarPageIds
@@ -48,6 +49,12 @@ describe("sidebar webview modules", () => {
     expect([...primaryCoachButtonIds]).toContain("coachSendCustom");
     expect([...primaryCoachButtonIds]).toContain("coachRecommendRule");
     expect([...ojActionButtonIds]).toEqual(["ojLogin", "ojPreviewSubmit"]);
+    expect([...formalWorkflowControlIds]).toEqual(expect.arrayContaining([
+      "coachHint",
+      "importManualMarkdownFile",
+      "ojPreviewSubmit",
+      "codexBrowserLogin"
+    ]));
     expect(disabledReasonForCoachAction({ hasProblem: false, isBusy: false })).toContain("先导入");
     expect(disabledReasonForCoachAction({ hasProblem: true, isBusy: true })).toContain("正在处理");
   });
