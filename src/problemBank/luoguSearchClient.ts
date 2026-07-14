@@ -48,13 +48,15 @@ export function normalizeLuoguProblemSearchResponse(
           }
 
           const record = item as Record<string, unknown>;
-          if (typeof record.pid !== "string" || typeof record.title !== "string") {
+          const title = typeof record.title === "string" ? record.title : typeof record.name === "string" ? record.name : "";
+
+          if (typeof record.pid !== "string" || !title) {
             return undefined;
           }
 
           const result: ProblemSearchResult = {
             id: record.pid,
-            title: record.title,
+            title,
             tags: normalizeTags(record.tags),
             sourceUrl: `https://www.luogu.com.cn/problem/${record.pid}`
           };

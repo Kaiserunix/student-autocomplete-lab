@@ -15,7 +15,7 @@ describe("Luogu search normalization", () => {
           result: [
             {
               pid: "P1319",
-              title: "压缩技术",
+              name: "压缩技术",
               difficulty: 1,
               tags: [1, 2, 81]
             },
@@ -47,6 +47,37 @@ describe("Luogu search normalization", () => {
         sourceUrl: "https://www.luogu.com.cn/problem/P1320"
       }
     ]);
+  });
+
+  test("normalizes current Luogu problem search results that use name instead of title", () => {
+    const results = normalizeLuoguProblemSearchResponse({
+      data: {
+        problems: {
+          count: 1,
+          result: [
+            {
+              pid: "P1001",
+              name: "A+B Problem",
+              difficulty: 1,
+              tags: [1]
+            }
+          ]
+        }
+      }
+    });
+
+    expect(results).toEqual({
+      total: 1,
+      items: [
+        {
+          id: "P1001",
+          title: "A+B Problem",
+          difficulty: 1,
+          tags: ["1"],
+          sourceUrl: "https://www.luogu.com.cn/problem/P1001"
+        }
+      ]
+    });
   });
 
   test("normalizes problem-set search results", () => {

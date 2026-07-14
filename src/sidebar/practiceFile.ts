@@ -15,10 +15,10 @@ export const practiceLanguageOptions: PracticeLanguageOption[] = [
   { id: "rust", label: "Rust", extension: "rs" }
 ];
 
-type PracticeProblem = Pick<ProblemRecord, "platform" | "id" | "title" | "sourceUrl">;
+type PracticeProblem = Pick<ProblemRecord, "platform" | "id">;
 
 export function buildPracticeFileRelativePath(
-  problem: Pick<PracticeProblem, "platform" | "id" | "title">,
+  problem: PracticeProblem,
   language: PracticeLanguage
 ): string {
   const extension = optionForLanguage(language).extension;
@@ -26,7 +26,7 @@ export function buildPracticeFileRelativePath(
 }
 
 export function buildPracticeFileContent(problem: PracticeProblem, language: PracticeLanguage): string {
-  const header = practiceHeader(problem, language);
+  const header = practiceHeader(language);
 
   if (language === "python") {
     return `${header}
@@ -86,12 +86,10 @@ fn main() {
 `;
 }
 
-function practiceHeader(problem: PracticeProblem, language: PracticeLanguage): string {
+function practiceHeader(language: PracticeLanguage): string {
   const comment = language === "python" ? "#" : "//";
   return [
-    `${comment} 题目：${problem.id} ${problem.title}`,
-    problem.sourceUrl ? `${comment} 链接：${problem.sourceUrl}` : "",
-    `${comment} 提醒：题面在插件侧栏查看；自动补全不会读取完整题面。`
+    `${comment} 提醒：题面在插件侧栏查看；自动补全只读取学生代码区。`
   ]
     .filter((line) => line.length > 0)
     .join("\n");

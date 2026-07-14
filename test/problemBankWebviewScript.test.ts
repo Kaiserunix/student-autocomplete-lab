@@ -237,6 +237,25 @@ describe("problem bank webview script", () => {
     expect(source).toContain('data.type === "ojSubmissionResult"');
   });
 
+  test("keeps the coach UI output-first and touchable in the narrow sidebar", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain(".coachMetaGrid");
+    expect(source).toContain("grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));");
+    expect(source).toContain("补全不读题面");
+    expect(source.indexOf('<div id="aiResponse" class="aiResponse">')).toBeLessThan(
+      source.indexOf('<div class="field coachAskBox">')
+    );
+    expect(source.indexOf('<div id="aiResponse" class="aiResponse">')).toBeLessThan(
+      source.indexOf('<div class="coachActions">')
+    );
+    expect(source).toContain(".coachActions button:first-child");
+    expect(source).toContain(".coachQuestionActions button");
+    expect(source).toContain("@media (max-width: 360px)");
+    expect(source).toContain(".skillActionRow");
+    expect(source).toContain(".detailActions");
+  });
+
   test("shows context boundary audits for AI diagnosis and autocomplete preview", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
@@ -381,9 +400,11 @@ describe("problem bank webview script", () => {
   test("keeps AI actions on the coach page instead of duplicating them in problem detail", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
-    expect(source).not.toContain("problemDetail.appendChild(actions);");
+    expect(source).toContain('actions.className = "detailActions";');
     expect(source).toContain('goCoachButton.textContent = "去 AI 教练提问";');
     expect(source).toContain('id="coachHint"');
+    expect(source).not.toContain('goCoachButton.addEventListener("click", () => requestAiCoach');
+    expect(source).not.toContain('deleteButton.addEventListener("click", () => requestAiCoach');
   });
 
   test("routes next-problem recommendation through the rule engine", async () => {

@@ -52,6 +52,26 @@ describe("teaching diagnosis report parser", () => {
     expect(report.painPoints[0].confidence).toBe(0.9);
   });
 
+  test("ignores incomplete optional recommendations from loose live model responses", () => {
+    const report = parseTeachingDiagnosisReport(
+      JSON.stringify({
+        pain_points: [
+          {
+            label: "output_format",
+            confidence: 0.8,
+            evidence: "The code prints prompt text before the answer."
+          }
+        ],
+        hint: "先删掉所有题目没有要求的提示文字。",
+        recommendation: {
+          reason: "模型只给了推荐理由，没有给具体题号。"
+        }
+      })
+    );
+
+    expect(report.recommendation).toBeUndefined();
+  });
+
   test("parses layered hints for basic and more-specific coaching actions", () => {
     const report = parseTeachingDiagnosisReport(
       JSON.stringify({

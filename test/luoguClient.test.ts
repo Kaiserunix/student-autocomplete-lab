@@ -29,10 +29,11 @@ const liveShapeLuoguResponse = {
   data: {
     problem: {
       pid: "P5730",
-      title: "【深基5.例10】显示屏",
+      name: "【深基5.例10】显示屏",
       difficulty: 2,
       tags: [],
       contenu: {
+        name: "【深基5.例10】显示屏",
         description: "液晶屏上，每个阿拉伯数字都是 3x5 点阵。",
         formatI: "第一行输入一个整数 n。",
         formatO: "输出显示屏内容。",
@@ -96,6 +97,7 @@ describe("luogu client normalization", () => {
     const problem = normalizeLuoguProblemResponse(liveShapeLuoguResponse);
 
     expect(problem.id).toBe("P5730");
+    expect(problem.title).toContain("显示屏");
     expect(problem.statement).toContain("液晶屏");
     expect(problem.inputFormat).toContain("第一行");
     expect(problem.outputFormat).toContain("输出显示屏");

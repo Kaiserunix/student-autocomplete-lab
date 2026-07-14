@@ -105,7 +105,7 @@ return d
     expect(prompt).not.toContain("return a + b");
   });
 
-  test("keeps autocomplete prompt file context stable without absolute workspace paths", () => {
+  test("keeps autocomplete prompt file context stable without absolute workspace paths or problem ids", () => {
     const prompt = buildMimoAutocompletePrompt({
       prefix: "def solve():\n    ",
       suffix: "",
@@ -114,9 +114,23 @@ return d
       habits: []
     });
 
-    expect(prompt).toContain("File: luogu/P1001.py");
+    expect(prompt).toContain("File: practice/luogu/problem.py");
     expect(prompt).not.toContain("C:\\Users\\qwerf");
     expect(prompt).not.toContain("Desktop\\Source\\leetcodepy");
+    expect(prompt).not.toContain("P1001");
+  });
+
+  test("redacts manual practice file names from autocomplete prompts", () => {
+    const prompt = buildAutocompletePrompt({
+      prefix: "def solve():\n    ",
+      suffix: "",
+      language: "python",
+      filePath: "C:\\Users\\qwerf\\Desktop\\Source\\leetcodepy\\practice\\manual\\校园昵称规范器.py",
+      habits: []
+    });
+
+    expect(prompt).toContain("File: practice/manual/problem.py");
+    expect(prompt).not.toContain("校园昵称规范器");
   });
 
   test("requests inline completion after indentation even before a non-space token exists", () => {
@@ -131,6 +145,17 @@ return d
     expect(shouldRequestInlineCompletion("    # TODO")).toBe(false);
     expect(shouldRequestInlineCompletion("// comment")).toBe(false);
     expect(shouldRequestInlineCompletion("def solve")).toBe(true);
+  });
+
+  test("triggers C-family inline completion while typing an include directive", () => {
+    expect(shouldRequestInlineCompletion("#include <", { languageId: "c" })).toBe(true);
+    expect(shouldRequestInlineCompletion("#include <vector", { languageId: "cpp" })).toBe(true);
+    expect(shouldRequestInlineCompletion("#include <", { languageId: "python" })).toBe(false);
+  });
+
+  test("lets an explicit inline completion request reach the provider on a blank or comment line", () => {
+    expect(shouldRequestInlineCompletion("", { languageId: "c", explicit: true })).toBe(true);
+    expect(shouldRequestInlineCompletion("// continue here", { languageId: "c", explicit: true })).toBe(true);
   });
 
   test("limits inline completion to supported code languages", () => {

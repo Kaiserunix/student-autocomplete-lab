@@ -5,6 +5,7 @@ interface LuoguProblemPayload {
     problem?: {
       pid?: unknown;
       title?: unknown;
+      name?: unknown;
       difficulty?: unknown;
       tags?: unknown;
       description?: unknown;
@@ -13,6 +14,7 @@ interface LuoguProblemPayload {
       samples?: unknown;
       hint?: unknown;
       contenu?: {
+        name?: unknown;
         background?: unknown;
         description?: unknown;
         formatI?: unknown;
@@ -71,8 +73,9 @@ function joinProblemSections(...sections: string[]): string {
 
 export function normalizeLuoguProblemResponse(payload: LuoguProblemPayload): ProblemRecord {
   const problem = payload.data?.problem;
+  const title = asString(problem?.title) || asString(problem?.name) || asString(problem?.contenu?.name);
 
-  if (!problem || typeof problem.pid !== "string" || typeof problem.title !== "string") {
+  if (!problem || typeof problem.pid !== "string" || !title) {
     throw new Error("Luogu response did not include a usable problem payload.");
   }
 
@@ -81,7 +84,7 @@ export function normalizeLuoguProblemResponse(payload: LuoguProblemPayload): Pro
   return {
     platform: "luogu",
     id: problem.pid,
-    title: problem.title,
+    title,
     sourceUrl: `https://www.luogu.com.cn/problem/${problem.pid}`,
     difficulty: typeof problem.difficulty === "number" ? problem.difficulty : undefined,
     tags: normalizeTags(problem.tags),
