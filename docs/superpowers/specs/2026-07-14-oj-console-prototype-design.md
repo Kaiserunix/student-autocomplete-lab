@@ -2,7 +2,7 @@
 
 Date: 2026-07-14
 
-Status: backend-first slice implemented and verified; tool-console frontend in progress.
+Status: standalone prototype implemented and verified; authenticated live Codeforces submission remains a separate manual gate.
 
 ## 1. Purpose
 
@@ -87,6 +87,8 @@ Prototype-only units have one responsibility each:
 
 Every `/api/` request requires the random startup token in `X-OJ-Console-Token`. The PowerShell client reads it from the server startup file; the later browser document receives it through server-side HTML injection, never through a URL. The server sends no CORS headers. A missing `Origin` is accepted for the token-authenticated PowerShell client, the exact local server origin is accepted for the browser, and every other origin is rejected.
 
+The server also rejects non-local `Host` values before serving the token-bearing document, preventing a DNS-rebinding page from treating the service as its own origin. This token protects against drive-by web requests; it is not an operating-system identity boundary. Run the prototype only on a trusted, single-user device. Another process or user that can freely access this account's loopback traffic must be treated as trusted, especially while real mode is unlocked.
+
 ### `GET /api/status`
 
 Returns server version, startup time, current mode, real-mode lock state, sanitized `oj` availability/version, active object counts, and the Codeforces-only scope.
@@ -165,7 +167,9 @@ No endpoint imports browser cookies, accepts a password, or exposes CAPTCHA solv
 
 ## 9. State And Cleanup
 
-All sources, previews, unlock state, and jobs live in memory and disappear at process stop. The source store has bounded entry count and byte total. Expired objects are pruned. Completed jobs retain only safe metadata until process exit.
+All sources, previews, unlock state, and jobs live in memory and disappear at process stop. The source store has bounded entry count and byte total. Expired objects are pruned. Completed jobs retain only safe metadata until their terminal TTL or process exit.
+
+At most 16 pending previews and 32 submission jobs are retained. Consumed confirmation tombstones expire, terminal jobs expire after ten minutes, and new entries trigger pruning before an explicit capacity error. The status endpoint caches the `oj --version` capability result for five seconds so page refreshes cannot create an unbounded process burst.
 
 Temporary real-mode files live only below `.runtime/oj-console/`. Startup removes stale prototype directories from interrupted runs, and graceful shutdown removes the current directory.
 
@@ -276,3 +280,18 @@ Verified outcomes:
 - no authenticated remote submission was attempted.
 
 The completed backend construction checklist was removed after these results were recorded. The persistent design and this implementation record are the source of truth.
+
+The tool-console frontend was then completed with the selected dense dark B layout. It receives the session token through the initial local document, removes it from the DOM after bootstrap, sends source bytes without rendering their content, and uses the same preview/confirmation/job contract as the PowerShell client. HTML, CSS, and browser JavaScript contain no source comments, enforced by a regression test.
+
+Final verification on 2026-07-14:
+
+- 86 test files and 297 tests passed under Vitest 3.2.7;
+- the main extension build and dedicated prototype build passed;
+- the PowerShell client completed a fresh demo AC and rejected a non-local runtime descriptor;
+- a headless Chromium flow selected the demo source, checked the real-mode lock, generated a preview, consumed one confirmation, rendered `ACCEPTED / AC`, and reported no browser-console errors;
+- `npm audit` reported zero vulnerabilities after compatible dependency updates;
+- the beta VSIX packaged successfully with project hygiene passing, and the package inspection contained no prototype, prototype build config, browser-check script, or local `.superpowers` artifact;
+- the frontend blocks foreign Host values, bounds confirmations/jobs, expires terminal records, and caches status tool checks;
+- no live Codeforces login, CAPTCHA interaction, or remote submission was run.
+
+The complete prototype remains an experimental repository harness. Its browser UI is not included in the VSIX; validated behavior can later be absorbed into the extension surface.

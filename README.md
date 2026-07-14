@@ -31,6 +31,7 @@ This repository is prepared as an MIT-licensed open-source beta candidate. Publi
 - `docs/codex-start-prompt.md`: prompt to give Codex for the first build attempt.
 - `docs/beta-v2-final-goals.md`: final beta target, including Student Skill distillation requirements.
 - `docs/superpowers/specs/2026-07-12-oj-submission-design.md`: approved hybrid architecture for user-confirmed real OJ submission and interactive login.
+- `docs/superpowers/specs/2026-07-14-oj-console-prototype-design.md`: implemented standalone localhost OJ console design and verification record.
 - `docs/large-scale-growth-simulation.md`: costed plan for the 200-problem / 1000-code growth simulation.
 - `docs/open-source-release.md`: release notes, open-source scope, model rationale, and package command.
 - `docs/release-lanes.md`: three VSIX lanes: beta, clean beta release, and private internal test.
@@ -76,6 +77,25 @@ python -m pip install --user online-judge-tools
 每次提交都必须明确确认。确认记录两分钟后失效，并与当前文件版本绑定；代码变化后必须重新预览。扩展不会自动重试提交，不会绕过图形验证，不会抓取浏览器 Cookie，也不会记录 `oj` 的原始输出或其中显示的源码预览。若网络结果不明，请先到 Codeforces 检查，避免手动重复提交。
 
 本项目与 Codeforces、online-judge-tools 均无隶属或背书关系。第三方许可见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+
+## Standalone OJ Console Prototype
+
+无需打开 VS Code，可以直接启动本地深色工具控制台：
+
+```powershell
+npm run prototype:oj
+```
+
+该命令只监听 `127.0.0.1`，生成当前进程专用的随机令牌，并打开浏览器。选择源码后，默认 `DEMO` 模式可以体验预览、一次性确认、排队、判题和 AC/WA/CE/UNKNOWN 状态；演示模式不会访问 Codeforces。
+
+若只想启动后端，或先用 PowerShell 客户端试流程：
+
+```powershell
+npm run prototype:oj:backend
+npm run prototype:oj:try -- -SourcePath prototypes/oj-console/examples/demo-source.cpp -Yes
+```
+
+真实模式默认锁定，只有安装并登录 `online-judge-tools/oj` 后才可使用。它仍然要求完整解锁短语、不可复用的提交确认，并且不会自动重试。登录由可见 PowerShell 终端接管；浏览器 Cookie、账号密码、图形验证绕过和验证码自动化不属于本原型。
 
 ## Development
 
