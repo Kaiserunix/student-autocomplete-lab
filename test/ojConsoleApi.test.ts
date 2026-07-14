@@ -53,6 +53,20 @@ describe("OJ console local API", () => {
     expect(local.status).toBe(200);
   });
 
+  test("caches status tool checks to avoid spawning a process for every refresh", async () => {
+    const checkTool = vi.fn(async () => ({ available: false, message: "not installed" }));
+    const { baseUrl } = await startApi({
+      token: "test-token",
+      runtimeRoot: ".runtime/test-oj-console",
+      checkTool
+    });
+
+    await fetch(`${baseUrl}/api/status`, { headers: tokenHeaders() });
+    await fetch(`${baseUrl}/api/status`, { headers: tokenHeaders() });
+
+    expect(checkTool).toHaveBeenCalledOnce();
+  });
+
   test("uploads safe metadata and completes a one-time demo submission", async () => {
     const { baseUrl } = await startApi({
       token: "test-token",

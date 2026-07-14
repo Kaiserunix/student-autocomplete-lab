@@ -47,6 +47,9 @@ export function createOjConsoleApi(options: OjConsoleApiOptions): RequestListene
   const runReal = options.runReal ?? ((input) => runRealSubmission(input));
   const openLogin = options.openLogin ?? (() => openCodeforcesLoginTerminal());
   const startedAt = options.startedAt ?? new Date().toISOString();
+  let cachedStatusTool: Awaited<ReturnType<typeof checkOnlineJudgeTools>> | undefined;
+  let cachedStatusToolUntil = 0;
+  let pendingStatusTool: ReturnType<typeof checkOnlineJudgeTools> | undefined;
 
   return (request, response) => {
     void handleRequest(request, response).catch((error: unknown) => {
@@ -64,7 +67,7 @@ export function createOjConsoleApi(options: OjConsoleApiOptions): RequestListene
     requireAllowedOrigin(request);
 
     if (request.method === "GET" && url.pathname === "/api/status") {
-      const tool = await checkTool();
+      const tool = await checkStatusTool();
       sendJson(response, 200, {
         version: "0.1",
         startedAt,
@@ -198,6 +201,23 @@ export function createOjConsoleApi(options: OjConsoleApiOptions): RequestListene
         message: "提交任务执行失败；不会自动重试。"
       });
     });
+  }
+
+  async function checkStatusTool(): Promise<Awaited<ReturnType<typeof checkOnlineJudgeTools>>> {
+    const now = Date.now();
+    if (cachedStatusTool && now < cachedStatusToolUntil) {
+      return cachedStatusTool;
+    }
+    if (!pendingStatusTool) {
+      pendingStatusTool = checkTool().then((tool) => {
+        cachedStatusTool = tool;
+        cachedStatusToolUntil = Date.now() + 5_000;
+        return tool;
+      }).finally(() => {
+        pendingStatusTool = undefined;
+      });
+    }
+    return pendingStatusTool;
   }
 }
 

@@ -30,6 +30,8 @@ export interface SubmissionJobStoreOptions {
   now?: () => number;
   createId?: () => string;
   onChange?: (view: SubmissionJobView) => void;
+  maxJobs?: number;
+  terminalTtlMs?: number;
 }
 
 const allowedTransitions: Record<SubmissionJobState, SubmissionJobState[]> = {
@@ -43,19 +45,29 @@ const allowedTransitions: Record<SubmissionJobState, SubmissionJobState[]> = {
   failed: []
 };
 
+const terminalStates = new Set<SubmissionJobState>(["accepted", "rejected", "unknown", "failed"]);
+
 export class SubmissionJobStore {
   private readonly records = new Map<string, SubmissionJobView>();
   private readonly now: () => number;
   private readonly createId: () => string;
   private readonly onChange?: (view: SubmissionJobView) => void;
+  private readonly maxJobs: number;
+  private readonly terminalTtlMs: number;
 
   public constructor(options: SubmissionJobStoreOptions = {}) {
     this.now = options.now ?? Date.now;
     this.createId = options.createId ?? randomUUID;
     this.onChange = options.onChange;
+    this.maxJobs = options.maxJobs ?? 32;
+    this.terminalTtlMs = options.terminalTtlMs ?? 10 * 60_000;
   }
 
   public create(input: CreateSubmissionJobInput): SubmissionJobView {
+    this.pruneExpiredTerminalJobs();
+    if (this.records.size >= this.maxJobs) {
+      throw new OjConsoleError("job_limit_reached", `本次运行的任务数量不能超过 ${this.maxJobs} 个。`, 409);
+    }
     const now = new Date(this.now()).toISOString();
     const job: SubmissionJobView = {
       jobId: this.createId(),
@@ -98,15 +110,26 @@ export class SubmissionJobStore {
   }
 
   public count(): number {
+    this.pruneExpiredTerminalJobs();
     return this.records.size;
   }
 
   private requireJob(jobId: string): SubmissionJobView {
+    this.pruneExpiredTerminalJobs();
     const job = this.records.get(jobId);
     if (!job) {
       throw new OjConsoleError("job_missing", "找不到提交任务。", 404);
     }
     return job;
+  }
+
+  private pruneExpiredTerminalJobs(): void {
+    const now = this.now();
+    for (const [jobId, job] of this.records) {
+      if (terminalStates.has(job.state) && now > Date.parse(job.updatedAt) + this.terminalTtlMs) {
+        this.records.delete(jobId);
+      }
+    }
   }
 
   private emit(job: SubmissionJobView): void {

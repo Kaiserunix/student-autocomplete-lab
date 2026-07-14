@@ -73,4 +73,25 @@ describe("OJ console demo submission", () => {
     expect(jobs.get("job-1").source.fileName).toBe("main.cpp");
     expect(() => jobs.get("missing")).toThrow("找不到提交任务");
   });
+
+  test("bounds jobs and prunes expired terminal records", () => {
+    let now = 1_000;
+    let id = 0;
+    const jobs = new SubmissionJobStore({
+      createId: () => `job-${++id}`,
+      now: () => now,
+      maxJobs: 2,
+      terminalTtlMs: 100
+    });
+    const first = jobs.create({ mode: "demo", scenario: "accepted", source, target });
+    jobs.update(first.jobId, { state: "failed", message: "done" });
+    jobs.create({ mode: "demo", scenario: "accepted", source, target });
+
+    expect(() => jobs.create({ mode: "demo", scenario: "accepted", source, target })).toThrow("任务数量");
+
+    now += 101;
+    jobs.create({ mode: "demo", scenario: "accepted", source, target });
+    expect(jobs.count()).toBe(2);
+    expect(() => jobs.get(first.jobId)).toThrow("找不到提交任务");
+  });
 });

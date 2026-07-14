@@ -81,4 +81,28 @@ describe("OJ console confirmation store", () => {
     now += 120_001;
     expect(() => store.consume(expiredPreview.confirmationId, source)).toThrow("已过期");
   });
+
+  test("bounds pending confirmations and expires consumed tombstones", () => {
+    let now = 1_000;
+    let id = 0;
+    const store = new PrototypeConfirmationStore({
+      now: () => now,
+      createId: () => `confirm-${++id}`,
+      ttlMs: 100,
+      consumedTtlMs: 200,
+      maxPending: 2
+    });
+    store.create({ source, target, mode: "demo", scenario: "accepted" });
+    store.create({ source, target, mode: "demo", scenario: "accepted" });
+
+    expect(() => store.create({ source, target, mode: "demo", scenario: "accepted" })).toThrow("待确认预览");
+
+    now += 101;
+    const next = store.create({ source, target, mode: "demo", scenario: "accepted" });
+    store.consume(next.confirmationId, source);
+    expect(store.stats()).toEqual({ pending: 0, consumed: 1 });
+
+    now += 201;
+    expect(store.stats()).toEqual({ pending: 0, consumed: 0 });
+  });
 });

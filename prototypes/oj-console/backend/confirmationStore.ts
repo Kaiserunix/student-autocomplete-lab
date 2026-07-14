@@ -26,6 +26,8 @@ export interface PrototypeConfirmationStoreOptions {
   now?: () => number;
   createId?: () => string;
   ttlMs?: number;
+  consumedTtlMs?: number;
+  maxPending?: number;
 }
 
 interface StoredConfirmation {
@@ -35,18 +37,26 @@ interface StoredConfirmation {
 
 export class PrototypeConfirmationStore {
   private readonly records = new Map<string, StoredConfirmation>();
-  private readonly consumed = new Set<string>();
+  private readonly consumed = new Map<string, number>();
   private readonly now: () => number;
   private readonly createId: () => string;
   private readonly ttlMs: number;
+  private readonly consumedTtlMs: number;
+  private readonly maxPending: number;
 
   public constructor(options: PrototypeConfirmationStoreOptions = {}) {
     this.now = options.now ?? Date.now;
     this.createId = options.createId ?? randomUUID;
     this.ttlMs = options.ttlMs ?? 120_000;
+    this.consumedTtlMs = options.consumedTtlMs ?? this.ttlMs;
+    this.maxPending = options.maxPending ?? 16;
   }
 
   public create(input: CreatePrototypePreviewInput): SubmissionPreview {
+    this.pruneExpired();
+    if (this.records.size >= this.maxPending) {
+      throw new OjConsoleError("confirmation_limit_reached", `待确认预览最多保留 ${this.maxPending} 个。`, 409);
+    }
     const createdAtMs = this.now();
     const confirmationId = this.createId();
     const handle = normalizeHandle(input.codeforcesHandle);
@@ -79,7 +89,7 @@ export class PrototypeConfirmationStore {
     }
 
     this.records.delete(confirmationId);
-    this.consumed.add(confirmationId);
+    this.consumed.set(confirmationId, this.now() + this.consumedTtlMs);
     return {
       ...clonePreview(stored.preview),
       sourceId: stored.preview.source.sourceId,
@@ -92,10 +102,12 @@ export class PrototypeConfirmationStore {
   }
 
   public stats(): { pending: number; consumed: number } {
+    this.pruneExpired();
     return { pending: this.records.size, consumed: this.consumed.size };
   }
 
   private requirePending(confirmationId: string): StoredConfirmation {
+    this.pruneConsumed();
     const stored = this.records.get(confirmationId);
     if (!stored) {
       if (this.consumed.has(confirmationId)) {
@@ -108,6 +120,24 @@ export class PrototypeConfirmationStore {
       throw new OjConsoleError("confirmation_expired", "这次提交确认已过期，请重新预览。", 409);
     }
     return stored;
+  }
+
+  private pruneExpired(): void {
+    const now = this.now();
+    for (const [confirmationId, stored] of this.records) {
+      if (now > Date.parse(stored.preview.expiresAt)) {
+        this.records.delete(confirmationId);
+      }
+    }
+    this.pruneConsumed(now);
+  }
+
+  private pruneConsumed(now = this.now()): void {
+    for (const [confirmationId, expiresAt] of this.consumed) {
+      if (now > expiresAt) {
+        this.consumed.delete(confirmationId);
+      }
+    }
   }
 }
 
