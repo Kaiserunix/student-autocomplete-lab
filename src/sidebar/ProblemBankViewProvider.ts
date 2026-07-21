@@ -30,6 +30,7 @@ import { requestCompletion, type CompletionProviderConfig } from "../models/comp
 import { listProviderModels } from "../models/providerModelsClient";
 import { routeAutocompleteModel, routeTeachingModel } from "../models/modelRouter";
 import type { ModelTextTransport } from "../models/modelTextTransport";
+import type { SkillPlanAudit } from "../skills/types";
 import { fetchLuoguProblem } from "../problemBank/luoguClient";
 import { fetchLuoguProblemSet } from "../problemBank/luoguProblemSetClient";
 import { searchLuoguProblems, searchLuoguProblemSets } from "../problemBank/luoguSearchClient";
@@ -42,10 +43,10 @@ import { SubmissionConfirmationStore } from "../submission/confirmationStore";
 import { checkOnlineJudgeTools, submitWithOnlineJudgeTools } from "../submission/onlineJudgeTools";
 import type { EditorSubmissionIdentity, OjSubmissionResult } from "../submission/types";
 import { buildAttemptEvent, summarizeAttemptEvents, type AttemptEvent } from "../teaching/attemptEvent";
-import { requestMimoCoachFollowUp } from "../teaching/coachFollowUp";
+import { requestMimoCoachFollowUpWithSkills } from "../teaching/coachFollowUp";
 import { requestMimoLessonReport } from "../teaching/lessonReport";
 import { buildLuoguMcpRecommendationCandidates } from "../teaching/luoguMcpRecommendationCandidates";
-import { requestMimoTeachingDiagnosis } from "../teaching/mimoTeacher";
+import { requestMimoTeachingDiagnosisWithSkills } from "../teaching/mimoTeacher";
 import { requestMimoOptimizationReport, type OptimizationReport } from "../teaching/optimizationReport";
 import {
   mergeRecommendationCandidates,
@@ -828,9 +829,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       throw new Error("先打开你的代码文件，AI 才能分析当前卡点。");
     }
 
-    const config = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text).config;
+    const route = routeTeachingModel(
+      await this.loadRuntimeModelEnv(),
+      this.codexServices.text
+    );
+    const config = route.config;
     const profile = await loadStudentProfile(this.profilePath());
     const studentSkill = await this.loadStudentSkillForProfile(profile);
+    let coachSkillAudit: SkillPlanAudit | undefined;
     const teacherPack = await this.ensureTeacherPack(problem, config);
     const occurredAt = new Date().toISOString();
     const context = buildSidebarTeachingContext({
@@ -845,16 +851,26 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     });
 
     if (action === "followUp") {
-      const followUpReport = await requestMimoCoachFollowUp(config, {
-        problem: context.problem,
-        teacherPack: context.teacherPack,
-        language: context.language,
-        studentCode: context.studentCode,
-        studentProfile: context.studentProfile,
-        studentRequest: studentRequest?.trim() || "请把上一条提示讲得更详细但更容易懂。",
-        previousCoachTurn,
-        responseLanguage: context.responseLanguage
-      });
+      const followUpReport = await requestMimoCoachFollowUpWithSkills(
+        config,
+        {
+          problem: context.problem,
+          teacherPack: context.teacherPack,
+          language: context.language,
+          studentCode: context.studentCode,
+          studentProfile: context.studentProfile,
+          studentRequest: studentRequest?.trim() || "请把上一条提示讲得更详细但更容易懂。",
+          previousCoachTurn,
+          responseLanguage: context.responseLanguage
+        },
+        {
+          studentSkill,
+          capabilities: route.capabilities,
+          onAudit: (audit) => {
+            coachSkillAudit = audit;
+          }
+        }
+      );
       const event = buildAttemptEvent({
           problemKey,
           problemId: problem.id,
@@ -891,7 +907,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         payload: {
           followUpOnly: true,
           hasPreviousCoachTurn: Boolean(previousCoachTurn?.trim()),
-          hasStudentRequest: Boolean(studentRequest?.trim())
+          hasStudentRequest: Boolean(studentRequest?.trim()),
+          coachSkillAudit
         }
       });
 
@@ -914,7 +931,19 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       studentSkill,
       occurredAt,
       patchSource: config.model,
-      diagnose: (diagnosisContext) => requestMimoTeachingDiagnosis(config, diagnosisContext)
+      diagnose: (diagnosisContext) =>
+        requestMimoTeachingDiagnosisWithSkills(
+          config,
+          diagnosisContext,
+          {
+            studentSkill,
+            action,
+            capabilities: route.capabilities,
+            onAudit: (audit) => {
+              coachSkillAudit = audit;
+            }
+          }
+        )
     });
     await saveStudentProfile(this.profilePath(), result.updatedProfile);
     await saveStudentSkill(this.studentSkillPath(), result.updatedStudentSkill);
@@ -952,7 +981,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       payload: {
         candidateSkill: result.report.skillUpdate?.candidate,
         skillMergeChangeCount: result.studentSkillMerge.changeSummary.length,
-        workflowAudit: result.audit
+        workflowAudit: result.audit,
+        coachSkillAudit
       }
     });
 

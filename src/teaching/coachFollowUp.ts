@@ -3,6 +3,12 @@ import {
   type ChatCompletionUsageSink,
   requestChatCompletionText
 } from "../models/chatCompletionsClient";
+import { providerCapabilitiesFor } from "../models/providerCapabilities";
+import { composeCoachSkillPlan } from "../skills/composeSkillPlan";
+import { selectLearnerRules } from "../skills/habitSelector";
+import { renderCoachSkillPlan } from "../skills/renderers/skillRenderer";
+import type { ProviderCapabilities, SkillPlanAudit } from "../skills/types";
+import { createEmptyStudentSkill, type StudentSkill } from "./studentSkill";
 import type { TeacherPackReference, TeachingProblemContext, TeachingStudentProfileSummary } from "./types";
 
 export interface CoachFollowUpContext {
@@ -23,6 +29,12 @@ export interface CoachFollowUpReport {
   boundary?: string;
 }
 
+export interface CoachFollowUpSkillOptions {
+  studentSkill?: StudentSkill;
+  capabilities?: ProviderCapabilities;
+  onAudit?: (audit: SkillPlanAudit) => void;
+}
+
 interface RawCoachFollowUpReport {
   answer?: unknown;
   tiny_example?: unknown;
@@ -38,20 +50,49 @@ export async function requestMimoCoachFollowUp(
   fetchImpl: typeof fetch = fetch,
   onUsage?: ChatCompletionUsageSink
 ): Promise<CoachFollowUpReport> {
+  return requestMimoCoachFollowUpWithSkills(
+    config,
+    context,
+    {},
+    fetchImpl,
+    onUsage
+  );
+}
+
+export async function requestMimoCoachFollowUpWithSkills(
+  config: ChatCompletionProviderConfig,
+  context: CoachFollowUpContext,
+  options: CoachFollowUpSkillOptions,
+  fetchImpl: typeof fetch = fetch,
+  onUsage?: ChatCompletionUsageSink
+): Promise<CoachFollowUpReport> {
+  const skill = options.studentSkill ?? createEmptyStudentSkill("legacy-coach-follow-up");
+  const learnerSelection = selectLearnerRules({
+    skill,
+    route: "coach",
+    language: context.language,
+    localCode: context.studentCode
+  });
+  const plan = composeCoachSkillPlan({
+    language: context.language,
+    action: "followUp",
+    learnerSelection
+  });
+  const capabilities = options.capabilities ?? providerCapabilitiesFor({
+    format: config.format ?? "openai-chat",
+    baseUrl: "baseUrl" in config ? config.baseUrl : "codex://app-server"
+  });
+  const rendered = renderCoachSkillPlan(
+    plan,
+    capabilities,
+    buildCoachFollowUpPrompt(context)
+  );
+  options.onAudit?.(rendered.audit);
+
   const text = await requestChatCompletionText(
     config,
     {
-      messages: [
-        {
-          role: "system",
-          content:
-            "You are MiMo, a patient algorithm coach answering one student follow-up. Return one valid JSON object only. Do not include markdown."
-        },
-        {
-          role: "user",
-          content: buildCoachFollowUpPrompt(context)
-        }
-      ],
+      messages: rendered.messages,
       maxTokens: 700,
       temperature: 0.2,
       responseFormat: { type: "json_object" },
@@ -60,6 +101,10 @@ export async function requestMimoCoachFollowUp(
     fetchImpl
   );
 
+  return parseCoachFollowUpText(text);
+}
+
+function parseCoachFollowUpText(text: string): CoachFollowUpReport {
   try {
     return parseCoachFollowUpReport(text);
   } catch (error) {
