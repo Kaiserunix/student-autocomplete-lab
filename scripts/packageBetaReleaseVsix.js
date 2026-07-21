@@ -55,6 +55,10 @@ const allowedTeachingFiles = [
   "types.js"
 ];
 
+const allowedTeachingDirectories = [
+  "workflow"
+];
+
 const blockedCompiledReleaseFiles = [
   path.join("teaching", "fixtureTeachingContext.js"),
   path.join("teaching", "journeyTrial.js"),
@@ -91,6 +95,7 @@ async function main() {
   await writeReleasePackageJson();
   await patchReleaseRuntime();
 
+  assertRuntimeDependencyClosure();
   assertCleanReleaseTree();
   assertNoBlockedReleaseContent();
 
@@ -122,6 +127,13 @@ async function copyReleaseRuntime() {
   await mkdir(path.join(stagingRoot, "dist", "src", "teaching"), { recursive: true });
   for (const file of allowedTeachingFiles) {
     await cp(path.join(releaseDist, "teaching", file), path.join(stagingRoot, "dist", "src", "teaching", file));
+  }
+  for (const directory of allowedTeachingDirectories) {
+    await cp(
+      path.join(releaseDist, "teaching", directory),
+      path.join(stagingRoot, "dist", "src", "teaching", directory),
+      { recursive: true }
+    );
   }
   for (const relativePath of blockedCompiledReleaseFiles) {
     await rm(path.join(stagingRoot, "dist", "src", relativePath), { force: true });
@@ -192,6 +204,37 @@ function stripReleaseInternalTestingUi(text) {
     )
     .replaceAll("Student Autocomplete Lab Beta Release 内测记录版", "Student Autocomplete Lab Beta Release")
     .replaceAll("正式版：内测记录未开启。", "正式版：本地记录未开启。");
+}
+
+function assertRuntimeDependencyClosure() {
+  const runtimeDir = path.join(stagingRoot, "dist", "src");
+  const missing = [];
+  const javascriptFiles = listFiles(runtimeDir).filter((file) => file.endsWith(".js"));
+
+  for (const file of javascriptFiles) {
+    const content = require("node:fs").readFileSync(file, "utf8");
+    const relativeRequires = content.matchAll(/require\(["'](\.[^"']+)["']\)/g);
+    for (const match of relativeRequires) {
+      const request = match[1];
+      const target = path.resolve(path.dirname(file), request);
+      const candidates = [
+        target,
+        `${target}.js`,
+        `${target}.json`,
+        path.join(target, "index.js"),
+        path.join(target, "index.json")
+      ];
+      if (!candidates.some((candidate) => existsSync(candidate))) {
+        missing.push(
+          `${path.relative(runtimeDir, file).replaceAll(path.sep, "/")} -> ${request}`
+        );
+      }
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`Beta release runtime has missing relative dependencies:\n${missing.join("\n")}`);
+  }
 }
 
 function assertCleanReleaseTree() {

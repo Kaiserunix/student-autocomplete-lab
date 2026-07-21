@@ -14,4 +14,13 @@ describe("skill composition packaging", () => {
       "*.rs"
     ]));
   });
+
+  test("ships the teaching workflow and rejects broken runtime dependency closure", async () => {
+    const packager = await readFile("scripts/packageBetaReleaseVsix.js", "utf8");
+
+    expect(packager).toContain("allowedTeachingDirectories");
+    expect(packager).toContain('"workflow"');
+    expect(packager).toContain("assertRuntimeDependencyClosure();");
+    expect(packager).toContain("function assertRuntimeDependencyClosure()");
+  });
 });
