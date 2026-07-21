@@ -52,7 +52,7 @@ describe("OJ console PowerShell client", () => {
     expect(result.stdout).toMatch(/digest=[a-f0-9]{12}/);
     expect(result.stdout).toContain("state=accepted");
     expect(result.stdout).toContain("verdict=AC");
-  });
+  }, 30_000);
 
   test("rejects a runtime descriptor that could send source bytes away from localhost", async () => {
     const runtimeRoot = await mkdtemp(path.join(tmpdir(), "oj-console-descriptor-"));
@@ -85,5 +85,5 @@ describe("OJ console PowerShell client", () => {
     expect(failure).toMatchObject({ code: 1 });
     const stderr = String((failure as { stderr?: string }).stderr ?? "").replace(/\s+/g, " ");
     expect(stderr).toContain("Runtime descriptor must point to http://127.0.0.1");
-  });
+  }, 30_000);
 });

@@ -94,7 +94,7 @@ describe("VS Code extension manifest", () => {
     expect(source).toContain("请在左侧 AI 教练");
   });
 
-  test("documents the optional Codeforces submission dependency and ships its notice", async () => {
+  test("documents the optional Codeforces and AtCoder submission dependency and ships its notice", async () => {
     const readme = await readFile("README.md", "utf8");
     const notices = await readFile("THIRD_PARTY_NOTICES.md", "utf8");
     const releaseReadme = await readFile("README.release.md", "utf8");
@@ -102,11 +102,12 @@ describe("VS Code extension manifest", () => {
 
     expect(readme).toContain("online-judge-tools");
     expect(readme).toContain("每次提交都必须明确确认");
-    expect(readme).toContain("当前仅实验性支持 Codeforces");
+    expect(readme).toContain("当前实验性支持 Codeforces 和 AtCoder");
     expect(readme).toContain("不会打包进 VSIX");
     expect(notices).toContain("https://github.com/online-judge-tools/oj");
     expect(notices).toContain("The MIT License (MIT)");
     expect(notices).toContain("Copyright (c) 2017-2020 Kimiyuki Onaka");
+    expect(notices).toContain("not affiliated with or endorsed by Codeforces, AtCoder");
     expect(releaseReadme).toContain("online-judge-tools");
     expect(releasePackager).toContain('"submission"');
     expect(releasePackager).toContain('copyIfExists("THIRD_PARTY_NOTICES.md")');

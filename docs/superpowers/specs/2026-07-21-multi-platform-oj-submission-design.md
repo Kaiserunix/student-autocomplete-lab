@@ -155,3 +155,15 @@ Implementation commits:
 The first commit added the strict target registry. The second generalized confirmation, jobs, login, CLI submission, and safe result handling. The third exposed platform selection in both the standalone console and the VS Code sidebar while preserving the established frontend design and comment-free frontend-source rule.
 
 No account credentials were entered, no graphical verification was automated, and no live OJ submission was made during implementation.
+
+Final verification on 2026-07-21:
+
+- the main extension and standalone-console TypeScript builds passed;
+- 95 test files and 360 tests passed under Vitest 3.2.7;
+- the PowerShell console client completed a local confirmed demo and rejected a non-local runtime descriptor;
+- a headless Chromium flow switched to AtCoder, hid the Codeforces handle, fixed the AtCoder target in preview, consumed one confirmation, rendered the demo result, and reported no browser-console errors;
+- the browser screenshot was inspected and preserved only under ignored `.runtime` output;
+- `npm audit` reported zero vulnerabilities after the existing indirect `body-parser` dependency was updated from 2.2.2 to 2.3.0 in the lockfile;
+- full beta and clean beta-release VSIX packages completed, project hygiene passed, and the clean package contained production submission modules but not the standalone prototype or browser test;
+- the clean beta-release VSIX was force-installed successfully as `kaiserunix.student-autocomplete-lab-beta-release@0.1.0-beta.1`;
+- no authenticated login, graphical challenge interaction, or remote submission was performed.

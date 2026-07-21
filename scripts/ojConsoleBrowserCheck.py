@@ -31,6 +31,11 @@ with sync_playwright() as playwright:
     expect(page.locator("#previewButton")).to_be_disabled()
     page.locator("[data-mode='demo']").click()
 
+    page.locator("#targetPlatform").select_option("atcoder")
+    expect(page.locator("#problemUrl")).to_have_value("https://atcoder.jp/contests/abc350/tasks/abc350_a")
+    expect(page.locator("#handleField")).to_be_hidden()
+    expect(page.locator("#loginButton")).to_have_text("登录 AtCoder")
+
     page.locator("#fileInput").set_input_files(str(source))
     expect(page.locator("#sourceTicket")).to_be_visible()
     expect(page.locator("#sourceDigest")).to_contain_text(re.compile(r"[a-f0-9]{12}"))
@@ -39,6 +44,8 @@ with sync_playwright() as playwright:
     page.locator("#previewButton").click()
     expect(page.locator("#previewCard")).to_be_visible()
     expect(page.locator("#previewMode")).to_have_text("DEMO")
+    expect(page.locator("#previewTarget")).to_have_text("https://atcoder.jp/contests/abc350/tasks/abc350_a")
+    expect(page.locator("#previewHandle")).to_have_text("SUBMISSION LINK ONLY")
     expect(page.locator("#previewDigest")).to_have_text(re.compile(r"^[a-f0-9]{12}$"))
 
     page.locator("#confirmButton").click()
