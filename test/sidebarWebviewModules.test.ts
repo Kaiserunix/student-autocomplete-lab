@@ -31,9 +31,9 @@ describe("sidebar webview modules", () => {
     expect(normalizeUiLanguage(undefined)).toBe("zh");
     expect(normalizeUiLanguage("en")).toBe("en");
     expect(getSidebarUiCopy("zh")).toMatchObject({
-      tabAi: "AI 教练",
-      tabProblem: "题目",
-      tabSkill: "学习画像",
+      tabAi: "作答现场",
+      tabProblem: "题目张贴板",
+      tabSkill: "学习档案",
       send: "发送"
     });
     expect(getSidebarUiCopy("en")).toMatchObject({

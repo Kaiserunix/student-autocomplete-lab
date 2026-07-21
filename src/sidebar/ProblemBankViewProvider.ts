@@ -251,9 +251,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       const practiceFile = message.createFile
         ? await this.createPracticeFile(problem, normalizePracticeLanguage(message.language))
         : undefined;
-      const fileSuffix = practiceFile ? ` 已创建练习文件：${practiceFile.relativePath}` : "";
-      const packSuffix = teacherPack ? " 已生成隐藏 Teacher Pack。" : " Teacher Pack 将在首次 AI 分析时尝试生成。";
-      return this.problemBankState(makeProblemKey(problem), `已导入 ${problem.id}。${fileSuffix}${packSuffix}`, {
+      const fileSuffix = practiceFile ? " 练习文件已创建。" : "";
+      return this.problemBankState(makeProblemKey(problem), `已导入 ${problem.id}。${fileSuffix}`, {
         createdFile: practiceFile,
         teacherPackReady: Boolean(teacherPack)
       });
@@ -670,8 +669,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       type: "aiHealthCheckResult",
       result,
       status: allPassed
-        ? "Provider Health Check 通过：模型列表、AI 提示、自动补全都可达。"
-        : "Provider Health Check 完成：有项目未通过，请看卡片里的修复建议。"
+        ? "连接检测通过。"
+        : "连接检测完成，有项目需要检查。"
     };
   }
 
@@ -698,8 +697,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     });
     await this.saveProblem(problem);
     const teacherPack = await this.tryPrepareTeacherPack(problem);
-    const packSuffix = teacherPack ? " 已生成隐藏 Teacher Pack。" : " Teacher Pack 将在首次 AI 分析时尝试生成。";
-    return this.problemBankState(makeProblemKey(problem), `已从 Markdown 文件导入《${problem.title}》。${packSuffix}`, {
+    return this.problemBankState(makeProblemKey(problem), `已导入《${problem.title}》。`, {
       teacherPackReady: Boolean(teacherPack)
     });
   }
@@ -1150,7 +1148,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     });
     const recommendationLimitations =
       luoguMcpCandidates.errorMessages.length > 0
-        ? `Luogu MCP 搜索有 ${luoguMcpCandidates.errorMessages.length} 个查询失败，已使用本地题库和内置候选继续推荐。`
+        ? "部分在线候选未返回，已继续使用本地题库。"
         : undefined;
 
     return {
@@ -1164,8 +1162,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       studentSkill,
       studentSkillVersions: await this.studentSkillVersionViews(),
       status: recommendationLimitations
-        ? `${recommendationLimitations} 合并生成 ${recommendation.recommendations.length} 个候选。`
-        : `规则推荐已通过 Luogu MCP 搜索 ${luoguMcpCandidates.queryCount} 次，合并生成 ${recommendation.recommendations.length} 个候选。`
+        ? `${recommendationLimitations} 已推荐 ${recommendation.recommendations.length} 题。`
+        : `已推荐 ${recommendation.recommendations.length} 题。`
     };
   }
 
@@ -2524,34 +2522,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       padding: 10px;
     }
 
-    .coachMetaGrid {
+    .coachSummary {
       display: grid;
       gap: 6px;
-      grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));
-    }
-
-    .coachMetaItem {
-      background: color-mix(in srgb, var(--vscode-list-hoverBackground) 42%, transparent);
-      border: 1px solid var(--line);
-      border-radius: 7px;
-      display: grid;
-      gap: 2px;
-      min-width: 0;
-      padding: 7px;
-    }
-
-    .coachMetaItem strong {
-      color: var(--vscode-foreground);
-      font-size: 11px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .coachMetaItem span {
-      color: var(--vscode-descriptionForeground);
-      font-size: 11px;
-      overflow-wrap: anywhere;
     }
 
     .coachActions {
@@ -2564,7 +2537,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       min-height: 36px;
     }
 
-    .coachActions button:first-child {
+    .coachActions:not(.coachMoreActions) button:first-child {
       grid-column: 1 / -1;
     }
 
@@ -2575,7 +2548,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     .coachQuestion {
-      min-height: 88px;
+      min-height: 62px;
     }
 
     .coachAskBox {
@@ -2594,6 +2567,89 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     .coachQuestionActions button {
       min-height: 36px;
+    }
+
+    .coachPrimaryAction {
+      font-weight: 700;
+      min-height: 40px;
+      width: 100%;
+    }
+
+    .compactDrawer,
+    .utilityDrawer {
+      border: 1px solid var(--line);
+      overflow: hidden;
+    }
+
+    .compactDrawer > summary,
+    .utilityDrawer summary {
+      background: transparent;
+      border-bottom: 0;
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+      font-weight: 600;
+      min-height: 30px;
+      padding: 6px 8px;
+    }
+
+    .compactDrawer[open] > summary,
+    .utilityDrawer details[open] > summary,
+    .utilityDrawer[open] > summary {
+      border-bottom: 1px solid var(--line);
+      color: var(--vscode-foreground);
+    }
+
+    .compactDrawer > .coachOptions,
+    .compactDrawer > .coachMoreActions,
+    .compactDrawer > .aiStatusGrid {
+      padding: 8px;
+    }
+
+    .utilityShelf {
+      border-top: 1px solid var(--line);
+      display: grid;
+      gap: 5px;
+      padding-top: 7px;
+    }
+
+    .archiveDetails {
+      border-top: 1px solid var(--line);
+    }
+
+    .archiveDetails > summary {
+      background: transparent;
+      border: 0;
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+      font-weight: 600;
+      padding: 6px 0;
+    }
+
+    .archiveDetails[open] > summary {
+      color: var(--vscode-foreground);
+    }
+
+    .archiveDetailsBody {
+      display: grid;
+      gap: 4px;
+      padding: 0 0 7px;
+    }
+
+    .archivePrimaryAction {
+      width: 100%;
+    }
+
+    .row.archiveActionGrid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      padding: 8px;
+    }
+
+    .connectionPill {
+      color: var(--dossierMint);
+      font-family: var(--mono);
+      font-size: 10px;
+      white-space: nowrap;
     }
 
     .aiConfigBox {
@@ -2696,7 +2752,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       display: grid;
       gap: 10px;
       line-height: 1.5;
-      min-height: 118px;
+      min-height: 86px;
       padding: 11px;
     }
 
@@ -2970,7 +3026,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         grid-template-columns: 1fr;
       }
 
-      .coachMetaGrid,
       .aiStatusGrid,
       .skillSummary {
         grid-template-columns: 1fr;
@@ -3066,8 +3121,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       border: 1px solid var(--dossierRule);
       clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 10px 100%, 0 calc(100% - 10px));
       display: grid;
-      gap: 9px;
-      padding: 12px 13px 13px;
+      gap: 7px;
+      padding: 10px 11px 11px;
       position: relative;
     }
 
@@ -3077,12 +3132,11 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       height: 1px;
       opacity: 0.75;
       position: absolute;
-      right: 13px;
-      top: 10px;
-      width: 34px;
+      right: 11px;
+      top: 8px;
+      width: 28px;
     }
 
-    .mastheadEyebrow,
     .dossierEyebrow,
     .evidenceCode,
     .stateStamp {
@@ -3102,7 +3156,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     .mastheadTitle h1 {
-      font-size: 17px;
+      font-size: 16px;
       letter-spacing: -0.02em;
       line-height: 1.15;
     }
@@ -3116,65 +3170,40 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       grid-template-columns: minmax(0, 1fr) 92px;
     }
 
-    .sessionContext {
+    .sessionBrief {
       display: grid;
-      gap: 6px;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .sessionContextItem {
-      border-left: 1px solid var(--dossierRule);
-      display: grid;
-      gap: 2px;
+      gap: 3px 10px;
+      grid-template-columns: minmax(0, 1fr) auto;
       min-width: 0;
-      padding-left: 7px;
     }
 
-    .sessionContextItem strong {
-      font-family: var(--mono);
-      font-size: 10px;
-      font-weight: 500;
-      line-height: 1.35;
+    .sessionBrief strong {
+      color: var(--vscode-foreground);
+      font-size: 12px;
+      grid-column: 1 / -1;
+      min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
 
+    .sessionBrief span {
+      color: var(--vscode-descriptionForeground);
+      font-size: 10px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .sessionBrief span:last-child {
+      text-align: right;
+    }
+
     .sessionStatus {
       border-left: 2px solid var(--dossierAmber);
       color: var(--vscode-descriptionForeground);
-      min-height: 28px;
-      padding: 5px 7px;
-    }
-
-    .sessionTrace {
-      display: grid;
-      gap: 5px;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-    }
-
-    .traceStep {
-      border-top: 1px solid var(--dossierRule);
-      color: var(--vscode-descriptionForeground);
-      font-family: var(--mono);
-      font-size: 9px;
-      letter-spacing: 0.05em;
-      padding-top: 5px;
-    }
-
-    .traceStep:first-child {
-      border-top-color: var(--dossierMint);
-      color: var(--dossierMint);
-    }
-
-    .traceStep.isActive {
-      border-top-color: var(--dossierCyan);
-      color: var(--vscode-foreground);
-    }
-
-    .traceStep.isComplete {
-      border-top-color: var(--dossierMint);
-      color: var(--dossierMint);
+      min-height: 24px;
+      padding: 3px 6px;
     }
 
     .dossierTabs {
@@ -3266,8 +3295,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       padding: 10px 11px 9px;
     }
 
-    .posterHeading .dossierEyebrow,
-    .submissionDocket .dossierEyebrow {
+    .posterHeading .dossierEyebrow {
       color: var(--dossierAmber);
     }
 
@@ -3306,9 +3334,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     .coachPanel > .panelHeader {
-      align-items: start;
+      align-items: center;
       display: grid;
-      grid-template-columns: minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) auto;
     }
 
     .coachPanel #aiProvider {
@@ -3326,58 +3354,26 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       border-left-color: var(--dossierCyan);
     }
 
-    .coachActions {
-      counter-reset: attempt-action;
-    }
-
     .coachActions button {
       border-radius: 0;
       min-height: 38px;
       position: relative;
     }
 
-    .coachActions button:not(:first-child)::before {
-      color: var(--vscode-descriptionForeground);
-      content: "0" counter(attempt-action);
-      counter-increment: attempt-action;
-      font-family: var(--mono);
-      font-size: 9px;
-      margin-right: 5px;
-    }
-
     .submissionDocket {
-      border: 1px solid color-mix(in srgb, var(--dossierAmber) 46%, var(--line));
-      display: grid;
-      overflow: hidden;
-    }
-
-    .submissionDocket .dossierHeading {
-      background: color-mix(in srgb, var(--dossierAmber) 8%, transparent);
-      border-bottom-color: color-mix(in srgb, var(--dossierAmber) 42%, var(--line));
+      display: block;
     }
 
     .submissionDocket > details,
     .accountModelDrawer {
-      border: 0;
-      border-radius: 0;
-    }
-
-    .accountModelDrawer {
       border: 1px solid var(--dossierRule);
+      border-radius: 0;
     }
 
     .accountModelDrawer > summary {
       align-items: center;
       display: flex;
       justify-content: space-between;
-    }
-
-    .accountModelDrawer > summary::after {
-      color: var(--dossierMint);
-      content: "ACCOUNT / MODEL";
-      font-family: var(--mono);
-      font-size: 9px;
-      letter-spacing: 0.08em;
     }
 
     .codexOAuthPanel {
@@ -3423,18 +3419,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       border-left-color: var(--dossierCyan);
     }
 
-    .attemptEvidenceRail,
     .emptyPosterActions {
       display: grid;
       gap: 6px;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
-
-    .attemptEvidenceItem {
-      border-top: 1px solid var(--dossierRule);
-      display: grid;
-      gap: 2px;
-      padding-top: 5px;
     }
 
     .dossierTag.amber {
@@ -3478,26 +3466,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         padding: 8px 7px 14px;
       }
 
-      .mastheadTitle {
-        align-items: start;
-        flex-direction: column;
-      }
-
-      .sessionTrace {
-        grid-template-columns: 1fr;
-      }
-
-      .sessionContext,
-      .attemptEvidenceRail,
       .emptyPosterActions {
         grid-template-columns: 1fr;
-      }
-
-      .traceStep {
-        border-left: 1px solid var(--dossierRule);
-        border-top: 0;
-        padding-left: 6px;
-        padding-top: 0;
       }
 
       .posterHeading,
@@ -3511,27 +3481,17 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 <body>
   <main class="app dossierApp" data-design="competition-dossier">
     <header id="sessionMasthead" class="topbar sessionMasthead">
-      <span class="mastheadEyebrow">STUDENT AUTOCOMPLETE / LIVE DOSSIER</span>
       <div class="title mastheadTitle">
-        <h1 id="appTitle">AI 做题陪练</h1>
-        <span id="appSubtitle" class="stateStamp">SESSION READY</span>
+        <h1 id="appTitle">做题陪练</h1>
+        <span id="appSubtitle" class="stateStamp">待选题</span>
       </div>
-      <div class="sessionContext">
-        <div class="sessionContextItem">
-          <span class="evidenceCode">CURRENT PROBLEM</span>
-          <strong id="sessionProblemTitle">NO PROBLEM POSTED</strong>
-        </div>
-        <div class="sessionContextItem">
-          <span class="evidenceCode">ACTIVE EDITOR</span>
-          <strong id="sessionEditorState">NO FILE DETECTED</strong>
-        </div>
-        <div class="sessionContextItem">
-          <span class="evidenceCode">ATTEMPT TRACE</span>
-          <strong id="sessionAttemptState">0 COACH TURNS</strong>
-        </div>
+      <div class="sessionBrief">
+        <strong id="sessionProblemTitle">未选择题目</strong>
+        <span id="sessionEditorState">未打开文件</span>
+        <span id="sessionAttemptState">0 次提示</span>
       </div>
       <div class="topbarTools">
-        <p id="status" class="status sessionStatus" role="status" aria-live="polite">正在加载已导入题目...</p>
+        <p id="status" class="status sessionStatus" role="status" aria-live="polite">正在加载…</p>
         <div class="languageSwitch">
           <label id="uiLanguageLabel" class="mini" for="uiLanguage">界面</label>
           <select id="uiLanguage">
@@ -3539,12 +3499,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
             <option value="en">English</option>
           </select>
         </div>
-      </div>
-      <div id="stats" class="stats"></div>
-      <div class="sessionTrace" aria-label="作答路径">
-        <span id="traceUnderstand" class="traceStep">01 / UNDERSTAND · 理解</span>
-        <span id="traceImplement" class="traceStep">02 / IMPLEMENT · 实现</span>
-        <span id="traceVerify" class="traceStep">03 / VERIFY · 验证</span>
       </div>
     </header>
 
@@ -3559,22 +3513,22 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         <div class="posterHeading">
           <div>
             <span class="dossierEyebrow">POSTED PROBLEM / 题目张贴板</span>
-            <h2>当前竞赛简报</h2>
+            <h2>当前题目</h2>
           </div>
-          <span class="posterPin">PINNED / ACTIVE</span>
+          <span class="posterPin">置顶</span>
         </div>
         <section id="problemDetail" class="panel detail">
           <p class="empty">导入或选择一道题后，这里显示题面、样例和题目来源。</p>
         </section>
       </section>
 
-      <details class="panel manualPastePanel ledgerPanel" open>
-        <summary>Markdown 文件导入</summary>
+      <details class="panel manualPastePanel ledgerPanel">
+        <summary>导入 Markdown</summary>
         <div class="panelBody manualPasteBody">
           <div class="manualImportHero">
-            <span class="responseSectionTitle">手动导入 .md 题目</span>
-            <p class="mini">把 AI 写好的题目保存为 .md 文件，再从这里导入。插件会解析标题、难度、标签、题面、输入输出格式、样例和提示。</p>
-            <button id="importManualMarkdownFile" type="button">选择 .md 文件导入</button>
+            <span class="responseSectionTitle">.md 题目</span>
+            <p class="mini">选择文件后自动解析题面、样例和标签。</p>
+            <button id="importManualMarkdownFile" type="button">选择文件</button>
           </div>
           <details class="manualFormatGuide">
             <summary>AI 写题规范</summary>
@@ -3628,7 +3582,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       </details>
 
       <details class="panel ledgerPanel">
-        <summary>辅助：初始路线</summary>
+        <summary>初始路线</summary>
         <div class="panelBody">
           <p class="hint">新学生建议先导入诊断题；已经确定要从基础题单开始，可以直接跳过诊断。</p>
           <div id="starterPresets" class="presetGrid"></div>
@@ -3653,69 +3607,68 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       <section class="panel coachPanel dossierPanel">
         <div class="panelHeader">
           <div>
-            <span class="dossierEyebrow">CURRENT ATTEMPT / 作答现场</span>
-            <h2>当前作答与教练反馈</h2>
+            <h2>当前作答</h2>
           </div>
-          <span id="aiProvider" class="mini">正在检测 API</span>
+          <span id="aiProvider" class="connectionPill">正在连接</span>
         </div>
         <div class="panelBody">
           <div id="coachSelection" class="coachProblem"></div>
           <div id="aiResponse" class="aiResponse">
-            <span class="aiResponseTitle">等待 AI 交互</span>
-            <span class="hint">选择题目，打开你的代码文件，然后点“给点提示”。题面只会进入提示分析，不会塞进自动补全提示词。</span>
+            <span class="aiResponseTitle">准备好了</span>
+            <span class="hint">写代码，需要时要一个提示。</span>
           </div>
           <div class="field coachAskBox">
-            <label for="coachQuestion">追问 / 闲聊</label>
-            <textarea id="coachQuestion" class="coachQuestion" placeholder="问算法、让它讲简单点、吐槽两句都可以。按 Ctrl+Enter 发送。"></textarea>
+            <label for="coachQuestion">追问</label>
+            <textarea id="coachQuestion" class="coachQuestion" placeholder="输入问题，Ctrl+Enter 发送"></textarea>
             <div class="coachQuestionActions">
               <button id="coachSendCustom" class="secondary" type="button">发送</button>
             </div>
           </div>
-          <div class="coachOptions">
-            <div class="field">
-              <label for="practiceLanguage">建文件语言</label>
-              <select id="practiceLanguage"></select>
-            </div>
-          <div class="field">
-            <label for="coachResponseLanguage">AI 输出</label>
-            <select id="coachResponseLanguage">
-              <option value="zh" selected>中文优先</option>
-              <option value="en">English</option>
-              <option value="raw">保留原文</option>
-            </select>
-          </div>
-          <div class="field">
-            <label for="coachOjVerdict">OJ 结果</label>
-            <select id="coachOjVerdict">
-              <option value="UNKNOWN" selected>未提交 / 不确定</option>
-              <option value="AC">确实 AC</option>
-              <option value="WA">WA</option>
-              <option value="RE">RE</option>
-              <option value="TLE">TLE</option>
-              <option value="MLE">MLE</option>
-            </select>
-          </div>
-        </div>
-          <div class="coachActions">
-            <button id="coachHint" type="button">给一个方向</button>
-            <button id="coachSpecific" class="secondary" type="button">再具体一点</button>
-            <button id="coachFollowUp" class="secondary" type="button">继续追问</button>
-            <button id="coachGiveUp" class="secondary" type="button">我卡住了</button>
-            <button id="coachCompleted" class="secondary" type="button">完成并复盘</button>
-            <button id="coachAutocomplete" class="secondary" type="button">检查补全边界</button>
-          </div>
-          <section id="submissionDocket" class="submissionDocket">
-            <div class="dossierHeading">
-              <div>
-                <span class="dossierEyebrow">SUBMIT / 01 · EXPERIMENTAL</span>
-                <h2>提交公文夹</h2>
+          <details id="attemptOptionsDrawer" class="compactDrawer">
+            <summary>作答选项</summary>
+            <div class="coachOptions">
+              <div class="field">
+                <label for="practiceLanguage">文件语言</label>
+                <select id="practiceLanguage"></select>
               </div>
-              <span class="posterPin">CF / AT</span>
+              <div class="field">
+                <label for="coachResponseLanguage">回答语言</label>
+                <select id="coachResponseLanguage">
+                  <option value="zh" selected>中文</option>
+                  <option value="en">English</option>
+                  <option value="raw">原文</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="coachOjVerdict">OJ 结果</label>
+                <select id="coachOjVerdict">
+                  <option value="UNKNOWN" selected>未确定</option>
+                  <option value="AC">AC</option>
+                  <option value="WA">WA</option>
+                  <option value="RE">RE</option>
+                  <option value="TLE">TLE</option>
+                  <option value="MLE">MLE</option>
+                </select>
+              </div>
             </div>
+          </details>
+          <button id="coachHint" class="coachPrimaryAction" type="button">给一个提示</button>
+          <details id="coachMoreDrawer" class="compactDrawer">
+            <summary>更多操作</summary>
+            <div class="coachActions coachMoreActions">
+              <button id="coachSpecific" class="secondary" type="button">提示更具体</button>
+              <button id="coachFollowUp" class="secondary" type="button">继续追问</button>
+              <button id="coachGiveUp" class="secondary" type="button">我卡住了</button>
+              <button id="coachCompleted" class="secondary" type="button">完成复盘</button>
+              <button id="coachAutocomplete" class="secondary" type="button">补全检查</button>
+            </div>
+          </details>
+          <div class="utilityShelf">
+          <section id="submissionDocket" class="submissionDocket utilityDrawer">
             <details id="ojSubmissionPanel" class="aiConfigBox">
-            <summary>打开真实 OJ 提交流程</summary>
+            <summary>提交到 OJ</summary>
             <div class="panelBody">
-              <span class="hint">需要用户自行安装 online-judge-tools。登录在可见终端中完成，扩展不会读取或保存账号、密码、Cookie、验证码。</span>
+              <span class="hint">Codeforces 实验功能，每次提交都要确认。</span>
               <div class="field">
                 <label for="ojPlatform">提交平台</label>
                 <select id="ojPlatform">
@@ -3736,12 +3689,15 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
                 <button id="ojPreviewSubmit" type="button">提交前确认</button>
               </div>
               <div id="ojSubmissionStatus" class="aiResponse" data-submission-state="idle">
-                <span class="hint">确认后只会提交一次；网络超时或结果不明时不会自动重试提交。</span>
+                <span class="hint">只提交一次，不会自动重试。</span>
               </div>
             </div>
             </details>
           </section>
-          <div id="aiStatusGrid" class="aiStatusGrid"></div>
+          <details id="connectionStatusDrawer" class="compactDrawer utilityDrawer">
+            <summary>连接状态</summary>
+            <div id="aiStatusGrid" class="aiStatusGrid"></div>
+          </details>
           <details id="accountModelDrawer" class="aiConfigBox accountModelDrawer">
             <summary>账户与模型</summary>
             <div class="panelBody">
@@ -3832,6 +3788,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
               <div id="aiModelResults" class="modelResults" hidden></div>
             </div>
           </details>
+          </div>
         </div>
       </section>
       <section id="internalTestPanel" class="panel" hidden>
@@ -3854,9 +3811,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       <section id="learningDossier" class="panel learningDossier">
         <div class="panelHeader dossierHeading">
           <div>
-            <span class="dossierEyebrow">LEARNING EVIDENCE / 可纠偏档案</span>
-            <h2>AI 下次会这样教你</h2>
-            <span class="mini">每条判断都应有证据，也允许你说它不准</span>
+            <span class="dossierEyebrow">LEARNING FILE / 学习档案</span>
+            <h2>学习档案</h2>
+            <span class="mini">可查看、可纠正</span>
           </div>
           <span id="studentSkillRevision" class="mini">未加载</span>
         </div>
@@ -3898,7 +3855,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     };
 
     const status = document.getElementById("status");
-    const stats = document.getElementById("stats");
     const uiLanguage = document.getElementById("uiLanguage");
     const tabProblem = document.getElementById("tabProblem");
     const tabAi = document.getElementById("tabAi");
@@ -4163,7 +4119,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         renderAiModelResults(data);
       }
       if (data.type === "aiHealthCheckResult") {
-        setStatus(data.status || "Provider Health Check 已完成。", healthCheckHasFailure(data.result) ? "error" : undefined);
+        setStatus(data.status || "连接检测完成。", healthCheckHasFailure(data.result) ? "error" : undefined);
         state.aiStatus = {
           ...(state.aiStatus || {}),
           healthCheck: data.result
@@ -4238,37 +4194,37 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     const uiCopy = {
       zh: {
-        appTitle: "AI 做题陪练",
-        appSubtitle: "AI / 补全 / 痛点",
+        appTitle: "做题陪练",
+        appSubtitle: "待选题",
         uiLanguageLabel: "界面",
         tabAi: "作答现场",
         tabProblem: "题目张贴板",
         tabSkill: "学习档案",
-        coachPanelTitle: "当前作答与教练反馈",
-        coachQuestionLabel: "追问 / 闲聊",
-        coachQuestionPlaceholder: "问算法、让它讲简单点、吐槽两句都可以。按 Ctrl+Enter 发送。",
+        coachPanelTitle: "当前作答",
+        coachQuestionLabel: "追问",
+        coachQuestionPlaceholder: "输入问题，Ctrl+Enter 发送",
         send: "发送",
-        practiceLanguageLabel: "建文件语言",
-        responseLanguageLabel: "AI 输出",
-        responseZh: "中文优先",
+        practiceLanguageLabel: "文件语言",
+        responseLanguageLabel: "回答语言",
+        responseZh: "中文",
         responseEn: "English",
-        responseRaw: "保留原文",
+        responseRaw: "原文",
         ojVerdictLabel: "OJ 结果",
-        hint: "给一个方向",
-        specific: "再具体一点",
+        hint: "给一个提示",
+        specific: "提示更具体",
         followUp: "继续追问",
         giveUp: "我卡住了",
-        completed: "完成并复盘",
-        autocompletePreview: "检查补全边界",
-        waitingTitle: "等待 AI 交互",
-        waitingHint: "选择题目，打开你的代码文件，然后点“给点提示”。题面只会进入提示分析，不会塞进自动补全提示词。",
-        problemTabGuide: "Markdown 文件导入",
-        manualImportTitle: "手动导入 .md 题目",
-        manualImportButton: "选择 .md 文件导入",
+        completed: "完成复盘",
+        autocompletePreview: "补全检查",
+        waitingTitle: "准备好了",
+        waitingHint: "写代码，需要时要一个提示。",
+        problemTabGuide: "导入 Markdown",
+        manualImportTitle: ".md 题目",
+        manualImportButton: "选择文件",
         queueTitle: "练习队列",
         archiveTitle: "已归档",
-        skillTitle: "学习画像",
-        skillSubtitle: "AI 根据你的做题记录形成的可纠偏教学记忆"
+        skillTitle: "学习档案",
+        skillSubtitle: "可查看、可纠正"
       },
       en: {
         appTitle: "Student Autocomplete Lab",
@@ -4277,13 +4233,13 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         tabAi: "AI Coach",
         tabProblem: "Problems",
         tabSkill: "Learning Profile",
-        coachPanelTitle: "Core Coaching",
-        coachQuestionLabel: "Ask / Follow Up",
-        coachQuestionPlaceholder: "Ask about the algorithm, request a simpler explanation, or vent a little. Ctrl+Enter to send.",
+        coachPanelTitle: "Current Attempt",
+        coachQuestionLabel: "Ask",
+        coachQuestionPlaceholder: "Ask a question · Ctrl+Enter",
         send: "Send",
-        practiceLanguageLabel: "Starter File",
-        responseLanguageLabel: "AI Output",
-        responseZh: "Chinese First",
+        practiceLanguageLabel: "File Language",
+        responseLanguageLabel: "Reply Language",
+        responseZh: "Chinese",
         responseEn: "English",
         responseRaw: "Raw",
         ojVerdictLabel: "OJ Result",
@@ -4292,16 +4248,16 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         followUp: "Continue",
         giveUp: "I Give Up",
         completed: "I Finished",
-        autocompletePreview: "Test Completion",
-        waitingTitle: "Waiting for AI",
-        waitingHint: "Choose a problem, open your code file, then ask for a hint. The problem statement is only used for coaching, not autocomplete.",
-        problemTabGuide: "Markdown File Import",
-        manualImportTitle: "Import a .md Problem",
-        manualImportButton: "Choose .md File",
+        autocompletePreview: "Check Completion",
+        waitingTitle: "Ready",
+        waitingHint: "Code first; ask for a hint when needed.",
+        problemTabGuide: "Import Markdown",
+        manualImportTitle: ".md Problem",
+        manualImportButton: "Choose File",
         queueTitle: "Practice Queue",
         archiveTitle: "Archived",
-        skillTitle: "Learning Profile",
-        skillSubtitle: "Correctable teaching memory built from your practice records"
+        skillTitle: "Learning File",
+        skillSubtitle: "Reviewable and correctable"
       }
     };
 
@@ -4688,11 +4644,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     function runAiHealthCheck() {
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("Provider Health Check", "aiResponseTitle"));
-      aiResponse.appendChild(
-        textSpan("正在检查模型列表、AI 提示和自动补全；只显示 key 是否存在，不显示明文。", "hint")
-      );
-      setStatus("正在运行 Provider Health Check...");
+      aiResponse.appendChild(textSpan("连接检测", "aiResponseTitle"));
+      aiResponse.appendChild(textSpan("正在检查模型、提示和补全。", "hint"));
+      setStatus("正在检测连接...");
       vscode.postMessage({
         command: "runAiHealthCheck",
         config: currentAiConfigUpdate()
@@ -4722,7 +4676,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       aiModelResults.hidden = false;
       aiModelResults.innerHTML = "";
       const models = data.models || [];
-      aiModelResults.appendChild(textSpan("模型列表 · " + models.length + " 个 · " + (data.endpoint || ""), "aiResponseTitle"));
+      aiModelResults.appendChild(textSpan("模型列表 · " + models.length + " 个", "aiResponseTitle"));
       if (models.length === 0) {
         aiModelResults.appendChild(textSpan("没有返回可用模型；仍可手动填写模型名。", "hint"));
         return;
@@ -4766,43 +4720,19 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     function renderAiHealthCheckResult(data) {
       const result = data.result || {};
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("Provider Health Check", "aiResponseTitle"));
-      aiResponse.appendChild(
-        textSpan(
-          "检查时间 " + (result.checkedAt || "?") + " · " + providerModeLabel(result.providerMode),
-          "mini"
-        )
-      );
+      aiResponse.appendChild(textSpan("连接检测", "aiResponseTitle"));
+      aiResponse.appendChild(textSpan(healthCheckHasFailure(result) ? "需要检查" : "全部通过", "mini"));
       aiResponse.appendChild(responseBlock("模型列表", healthCheckStepText(result.models, "models")));
-      aiResponse.appendChild(responseBlock("AI 提示", healthCheckStepText(result.chatSmoke, "chat")));
-      aiResponse.appendChild(responseBlock("自动补全", healthCheckStepText(result.autocompleteSmoke, "autocomplete")));
-      aiResponse.appendChild(textSpan("Key 状态只显示 provided / saved / missing，不显示明文。", "mini"));
+      aiResponse.appendChild(responseBlock("提示与评分", healthCheckStepText(result.chatSmoke, "chat")));
+      aiResponse.appendChild(responseBlock("代码补全", healthCheckStepText(result.autocompleteSmoke, "autocomplete")));
     }
 
     function healthCheckStepText(step, kind) {
       const item = step || {};
-      const lines = [
-        "状态：" + (item.status === "pass" ? "通过" : "未通过"),
-        item.endpoint ? "Endpoint：" + item.endpoint : "",
-        item.model ? "Model：" + item.model : "",
-        item.format ? "Format：" + item.format : "",
-        item.keyState ? "Key：" + healthCheckKeyLabel(item.keyState) : "",
-        typeof item.count === "number" ? "模型数：" + item.count : "",
-        typeof item.latencyMs === "number" ? "耗时：" + item.latencyMs + "ms" : "",
-        item.error ? "错误：" + item.error : "",
-        item.errorHint ? "修复建议：" + item.errorHint : healthCheckDefaultHint(kind, item)
-      ].filter(Boolean);
-      return lines.join("\\n");
-    }
-
-    function healthCheckKeyLabel(value) {
-      if (value === "provided") {
-        return "本次输入";
+      if (item.status === "pass") {
+        return "通过";
       }
-      if (value === "saved") {
-        return "已保存";
-      }
-      return "未检测到";
+      return item.errorHint || item.error || healthCheckDefaultHint(kind, item) || "未通过";
     }
 
     function healthCheckDefaultHint(kind, step) {
@@ -4845,106 +4775,64 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       renderSessionMasthead();
       renderAiStatus();
       coachSelection.innerHTML = "";
+      const summary = document.createElement("div");
+      summary.className = "coachSummary";
 
       if (!problem) {
-        coachSelection.appendChild(textSpan("ATTEMPT / NONE", "evidenceCode"));
-        coachSelection.appendChild(textSpan("还没有选择题目", "aiResponseTitle"));
-        coachSelection.appendChild(textSpan("先导入初始诊断或输入洛谷题号；AI 提示会读取当前编辑器代码和当前选中题面。", "hint"));
-        const emptyMeta = document.createElement("div");
-        emptyMeta.className = "coachMetaGrid";
-        [
-          ["第一步", "题目页导入 / 搜索"],
-          ["第二步", "打开代码文件"],
-          ["安全边界", "补全不读题面"]
-        ].forEach(([label, value]) => emptyMeta.appendChild(coachMetaItem(label, value)));
-        coachSelection.appendChild(emptyMeta);
+        summary.appendChild(textSpan("还没选题", "aiResponseTitle"));
+        summary.appendChild(textSpan("到题目张贴板选一道题。", "hint"));
+        coachSelection.appendChild(summary);
         setCoachBusy(false);
         return;
       }
 
       const threadLength = coachThread(keyOf(problem)).length;
-      coachSelection.appendChild(textSpan("ATTEMPT / " + String(threadLength + 1).padStart(2, "0"), "evidenceCode"));
-      coachSelection.appendChild(textSpan(problem.id + " · " + problem.title, "aiResponseTitle"));
       const activeEditor = state.activeEditor || {};
-      const evidenceRail = document.createElement("div");
-      evidenceRail.className = "attemptEvidenceRail";
-      [
-        ["BRIEF", problem.statement ? "READY" : "SUMMARY"],
-        ["EDITOR", activeEditor.relativePath || activeEditor.fileName ? "OPEN" : "MISSING"],
-        ["COACH", threadLength + " TURNS"],
-        ["MODE", isArchivedCoachProblem ? "REVIEW" : "CODING"]
-      ].forEach(([label, value]) => {
-        const item = document.createElement("div");
-        item.className = "attemptEvidenceItem";
-        item.appendChild(textSpan(label, "evidenceCode"));
-        item.appendChild(textSpan(value, "mini"));
-        evidenceRail.appendChild(item);
-      });
-      coachSelection.appendChild(evidenceRail);
-      const metaGrid = document.createElement("div");
-      metaGrid.className = "coachMetaGrid";
-      [
-        [isArchivedCoachProblem ? "复盘归档题" : "当前练习题", problem.statement ? "完整题面已就绪" : "题单摘要，先下载题面更准"],
-        ["当前文件", activeEditor.relativePath || activeEditor.fileName || "未检测到"],
-        ["会话", "session " + threadLength + " 轮"],
-        ["自动补全", "补全不读题面"],
-        ["AI 提示", "提示才读题面和代码"]
-      ].forEach(([label, value]) => metaGrid.appendChild(coachMetaItem(label, value)));
-      coachSelection.appendChild(metaGrid);
+      summary.appendChild(textSpan(problem.id + " · " + problem.title, "aiResponseTitle"));
+      const tags = document.createElement("div");
+      tags.className = "tagRow";
+      tags.appendChild(textSpan(problem.statement ? "题面就绪" : "题面待下载", "tag"));
+      tags.appendChild(textSpan(activeEditor.relativePath || activeEditor.fileName ? "文件已打开" : "未打开文件", "tag"));
+      tags.appendChild(textSpan(threadLength + " 次提示", "tag"));
+      if (isArchivedCoachProblem) {
+        tags.appendChild(textSpan("已归档", "tag dossierTag amber"));
+      }
+      summary.appendChild(tags);
+      coachSelection.appendChild(summary);
       setCoachBusy(false);
-    }
-
-    function coachMetaItem(label, value) {
-      const item = document.createElement("div");
-      item.className = "coachMetaItem";
-      const strong = document.createElement("strong");
-      strong.textContent = label;
-      const span = document.createElement("span");
-      span.textContent = value;
-      item.appendChild(strong);
-      item.appendChild(span);
-      return item;
     }
 
     function renderAiStatus() {
       aiStatusGrid.innerHTML = "";
       const statusData = state.aiStatus;
       if (!statusData) {
-        aiProvider.textContent = "正在检测 API";
+        aiProvider.textContent = "正在连接";
         return;
       }
 
       const teaching = statusData.teaching || {};
       const autocomplete = statusData.autocomplete || {};
-      aiProvider.textContent = teaching.configured || autocomplete.configured
-        ? [
-            providerModeLabel(statusData.providerMode),
-            "补全 " + (autocomplete.model || "未配置"),
-            "分析 " + (teaching.model || "未配置"),
-            "协议 " + [autocomplete.format, teaching.format].filter(Boolean).join(" / ")
-          ].join(" · ")
-        : "AI 未配置";
+      if (teaching.configured || autocomplete.configured) {
+        aiProvider.textContent = "AI 已就绪";
+      } else {
+        aiProvider.textContent = "需要配置";
+      }
       [
         {
-          label: "自动补全",
+          label: "代码补全",
           data: statusData.autocomplete,
-          readyText: "编辑器 Ghost Text，触发 " + endpointText(statusData.autocomplete)
+          readyText: "已连接"
         },
         {
-          label: "AI 提示",
+          label: "提示与评分",
           data: statusData.teaching,
-          readyText: "侧栏按钮，触发 " + endpointText(statusData.teaching)
-        },
-        {
-          label: "配置文件",
-          data: { configured: Boolean(statusData.envPath) },
-          readyText: statusData.envPath || "未找到工作区"
+          readyText: "已连接"
         }
       ].forEach((item) => {
         const row = document.createElement("div");
         row.className = "aiStatusItem" + (item.data?.configured ? " ready" : "");
-        row.appendChild(textSpan(item.label + (item.data?.configured ? "：可用" : "：不可用"), "mini"));
-        row.appendChild(textSpan(item.data?.configured ? item.readyText : item.data?.error || "未配置", "hint"));
+        row.appendChild(textSpan(item.label, "mini"));
+        row.appendChild(textSpan(item.data?.configured ? item.readyText : "未连接", "hint"));
         aiStatusGrid.appendChild(row);
       });
 
@@ -4957,8 +4845,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         ].forEach((item) => {
           const row = document.createElement("div");
           row.className = "aiStatusItem" + (item.step?.status === "pass" ? " ready" : "");
-          row.appendChild(textSpan("健康检查 · " + item.label + "：" + (item.step?.status === "pass" ? "通过" : "未通过"), "mini"));
-          row.appendChild(textSpan(item.step?.errorHint || item.step?.endpoint || "证据不足", "hint"));
+          row.appendChild(textSpan(item.label, "mini"));
+          row.appendChild(textSpan(item.step?.status === "pass" ? "检查通过" : "需要检查", "hint"));
           aiStatusGrid.appendChild(row);
         });
       }
@@ -5088,12 +4976,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       setCoachBusy(true);
       aiResponse.innerHTML = "";
       aiResponse.appendChild(textSpan("完成后复盘中", "aiResponseTitle"));
-      aiResponse.appendChild(
-        textSpan(
-          "AI 会回顾当前题目上下文、当前编辑器代码、本题提示历史和 OJ 下拉框结果，然后更新学习画像并归档。",
-          "hint"
-        )
-      );
+      aiResponse.appendChild(textSpan("正在复盘并更新学习档案。", "hint"));
       vscode.postMessage({
         command: "requestSolutionScore",
         problemKey: keyOf(problem),
@@ -5116,13 +4999,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       setCoachBusy(true);
       aiResponse.innerHTML = "";
       aiResponse.appendChild(textSpan("优化复盘中", "aiResponseTitle"));
-      aiResponse.appendChild(
-        textSpan(
-          (problem ? problem.id + " · " + problem.title + " · " : "") +
-            "会读取当前编辑器代码，并允许结论是“无需优化”。",
-          "hint"
-        )
-      );
+      aiResponse.appendChild(textSpan((problem ? problem.id + " · " : "") + "正在判断是否值得优化。", "hint"));
       vscode.postMessage({
         command: "requestOptimizationReview",
         problemKey,
@@ -5134,8 +5011,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       setStatus("正在调用 AI 补全接口...");
       setCoachBusy(true);
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("AI 补全测试中", "aiResponseTitle"));
-      aiResponse.appendChild(textSpan("这只读取当前编辑器光标附近的代码、语言和安全习惯；不会读取题面、Teacher Pack 或标准答案。", "hint"));
+      aiResponse.appendChild(textSpan("补全检查中", "aiResponseTitle"));
+      aiResponse.appendChild(textSpan("只检查光标附近代码。", "hint"));
       vscode.postMessage({ command: "requestAutocompletePreview" });
     }
 
@@ -5152,8 +5029,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       setStatus("正在做 AI 找错复盘...");
       setCoachBusy(true);
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("AI 正在找错", "aiResponseTitle"));
-      aiResponse.appendChild(textSpan("这不是真正提交到 OJ；它会从当前编辑器代码和题目上下文里保守检查输入、边界、格式和复杂度风险。", "hint"));
+      aiResponse.appendChild(textSpan("正在找错", "aiResponseTitle"));
+      aiResponse.appendChild(textSpan("检查边界、格式与复杂度。", "hint"));
       vscode.postMessage({
         command: "requestSubmissionJudge",
         problemKey: keyOf(problem)
@@ -5673,28 +5550,15 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       const strategy = recommendation.strategy || {};
       const items = recommendation.recommendations || [];
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("规则推荐", "aiResponseTitle"));
+      aiResponse.appendChild(textSpan("推荐下一题", "aiResponseTitle"));
       aiResponse.appendChild(
         textSpan(
-          "当前题：" + (data.currentProblem?.id || "?") + " · 目标难度 " + (strategy.targetDifficulty ?? "?"),
+          "当前 " + (data.currentProblem?.id || "?") + " · 目标难度 " + (strategy.targetDifficulty ?? "?"),
           "mini"
         )
       );
-      if (data.luoguMcp) {
-        aiResponse.appendChild(
-          textSpan(
-            "Luogu MCP：搜索 " +
-              (data.luoguMcp.queryCount ?? 0) +
-              " 次 · 候选 " +
-              (data.luoguMcp.candidates?.length ?? 0) +
-              " 题" +
-              (data.luoguMcp.errorMessages?.length ? " · 失败 " + data.luoguMcp.errorMessages.length + " 次" : ""),
-            "mini"
-          )
-        );
-      }
       if (data.recommendationLimitations) {
-        aiResponse.appendChild(responseBlock("候选来源限制", data.recommendationLimitations));
+        aiResponse.appendChild(textSpan(data.recommendationLimitations, "mini"));
       }
 
       if (strategy.topPainPoints?.length) {
@@ -5716,12 +5580,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         const stable = item.recommendation || {};
         const block = responseBlock(
           (index + 1) + ". " + (problem.id || "?") + " · " + (problem.title || "未命名题目"),
-          "规则分 " +
-            (item.score ?? "?") +
-            " · " +
-            (problem.difficulty !== undefined ? "难度 " + problem.difficulty : "难度未知") +
-            " · " +
-            (stable.targetSkill ? "目标 " + stable.targetSkill : "目标 skill 未知")
+          (problem.difficulty !== undefined ? "难度 " + problem.difficulty : "难度未知") +
+            (stable.targetSkill ? " · 练习 " + stable.targetSkill : "")
         );
 
         if (item.matchedPainPoints?.length) {
@@ -5732,24 +5592,15 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         }
 
         block.appendChild(
-          responseBlock(
-            "课程调度解释",
+          optionalDetailsBlock(
+            "为什么推荐",
             [
               "为什么是这题：" + evidenceText(stable.reason || (item.reasons || []).join("；")),
               "为什么不是更难：" + evidenceText(stable.whyNotHarder),
-              "为什么不是重复上一题：" + evidenceText(stable.whyNotRepeat),
-              "针对痛点：" + evidenceText((item.matchedPainPoints || []).join(" / ")),
-              "目标 Skill：" + evidenceText(stable.targetSkill),
-              "难度变化：" + difficultyChangeLabel(stable.difficultyChange),
-              "迁移证据：" + transferEvidenceLabel(stable.transferEvidenceStatus),
-              "来源：" + evidenceText(stable.source || problem.platform)
+              "为什么不重复：" + evidenceText(stable.whyNotRepeat)
             ].join("\\n")
           )
         );
-
-        (item.reasons || []).slice(0, 4).forEach((reason) => {
-          block.appendChild(textSpan(reason, "mini"));
-        });
 
         const actions = document.createElement("div");
         actions.className = "row";
@@ -5816,7 +5667,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     function renderCoachFollowUp(data) {
       const report = data.report || {};
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("继续追问 · " + (data.model || "unknown model"), "aiResponseTitle"));
+      aiResponse.appendChild(textSpan("继续追问", "aiResponseTitle"));
       aiResponse.appendChild(responseBlock("回答", report.answer || "这次 AI 没有返回可展示的追问回答。"));
       if (report.tinyExample) {
         aiResponse.appendChild(responseBlock("小例子", report.tinyExample));
@@ -5824,10 +5675,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       if (report.nextAction) {
         aiResponse.appendChild(responseBlock("下一步", report.nextAction));
       }
-      if (report.boundary) {
-        aiResponse.appendChild(textSpan(report.boundary, "mini"));
-      }
-
       const quickActions = document.createElement("div");
       quickActions.className = "row";
       const simplerButton = document.createElement("button");
@@ -5839,7 +5686,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       );
       quickActions.appendChild(simplerButton);
       aiResponse.appendChild(quickActions);
-      aiResponse.appendChild(textSpan("继续在上方写一句话，问算法或吐槽都可以，按 Ctrl+Enter 或点“发送”。", "mini"));
       appendContextAudit(data.workflowAudit || coachContextAudit("follow_up"));
       appendCoachFollowUpTurn(data.problemKey || state.selectedKey, data, report);
       renderCoach();
@@ -5855,7 +5701,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       const checkpoint = localized.rawCheckpoint || report.checkpoint;
       const microSteps = localized.microSteps || report.microSteps || [];
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("AI 分析 · " + (data.model || "unknown model"), "aiResponseTitle"));
+      aiResponse.appendChild(textSpan("给你的提示", "aiResponseTitle"));
       if (isFollowUpAction) {
         aiResponse.appendChild(responseBlock("继续追问", specificHint || basicHint || "这次 AI 没有返回可展示的追问回答。"));
       } else if (isSpecificAction && specificHint) {
@@ -5892,7 +5738,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       );
       quickActions.appendChild(simplerButton);
       aiResponse.appendChild(quickActions);
-      aiResponse.appendChild(textSpan("还卡住？在上方写一句话，问算法或吐槽都可以，按 Ctrl+Enter 或点“继续聊”。", "mini"));
       appendCoachTurn(data.problemKey || state.selectedKey, data, report, localized);
       renderCoach();
       const painPoints = localized.painPoints || report.painPoints || [];
@@ -5904,34 +5749,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           row.appendChild(textSpan((painPoint.displayLabel || painPoint.label) + " " + Math.round((painPoint.confidence || 0) * 100) + "%", "tag"));
         });
         aiResponse.appendChild(row);
-        painPoints.slice(0, 2).forEach((painPoint) => {
-          aiResponse.appendChild(textSpan((localized.evidenceTitle || "证据") + "：" + painPoint.evidence, "mini"));
-        });
-      }
-      if (report.skillUpdate) {
-        aiResponse.appendChild(textSpan((localized.skillTitle || "Skill 候选") + "：" + report.skillUpdate.candidate + "；" + report.skillUpdate.reason, "mini"));
-      }
-      if (report.recommendation?.problemId) {
-        aiResponse.appendChild(textSpan((localized.recommendationTitle || "推荐下一题") + "：" + report.recommendation.problemId + "；" + report.recommendation.reason, "mini"));
-      }
-      if (data.profileSummary?.painPointCounts) {
-        const counts = Object.entries(data.profileSummary.painPointCounts)
-          .slice(0, 4)
-          .map(([label, count]) => label + "×" + count)
-          .join(" · ");
-        if (counts) {
-          aiResponse.appendChild(textSpan("本地痛点记录：" + counts, "mini"));
-        }
       }
       appendContextAudit(data.workflowAudit);
     }
 
     function renderAutocompletePreview(data) {
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("AI 补全预览 · " + (data.model || "unknown model"), "aiResponseTitle"));
-      aiResponse.appendChild(
-        textSpan((data.filePath || "当前文件") + ":" + (data.line || "?") + " · " + (data.language || "code"), "mini")
-      );
+      aiResponse.appendChild(textSpan("补全预览", "aiResponseTitle"));
+      aiResponse.appendChild(textSpan(data.language || "代码", "mini"));
       if (data.suggestion) {
         const block = responseBlock("将会补上的代码", "");
         const pre = codeBlock(data.suggestion);
@@ -5964,66 +5789,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       };
     }
 
-    function appendContextAudit(audit) {
-      if (!audit) {
-        return;
-      }
-
-      const included = Array.isArray(audit.included) ? audit.included : [];
-      const excluded = Array.isArray(audit.excluded) ? audit.excluded : [];
-      if (!included.length && !excluded.length) {
-        return;
-      }
-
-      aiResponse.appendChild(
-        responseBlock(
-          "上下文边界",
-          [
-            included.length ? "已使用：" + included.map(contextAuditLabel).join("、") : "",
-            excluded.length ? "未使用：" + excluded.map(contextAuditLabel).join("、") : ""
-          ]
-            .filter(Boolean)
-            .join("\\n")
-        )
-      );
-    }
-
-    function contextAuditLabel(value) {
-      const labels = {
-        action: "动作",
-        autocomplete_prompt: "补全提示词",
-        coach_thread: "教练对话历史",
-        code_habits: "安全代码习惯",
-        file_path: "文件路径",
-        full_teacher_pack: "完整 Teacher Pack",
-        language: "语言",
-        lesson_report: "讲解报告",
-        local_evidence: "本地证据",
-        problem: "题目",
-        "problem.summary": "题目摘要",
-        problem_statement: "完整题面",
-        raw_internal_test_records: "原始内测记录",
-        recent_hints: "最近提示",
-        standard_answer: "标准答案",
-        standard_answer_auto_reveal: "标准答案默认展示",
-        student_code: "学生代码",
-        student_code_prefix_suffix: "光标附近代码",
-        student_profile: "学习画像",
-        teacher_pack: "Teacher Pack",
-        teacher_pack_reference: "Teacher Pack 参考",
-        oj_verdict: "OJ 状态"
-      };
-      return labels[value] || String(value || "").replace(/_/g, " ");
-    }
+    function appendContextAudit() {}
 
     function renderSubmissionJudge(data) {
       const report = data.report || {};
       aiResponse.innerHTML = "";
       aiResponse.appendChild(
         textSpan(
-          (data.reviewStage === "archived" ? "找错复盘" : "交题前自检") +
-            " · AI 估计 · " +
-            (data.model || "unknown model"),
+          (data.reviewStage === "archived" ? "找错复盘" : "交题前自检") + " · AI 估计",
           "aiResponseTitle"
         )
       );
@@ -6061,7 +5834,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     function renderLessonReport(data) {
       const report = data.report || {};
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("讲解/补救报告 · " + (data.model || "unknown model"), "aiResponseTitle"));
+      aiResponse.appendChild(textSpan("讲解与补救", "aiResponseTitle"));
       aiResponse.appendChild(textSpan((data.problem?.id || "") + " · " + (data.problem?.title || ""), "mini"));
       aiResponse.appendChild(responseBlock("标准思路", report.standardApproach || "暂无标准思路。"));
 
@@ -6106,7 +5879,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     function renderSolutionScore(data) {
       const report = data.report || {};
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("学习评分 · " + (data.model || "unknown model"), "aiResponseTitle"));
+      aiResponse.appendChild(textSpan("学习评分", "aiResponseTitle"));
       aiResponse.appendChild(textSpan((data.problem?.id || "") + " · " + (data.problem?.title || ""), "mini"));
       aiResponse.appendChild(responseBlock("OJ 结果 / 学习分", (report.ojResult || "UNKNOWN") + " · " + (report.learningScore ?? "?") + " / 100"));
       aiResponse.appendChild(responseBlock("结论", report.summary || "暂无结论。"));
@@ -6156,7 +5929,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     function renderOptimizationReport(data) {
       const report = data?.report || {};
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("优化复盘 · " + (data?.model || "unknown model"), "aiResponseTitle"));
+      aiResponse.appendChild(textSpan("优化复盘", "aiResponseTitle"));
       aiResponse.appendChild(textSpan((data?.problem?.id || "") + " · " + (data?.problem?.title || ""), "mini"));
       aiResponse.appendChild(
         responseBlock("是否值得优化", report.optimizationNeeded ? "需要优化" : "无需优化")
@@ -6311,23 +6084,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         .join("\\n");
     }
 
-    function endpointText(item) {
-      if (!item?.configured) {
-        return "未配置";
-      }
-      return item.model + " · " + (item.format || "unknown") + " · " + item.endpoint;
-    }
-
-    function providerModeLabel(mode) {
-      if (mode === "openai") {
-        return "OpenAI";
-      }
-      if (mode === "anthropic-native") {
-        return "Anthropic";
-      }
-      return "OpenAI兼容";
-    }
-
     function verdictLabel(verdict) {
       if (verdict === "likely_ac") {
         return "可能 AC";
@@ -6372,36 +6128,18 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       const editor = state.activeEditor || {};
       const turnCount = problem ? coachThread(keyOf(problem)).length : 0;
       const archived = Boolean(selectedArchivedProblem());
-      setElementText("sessionProblemTitle", problem ? problem.id + " · " + problem.title : "NO PROBLEM POSTED");
-      setElementText("sessionEditorState", editor.relativePath || editor.fileName || "NO FILE DETECTED");
-      setElementText("sessionAttemptState", turnCount + " COACH TURNS" + (archived ? " · ARCHIVED" : ""));
-      setElementText("appSubtitle", archived ? "REVIEW MODE" : problem ? "ATTEMPT ACTIVE" : "SESSION READY");
+      setElementText("sessionProblemTitle", problem ? problem.id + " · " + problem.title : "未选择题目");
+      setElementText("sessionEditorState", editor.fileName || editor.relativePath || "未打开文件");
+      setElementText("sessionAttemptState", turnCount + " 次提示" + (archived ? " · 已归档" : ""));
+      setElementText("appSubtitle", archived ? "复盘" : problem ? "作答中" : "待选题");
       const hasProblem = Boolean(problem);
       const hasEditor = Boolean(editor.relativePath || editor.fileName);
-      const hasEvidence = turnCount > 0 || Boolean(state.ojVerdict && state.ojVerdict !== "UNKNOWN");
-      traceUnderstand.className = "traceStep" + (hasProblem ? " isComplete" : " isActive");
-      traceImplement.className = "traceStep" + (hasEditor ? " isComplete" : hasProblem ? " isActive" : "");
-      traceVerify.className = "traceStep" + (hasEvidence ? " isComplete" : hasEditor ? " isActive" : "");
       sessionMasthead.dataset.sessionState = archived ? "review" : hasEditor ? "coding" : hasProblem ? "briefing" : "empty";
     }
 
     function renderStats() {
-      const luoguCount = state.problems.filter((problem) => problem.platform === "luogu").length;
-      const manualCount = state.problems.filter((problem) => problem.platform === "manual").length;
       problemCount.textContent = state.problems.length + " 题";
       completedCount.textContent = state.completedProblems.length + " 题";
-      stats.innerHTML = "";
-      [
-        "已导入 " + state.problems.length,
-        "完成 " + state.completedProblems.length,
-        "洛谷 " + luoguCount,
-        "手动 " + manualCount
-      ].forEach((label) => {
-        const pill = document.createElement("span");
-        pill.className = "pill";
-        pill.textContent = label;
-        stats.appendChild(pill);
-      });
     }
 
     function renderProblemList() {
@@ -6476,7 +6214,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         const item = document.createElement("div");
         item.className = "problemItem" + (keyOf(problem) === state.selectedKey ? " active" : "");
         item.addEventListener("click", (event) => {
-          if (event.target?.closest?.("button")) {
+          if (event.target?.closest?.("button, summary, details")) {
             return;
           }
           selectArchivedProblem(problem);
@@ -6494,23 +6232,39 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
         item.appendChild(meta);
         item.appendChild(title);
-        item.appendChild(textSpan("痛点快照：" + (problem.painSummary || summarizePainSnapshot(problem.painSnapshot)), "mini"));
+        const details = document.createElement("details");
+        details.className = "archiveDetails";
+        const detailsSummary = document.createElement("summary");
+        detailsSummary.textContent = "学习记录";
+        details.appendChild(detailsSummary);
+        const detailsBody = document.createElement("div");
+        detailsBody.className = "archiveDetailsBody";
+        detailsBody.appendChild(textSpan(problem.painSummary || summarizePainSnapshot(problem.painSnapshot), "mini"));
         if (problem.optimizationReport) {
-          item.appendChild(
+          detailsBody.appendChild(
             textSpan(
-              "最近优化复盘：" + (problem.optimizationReport.optimizationNeeded ? "需要优化" : "无需优化"),
+              problem.optimizationReport.optimizationNeeded ? "建议继续优化" : "当前无需优化",
               "mini"
             )
           );
         }
-        const actions = document.createElement("div");
-        actions.className = "row";
+        details.appendChild(detailsBody);
+        item.appendChild(details);
+
         const chatButton = document.createElement("button");
-        chatButton.className = "secondary";
+        chatButton.className = "secondary archivePrimaryAction";
         chatButton.type = "button";
-        chatButton.textContent = "继续聊";
+        chatButton.textContent = "继续复盘";
         chatButton.addEventListener("click", () => selectArchivedProblem(problem));
-        actions.appendChild(chatButton);
+        item.appendChild(chatButton);
+
+        const actionsDrawer = document.createElement("details");
+        actionsDrawer.className = "archiveActionsDrawer compactDrawer";
+        const actionsSummary = document.createElement("summary");
+        actionsSummary.textContent = "更多操作";
+        actionsDrawer.appendChild(actionsSummary);
+        const actions = document.createElement("div");
+        actions.className = "row archiveActionGrid";
 
         const errorButton = document.createElement("button");
         errorButton.className = "secondary";
@@ -6548,7 +6302,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         deleteButton.addEventListener("click", () => requestDeleteProblem(keyOf(problem), "completed"));
         actions.appendChild(deleteButton);
 
-        item.appendChild(actions);
+        actionsDrawer.appendChild(actions);
+        item.appendChild(actionsDrawer);
         completedList.appendChild(item);
       });
     }
