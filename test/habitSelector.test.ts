@@ -162,4 +162,69 @@ describe("learner habit selector", () => {
       reason: "not-relevant"
     });
   });
+
+  test("never reactivates a disabled skill through selection", () => {
+    const skill = createEmptyStudentSkill("student-a", "2026-07-14T00:00:00.000Z");
+    skill.hardRules.disabledSkills = ["python-loop-boundary-check"];
+    skill.skills["python-loop-boundary-check"] = {
+      name: "python-loop-boundary-check",
+      status: "disabled",
+      reason: "User disabled it.",
+      rules: ["Check loop boundary."],
+      sourcePainPoints: ["loop_boundary"],
+      evidenceCount: 8,
+      score: 9,
+      examples: [],
+      lastSeen: "2026-07-14T00:00:00.000Z"
+    };
+
+    const selection = selectLearnerRules({
+      skill,
+      route: "coach",
+      language: "python",
+      localCode: "for i in range(n): pass"
+    });
+
+    expect(selection.rules).toEqual([]);
+    expect(selection.excludedRules).toContainEqual({
+      id: "learner.loop-boundary",
+      reason: "disabled"
+    });
+  });
+
+  test("helpful feedback affects ranking without exceeding budget", () => {
+    const skill = createEmptyStudentSkill("student-a", "2026-07-14T00:00:00.000Z");
+    skill.codeHabits.globalRules = [
+      "Initialize accumulators.",
+      "Check array indexes."
+    ];
+    skill.skills["python-loop-boundary-check"] = {
+      name: "python-loop-boundary-check",
+      status: "candidate",
+      reason: "Repeated loop boundary misses.",
+      rules: ["Check loop boundary."],
+      sourcePainPoints: ["loop_boundary"],
+      evidenceCount: 3,
+      score: 2.5,
+      examples: [],
+      lastSeen: "2026-07-14T00:00:00.000Z"
+    };
+    skill.correctionLog.push({
+      type: "diagnosis_helpful",
+      target: "python-loop-boundary-check",
+      note: "Useful.",
+      source: "user",
+      occurredAt: "2026-07-14T00:01:00.000Z"
+    });
+
+    const selection = selectLearnerRules({
+      skill,
+      route: "autocomplete",
+      language: "python",
+      localCode: "for i in range(n): total += values[i]"
+    });
+
+    expect(selection.rules).toHaveLength(2);
+    expect(selection.rules.map((rule) => rule.id)).toContain("learner.loop-boundary");
+  });
 });

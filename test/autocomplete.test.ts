@@ -67,12 +67,7 @@ return d
       suffix: "\nprint(add(1, 2))",
       language: "python",
       filePath: "C:/tmp/main.py",
-      habits: ["Prefer direct Python."],
-      activeProblem: {
-        title: "Secret Full Problem",
-        statement: "The hidden statement must never enter autocomplete.",
-        referenceSolution: "return a + b"
-      }
+      habits: ["Prefer direct Python."]
     });
 
     expect(prompt).toContain("def add");
@@ -90,12 +85,7 @@ return d
       suffix: "\nprint(add(1, 2))",
       language: "python",
       filePath: "trial.py",
-      habits: ["Prefer direct Python."],
-      activeProblem: {
-        title: "Secret Full Problem",
-        statement: "The hidden statement must never enter autocomplete.",
-        referenceSolution: "return a + b"
-      }
+      habits: ["Prefer direct Python."]
     });
 
     expect(prompt).toContain("def add(a, b):");
