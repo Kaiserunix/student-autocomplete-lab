@@ -641,11 +641,25 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const knownSecrets = collectKnownSecrets(baseEnv, env, config);
     const checkedAt = new Date().toISOString();
 
-    const [models, chatSmoke, autocompleteSmoke] = await Promise.all([
-      runModelListHealthCheck(env, mode, config, knownSecrets, this.codexServices.models),
-      runChatSmokeHealthCheck(env, config, knownSecrets, this.codexServices.text),
-      runAutocompleteSmokeHealthCheck(env, config, knownSecrets, this.codexServices.text)
-    ]);
+    const models = await runModelListHealthCheck(
+      env,
+      mode,
+      config,
+      knownSecrets,
+      this.codexServices.models
+    );
+    const chatSmoke = await runChatSmokeHealthCheck(
+      env,
+      config,
+      knownSecrets,
+      this.codexServices.text
+    );
+    const autocompleteSmoke = await runAutocompleteSmokeHealthCheck(
+      env,
+      config,
+      knownSecrets,
+      this.codexServices.text
+    );
     const result: AiHealthCheckResult = {
       checkedAt,
       providerMode: mode,
@@ -7196,6 +7210,9 @@ function healthCheckErrorHint(message: string, scope: "models" | "chat" | "autoc
   }
   if (/fetch failed|network|ENOTFOUND|ECONNRESET|before HTTP response/i.test(message)) {
     return "检查网络、代理或 Base URL；如果在国内网络，优先用当前可访问的兼容端点。";
+  }
+  if (/timed out|timeout|超时/i.test(message)) {
+    return "模型未在当前等待窗口内返回；先重试一次排除冷启动，仍失败则换更快的补全模型或检查 app-server 状态。";
   }
   if (/response did not include|响应缺少|返回为空|empty/i.test(message)) {
     return "接口已连通，但返回格式不符合当前协议；请确认补全协议和模型类型是否匹配。";

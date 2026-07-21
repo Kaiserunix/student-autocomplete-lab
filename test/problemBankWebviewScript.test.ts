@@ -166,6 +166,9 @@ describe("problem bank webview script", () => {
     expect(source).toContain('command: "fetchAiModels"');
     expect(source).toContain('command: "runAiHealthCheck"');
     expect(source).toContain("Provider Health Check");
+    expect(source).toContain("模型未在当前等待窗口内返回");
+    expect(source).not.toContain("const [models, chatSmoke, autocompleteSmoke] = await Promise.all");
+    expect(source).toContain("const autocompleteSmoke = await runAutocompleteSmokeHealthCheck");
     expect(source).toContain('type: "aiHealthCheckResult"');
     expect(source).toContain("renderAiHealthCheckResult(data)");
     expect(source).toContain('renderAiModelResults(data)');

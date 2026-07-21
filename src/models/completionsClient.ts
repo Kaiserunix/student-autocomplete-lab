@@ -2,6 +2,8 @@ import type { ModelTextTransport } from "./modelTextTransport";
 import type { ProviderCapabilities } from "../skills/types";
 import { providerCapabilitiesFor } from "./providerCapabilities";
 
+const DEFAULT_CODEX_AUTOCOMPLETE_TIMEOUT_MS = 15_000;
+
 export interface HttpCompletionProviderConfig {
   baseUrl: string;
   apiKey: string;
@@ -97,7 +99,7 @@ export async function requestCompletion(
       prompt: serializeCompletionPrompt(request),
       maxOutputTokens: request.maxTokens,
       temperature: request.temperature,
-      timeoutMs: request.timeoutMs ?? 5_000,
+      timeoutMs: request.timeoutMs ?? DEFAULT_CODEX_AUTOCOMPLETE_TIMEOUT_MS,
       signal: request.signal
     });
   }

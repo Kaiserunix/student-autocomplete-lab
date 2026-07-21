@@ -333,4 +333,31 @@ describe("OpenAI-compatible completions client", () => {
       "<system>\n[head] local code only\n</system>\nvalue = "
     ]);
   });
+
+  test("gives Codex autocomplete a bounded window beyond the five-second cold start", async () => {
+    const timeouts: number[] = [];
+    const transport = {
+      generate: async (request: { timeoutMs: number }): Promise<string> => {
+        timeouts.push(request.timeoutMs);
+        return "value";
+      }
+    };
+
+    await requestCompletion(
+      {
+        mode: "openai",
+        authMode: "codex-oauth",
+        model: "gpt-5.3-codex-spark",
+        format: "codex-app-server",
+        transport
+      },
+      {
+        prompt: "value = ",
+        maxTokens: 64,
+        temperature: 0
+      }
+    );
+
+    expect(timeouts).toEqual([15_000]);
+  });
 });
