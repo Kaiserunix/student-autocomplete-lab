@@ -25,6 +25,7 @@ const allowedTopLevelRuntime = [
   "recommendation",
   "release",
   "sidebar",
+  "skills",
   "submission",
   "storage"
 ];
