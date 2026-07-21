@@ -2780,6 +2780,31 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       overflow-wrap: anywhere;
     }
 
+    .resultDetailsDrawer {
+      border-top: 1px solid color-mix(in srgb, var(--accent) 34%, var(--line));
+      min-width: 0;
+    }
+
+    .resultDetailsDrawer > summary {
+      background: transparent;
+      border-bottom: 0;
+      color: var(--vscode-descriptionForeground);
+      font-size: 11px;
+      min-height: 30px;
+      padding: 6px 2px;
+    }
+
+    .resultDetailsDrawer[open] > summary {
+      border-bottom: 1px solid var(--line);
+      color: var(--vscode-foreground);
+    }
+
+    .resultDetailsBody {
+      display: grid;
+      gap: 7px;
+      padding-top: 8px;
+    }
+
     .skillPanelBody {
       display: grid;
       gap: 9px;
@@ -4722,9 +4747,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       aiResponse.innerHTML = "";
       aiResponse.appendChild(textSpan("连接检测", "aiResponseTitle"));
       aiResponse.appendChild(textSpan(healthCheckHasFailure(result) ? "需要检查" : "全部通过", "mini"));
-      aiResponse.appendChild(responseBlock("模型列表", healthCheckStepText(result.models, "models")));
-      aiResponse.appendChild(responseBlock("提示与评分", healthCheckStepText(result.chatSmoke, "chat")));
-      aiResponse.appendChild(responseBlock("代码补全", healthCheckStepText(result.autocompleteSmoke, "autocomplete")));
+      const healthDetails = [
+        responseBlock("模型列表", healthCheckStepText(result.models, "models")),
+        responseBlock("提示与评分", healthCheckStepText(result.chatSmoke, "chat")),
+        responseBlock("代码补全", healthCheckStepText(result.autocompleteSmoke, "autocomplete"))
+      ];
+      aiResponse.appendChild(resultDetailsGroup("检测详情", healthDetails));
     }
 
     function healthCheckStepText(step, kind) {
@@ -5669,11 +5697,16 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       aiResponse.innerHTML = "";
       aiResponse.appendChild(textSpan("继续追问", "aiResponseTitle"));
       aiResponse.appendChild(responseBlock("回答", report.answer || "这次 AI 没有返回可展示的追问回答。"));
+      const followUpDetails = [];
       if (report.tinyExample) {
-        aiResponse.appendChild(responseBlock("小例子", report.tinyExample));
+        followUpDetails.push(responseBlock("小例子", report.tinyExample));
       }
       if (report.nextAction) {
-        aiResponse.appendChild(responseBlock("下一步", report.nextAction));
+        followUpDetails.push(responseBlock("下一步", report.nextAction));
+      }
+      const followUpDetailsGroup = resultDetailsGroup("补充说明", followUpDetails);
+      if (followUpDetailsGroup) {
+        aiResponse.appendChild(followUpDetailsGroup);
       }
       const quickActions = document.createElement("div");
       quickActions.className = "row";
@@ -5711,6 +5744,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       } else if (specificHint) {
         aiResponse.appendChild(responseBlock(localized.specificHintTitle || "更具体的下一步", specificHint));
       }
+      const diagnosisDetails = [];
       const detailLines = [];
       if (checkpoint) {
         detailLines.push("【" + (localized.checkpointTitle || "自检点") + "】\\n" + checkpoint);
@@ -5721,11 +5755,22 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         );
       }
       if (detailLines.length) {
-        if (isFollowUpAction) {
-          aiResponse.appendChild(responseBlock("可操作步骤", detailLines.join("\\n\\n")));
-        } else {
-          aiResponse.appendChild(optionalDetailsBlock("展开自检 / 微步骤", detailLines.join("\\n\\n")));
-        }
+        diagnosisDetails.push(responseBlock(isFollowUpAction ? "可操作步骤" : "自检 / 微步骤", detailLines.join("\\n\\n")));
+      }
+      const painPoints = localized.painPoints || report.painPoints || [];
+      if (painPoints.length) {
+        const painBlock = responseBlock(localized.painTitle || "痛点判断", "");
+        const row = document.createElement("div");
+        row.className = "tagRow";
+        painPoints.forEach((painPoint) => {
+          row.appendChild(textSpan((painPoint.displayLabel || painPoint.label) + " " + Math.round((painPoint.confidence || 0) * 100) + "%", "tag"));
+        });
+        painBlock.appendChild(row);
+        diagnosisDetails.push(painBlock);
+      }
+      const diagnosisDetailsGroup = resultDetailsGroup("诊断细节", diagnosisDetails);
+      if (diagnosisDetailsGroup) {
+        aiResponse.appendChild(diagnosisDetailsGroup);
       }
       const quickActions = document.createElement("div");
       quickActions.className = "row";
@@ -5740,16 +5785,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       aiResponse.appendChild(quickActions);
       appendCoachTurn(data.problemKey || state.selectedKey, data, report, localized);
       renderCoach();
-      const painPoints = localized.painPoints || report.painPoints || [];
-      if (painPoints.length) {
-        aiResponse.appendChild(textSpan(localized.painTitle || "痛点判断", "responseSectionTitle"));
-        const row = document.createElement("div");
-        row.className = "tagRow";
-        painPoints.forEach((painPoint) => {
-          row.appendChild(textSpan((painPoint.displayLabel || painPoint.label) + " " + Math.round((painPoint.confidence || 0) * 100) + "%", "tag"));
-        });
-        aiResponse.appendChild(row);
-      }
       appendContextAudit(data.workflowAudit);
     }
 
@@ -5802,11 +5837,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       );
       aiResponse.appendChild(responseBlock(verdictLabel(report.verdict), report.summary || "没有摘要。"));
       aiResponse.appendChild(textSpan("AI 估计，不代表官方 OJ；置信度：" + Math.round((report.confidence || 0) * 100) + "%", "mini"));
+      const reviewDetails = [];
 
       if (report.issues?.length) {
-        aiResponse.appendChild(textSpan("主要风险", "responseSectionTitle"));
+        reviewDetails.push(textSpan("主要风险", "responseSectionTitle"));
         report.issues.forEach((issue) => {
-          aiResponse.appendChild(
+          reviewDetails.push(
             responseBlock(
               severityLabel(issue.severity) + " · " + (issue.label || "unknown"),
               (issue.evidence || "") + (issue.fixHint ? "\\n提示：" + issue.fixHint : "")
@@ -5816,13 +5852,17 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       }
 
       if (report.testSuggestions?.length) {
-        aiResponse.appendChild(textSpan("建议先跑的小测试", "responseSectionTitle"));
+        reviewDetails.push(textSpan("建议先跑的小测试", "responseSectionTitle"));
         report.testSuggestions.forEach((item) => {
           const block = responseBlock(item.reason || "测试建议", "");
           block.appendChild(codeBlock(item.input || ""));
           block.appendChild(textSpan(item.expectedBehavior || "", "hint"));
-          aiResponse.appendChild(block);
+          reviewDetails.push(block);
         });
+      }
+      const reviewDetailsGroup = resultDetailsGroup("风险与测试", reviewDetails);
+      if (reviewDetailsGroup) {
+        aiResponse.appendChild(reviewDetailsGroup);
       }
 
       if (report.nextAction) {
@@ -5837,11 +5877,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       aiResponse.appendChild(textSpan("讲解与补救", "aiResponseTitle"));
       aiResponse.appendChild(textSpan((data.problem?.id || "") + " · " + (data.problem?.title || ""), "mini"));
       aiResponse.appendChild(responseBlock("标准思路", report.standardApproach || "暂无标准思路。"));
+      const lessonDetails = [];
 
       if (report.painPoints?.length) {
-        aiResponse.appendChild(textSpan("你的卡点", "responseSectionTitle"));
+        lessonDetails.push(textSpan("你的卡点", "responseSectionTitle"));
         report.painPoints.slice(0, 2).forEach((painPoint) => {
-          aiResponse.appendChild(
+          lessonDetails.push(
             responseBlock(
               painPoint.label + " " + Math.round((painPoint.confidence || 0) * 100) + "%",
               painPoint.evidence || ""
@@ -5851,12 +5892,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       }
 
       if (report.minimalFixPath?.length) {
-        aiResponse.appendChild(responseBlock("最小修正路径", report.minimalFixPath.map((item, index) => (index + 1) + ". " + item).join("\\n")));
+        lessonDetails.push(responseBlock("最小修正路径", report.minimalFixPath.map((item, index) => (index + 1) + ". " + item).join("\\n")));
       }
 
       if (report.remedialExercise) {
         const exercise = report.remedialExercise;
-        aiResponse.appendChild(
+        lessonDetails.push(
           responseBlock(
             "补救小练习" + (exercise.problemId ? " · " + exercise.problemId : ""),
             [exercise.title, exercise.prompt, exercise.reason].filter(Boolean).join("\\n")
@@ -5865,13 +5906,13 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       }
 
       if (report.referenceSolution?.code) {
-        const details = document.createElement("details");
-        details.className = "resultBlock";
-        const summary = document.createElement("summary");
-        summary.textContent = "展开参考实现";
-        details.appendChild(summary);
-        details.appendChild(codeBlock(report.referenceSolution.code));
-        aiResponse.appendChild(details);
+        const referenceBlock = responseBlock("参考实现", "");
+        referenceBlock.appendChild(codeBlock(report.referenceSolution.code));
+        lessonDetails.push(referenceBlock);
+      }
+      const lessonDetailsGroup = resultDetailsGroup("完整复盘", lessonDetails);
+      if (lessonDetailsGroup) {
+        aiResponse.appendChild(lessonDetailsGroup);
       }
       appendContextAudit(data.workflowAudit || lessonReportContextAudit(report));
     }
@@ -5883,10 +5924,11 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       aiResponse.appendChild(textSpan((data.problem?.id || "") + " · " + (data.problem?.title || ""), "mini"));
       aiResponse.appendChild(responseBlock("OJ 结果 / 学习分", (report.ojResult || "UNKNOWN") + " · " + (report.learningScore ?? "?") + " / 100"));
       aiResponse.appendChild(responseBlock("结论", report.summary || "暂无结论。"));
+      const scoreDetails = [];
 
       if (report.rubric) {
         const rubric = report.rubric;
-        aiResponse.appendChild(
+        scoreDetails.push(
           responseBlock(
             "评分细项",
             [
@@ -5902,7 +5944,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
       if (report.complexityAssessment) {
         const complexity = report.complexityAssessment;
-        aiResponse.appendChild(
+        scoreDetails.push(
           responseBlock(
             "复杂度评价 · " + (complexity.verdict || "unknown"),
             ["你的解法：" + complexity.observed, "预期方向：" + complexity.expected, complexity.reason].filter(Boolean).join("\\n")
@@ -5911,17 +5953,22 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       }
 
       if (report.painPoints?.length) {
-        aiResponse.appendChild(textSpan("仍需补的点", "responseSectionTitle"));
+        scoreDetails.push(textSpan("仍需补的点", "responseSectionTitle"));
         report.painPoints.slice(0, 2).forEach((painPoint) => {
-          aiResponse.appendChild(responseBlock(painPoint.label, painPoint.evidence || ""));
+          scoreDetails.push(responseBlock(painPoint.label, painPoint.evidence || ""));
         });
+      }
+
+      if (report.recommendation?.problemId) {
+        scoreDetails.push(responseBlock("推荐题目", report.recommendation.problemId + "\\n" + report.recommendation.reason));
+      }
+      const scoreDetailsGroup = resultDetailsGroup("评分详情", scoreDetails);
+      if (scoreDetailsGroup) {
+        aiResponse.appendChild(scoreDetailsGroup);
       }
 
       if (report.nextAction) {
         aiResponse.appendChild(responseBlock("下一步", report.nextAction));
-      }
-      if (report.recommendation?.problemId) {
-        aiResponse.appendChild(responseBlock("推荐题目", report.recommendation.problemId + "\\n" + report.recommendation.reason));
       }
       appendContextAudit(data.workflowAudit || coachContextAudit("solution_score"));
     }
@@ -5935,20 +5982,25 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         responseBlock("是否值得优化", report.optimizationNeeded ? "需要优化" : "无需优化")
       );
       aiResponse.appendChild(responseBlock("结论", report.summary || "暂无结论。"));
+      const optimizationDetails = [];
 
       if (report.timeComplexity) {
-        aiResponse.appendChild(responseBlock("时间复杂度", optimizationDimensionText(report.timeComplexity)));
+        optimizationDetails.push(responseBlock("时间复杂度", optimizationDimensionText(report.timeComplexity)));
       }
       if (report.memory) {
-        aiResponse.appendChild(responseBlock("内存", optimizationDimensionText(report.memory)));
+        optimizationDetails.push(responseBlock("内存", optimizationDimensionText(report.memory)));
       }
       if (report.codeQuality) {
-        aiResponse.appendChild(
+        optimizationDetails.push(
           responseBlock(
             "代码质量 · " + (report.codeQuality.verdict === "needs_cleanup" ? "需要整理" : "可以保持"),
             report.codeQuality.action || ""
           )
         );
+      }
+      const optimizationDetailsGroup = resultDetailsGroup("优化详情", optimizationDetails);
+      if (optimizationDetailsGroup) {
+        aiResponse.appendChild(optimizationDetailsGroup);
       }
       if (report.nextStep) {
         aiResponse.appendChild(responseBlock("下一步", report.nextStep));
@@ -5997,6 +6049,23 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       if (bodyText) {
         details.appendChild(markdownBlock(bodyText, "hint"));
       }
+      return details;
+    }
+
+    function resultDetailsGroup(titleText, blocks) {
+      const visibleBlocks = blocks.filter(Boolean);
+      if (!visibleBlocks.length) {
+        return undefined;
+      }
+      const details = document.createElement("details");
+      details.className = "resultDetailsDrawer";
+      const summary = document.createElement("summary");
+      summary.textContent = titleText;
+      details.appendChild(summary);
+      const body = document.createElement("div");
+      body.className = "resultDetailsBody";
+      visibleBlocks.forEach((block) => body.appendChild(block));
+      details.appendChild(body);
       return details;
     }
 

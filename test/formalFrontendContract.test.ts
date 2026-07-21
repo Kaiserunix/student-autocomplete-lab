@@ -147,6 +147,23 @@ describe("formal sidebar frontend contract", () => {
     expect(source).toContain('textSpan("连接检测", "aiResponseTitle")');
   });
 
+  test("collapses secondary AI analysis below the primary answer", async () => {
+    const source = await providerSource();
+
+    expect(source).toContain('function resultDetailsGroup(titleText, blocks)');
+    expect(source).toContain('details.className = "resultDetailsDrawer"');
+    expect(source).toContain('body.className = "resultDetailsBody"');
+    expect(source).toContain('resultDetailsGroup("诊断细节", diagnosisDetails)');
+    expect(source).toContain('resultDetailsGroup("风险与测试", reviewDetails)');
+    expect(source).toContain('resultDetailsGroup("完整复盘", lessonDetails)');
+    expect(source).toContain('resultDetailsGroup("评分详情", scoreDetails)');
+    expect(source).toContain('resultDetailsGroup("优化详情", optimizationDetails)');
+    expect(source).toContain('resultDetailsGroup("检测详情", healthDetails)');
+    expect(source).not.toContain(
+      'aiResponse.appendChild(textSpan(localized.painTitle || "痛点判断", "responseSectionTitle"))'
+    );
+  });
+
   test("collapses archived evidence and secondary actions inside each card", async () => {
     const source = await providerSource();
 

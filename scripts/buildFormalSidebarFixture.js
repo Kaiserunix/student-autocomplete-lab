@@ -162,6 +162,42 @@ function fixtureBootstrap() {
         }
       });
     }
+    if (view === "diagnosis") {
+      dispatch({
+        type: "teachingDiagnosis",
+        status: "提示已生成。",
+        problemKey: "luogu:P1048",
+        action: "specific",
+        report: {
+          hint: "先写清楚 dp[t] 代表什么，再决定循环方向。",
+          specificHint: "让 dp[t] 表示时间不超过 t 时能得到的最大价值。每株草药只能选一次，所以时间要倒序枚举。",
+          checkpoint: "如果时间正序枚举，同一株草药会不会被重复使用？",
+          microSteps: ["写出状态含义", "确认初始值", "检查容量循环方向"],
+          painPoints: [
+            { label: "dp_state_definition", confidence: 0.91 },
+            { label: "loop_direction", confidence: 0.84 }
+          ]
+        },
+        localizedReport: {
+          rawHint: "先写清楚 dp[t] 代表什么，再决定循环方向。",
+          rawSpecificHint: "让 dp[t] 表示时间不超过 t 时能得到的最大价值。每株草药只能选一次，所以时间要倒序枚举。",
+          rawCheckpoint: "如果时间正序枚举，同一株草药会不会被重复使用？",
+          specificHintTitle: "更具体的下一步",
+          checkpointTitle: "自检点",
+          microStepsTitle: "微步骤",
+          painTitle: "痛点判断",
+          microSteps: ["写出状态含义", "确认初始值", "检查容量循环方向"],
+          painPoints: [
+            { label: "dp_state_definition", displayLabel: "状态定义", confidence: 0.91 },
+            { label: "loop_direction", displayLabel: "循环方向", confidence: 0.84 }
+          ]
+        },
+        workflowAudit: {
+          included: ["problem_statement", "student_code"],
+          excluded: ["standard_answer"]
+        }
+      });
+    }
   };
   window.acquireVsCodeApi = () => ({
     postMessage(message) {
