@@ -24,10 +24,16 @@ describe("VS Code extension manifest", () => {
     expect(manifest.main).toBe("./dist/src/extension.js");
   });
 
-  test("activates early enough to register the problem-bank view and inline provider", async () => {
+  test("activates immediately for supported code languages and still warms up after startup", async () => {
     const manifest = JSON.parse(await readFile("package.json", "utf8")) as ExtensionManifest;
 
     expect(manifest.activationEvents).toContain("onStartupFinished");
+    expect(manifest.activationEvents).toEqual(expect.arrayContaining([
+      "onLanguage:python",
+      "onLanguage:c",
+      "onLanguage:cpp",
+      "onLanguage:rust"
+    ]));
   });
 
   test("contributes the problem-bank view as a webview", async () => {
@@ -61,7 +67,11 @@ describe("VS Code extension manifest", () => {
     expect(
       manifest.contributes?.commands?.find((item) => item.command === "studentAutocomplete.triggerInlineCompletion")
         ?.title
-    ).toBe("AI 做题陪练：触发自动补全");
+    ).toBe("AI 做题陪练：立即补全一次（备用）");
+
+    const source = await readFile("src/extension.ts", "utf8");
+    expect(source).toContain('autocompleteStatus.text = "$(sparkle) AI 自动补全已开启"');
+    expect(source).toContain("停下输入约 350 毫秒后自动显示灰色 Ghost Text");
   });
 
   test("exposes real AI provider settings instead of a webview-only config", async () => {

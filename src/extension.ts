@@ -32,8 +32,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const autocompleteStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
   autocompleteStatus.name = "AI 做题陪练补全";
   autocompleteStatus.command = "studentAutocomplete.triggerInlineCompletion";
-  autocompleteStatus.text = "$(sparkle) AI 补全待触发";
-  autocompleteStatus.tooltip = "自动补全会显示为编辑器里的灰色 Ghost Text；点击这里手动触发一次。";
+  autocompleteStatus.text = "$(sparkle) AI 自动补全已开启";
+  autocompleteStatus.tooltip = "停下输入约 350 毫秒后自动显示灰色 Ghost Text；点击这里可立即补全一次。";
   autocompleteStatus.show();
   void internalRecorder.record({
     kind: "extension_activated",
@@ -96,12 +96,12 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand("studentAutocomplete.triggerInlineCompletion", async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor) {
-        vscode.window.showWarningMessage("先打开一个代码文件，再触发 MiMo 自动补全。");
+        vscode.window.showWarningMessage("先打开一个代码文件，再立即请求一次 AI 补全。");
         return;
       }
 
       await vscode.window.showTextDocument(editor.document, editor.viewColumn, false);
-      autocompleteStatus.text = "$(sync~spin) 正在触发 AI 补全";
+      autocompleteStatus.text = "$(sync~spin) 正在立即请求 AI 补全";
       output.appendLine(
         `[autocomplete:manual-trigger] ${editor.document.languageId} line ${editor.selection.active.line + 1}`
       );

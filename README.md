@@ -256,7 +256,7 @@ npm run trial:mimo-teacher -- --provider live --wrong-index 1
 npm run trial:mimo-teacher -- --fixture fixtures/practice/P4913.codex.json --wrong-index 2
 ```
 
-To try the extension in VS Code, open this folder, press `F5`, and choose `Run Student Autocomplete Extension`. The extension host opens `.student-autocomplete-smoke/main.py`. Put the cursor after the indentation in `def add(a, b):` and trigger inline completion. The activity bar also shows `Student Autocomplete`, with a `Problem Bank` sidebar.
+To try the extension in VS Code, open this folder, press `F5`, and choose `Run Student Autocomplete Extension`. The extension host opens `.student-autocomplete-smoke/main.py`. Type at a supported code location and pause for about 350 ms; inline completion is requested automatically. `AI 做题陪练：立即补全一次（备用）` remains available for diagnosis or an immediate retry. The activity bar also shows `Student Autocomplete`, with a `Problem Bank` sidebar.
 
 Current inner-test boundary:
 

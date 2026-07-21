@@ -127,6 +127,8 @@ describe("problem bank webview script", () => {
     expect(source).not.toContain('id="coachSolved"');
     expect(source).not.toContain('id="coachSubmitCheck"');
     expect(source).toContain('id="coachAutocomplete"');
+    expect(source).toContain('autocompletePreview: "测试补全接口"');
+    expect(source).toContain('autocompletePreview: "Test Completion API"');
     expect(source).toContain('class="coachQuestionActions"');
     expect(source).toContain('coachQuestionLabel: "追问"');
     expect(source).toContain('coachQuestionPlaceholder: "输入问题，Ctrl+Enter 发送"');

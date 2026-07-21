@@ -19,6 +19,10 @@
   ],
   "activationEvents": [
     "onStartupFinished",
+    "onLanguage:python",
+    "onLanguage:c",
+    "onLanguage:cpp",
+    "onLanguage:rust",
     "onView:studentAutocomplete.problemBankWebview",
     "onCommand:studentAutocomplete.saveProblem",
     "onCommand:studentAutocomplete.giveHint",
@@ -52,7 +56,7 @@
       },
       {
         "command": "studentAutocomplete.triggerInlineCompletion",
-        "title": "AI 做题陪练：触发自动补全"
+        "title": "AI 做题陪练：立即补全一次（备用）"
       }
     ],
     "configurationDefaults": {

@@ -3755,7 +3755,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
               <button id="coachFollowUp" class="secondary" type="button">继续追问</button>
               <button id="coachGiveUp" class="secondary" type="button">我卡住了</button>
               <button id="coachCompleted" class="secondary" type="button">完成复盘</button>
-              <button id="coachAutocomplete" class="secondary" type="button">补全检查</button>
+              <button id="coachAutocomplete" class="secondary" type="button">测试补全接口</button>
             </div>
           </details>
           <div class="utilityShelf">
@@ -4310,7 +4310,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         followUp: "继续追问",
         giveUp: "我卡住了",
         completed: "完成复盘",
-        autocompletePreview: "补全检查",
+        autocompletePreview: "测试补全接口",
         waitingTitle: "准备好了",
         waitingHint: "写代码，需要时要一个提示。",
         problemTabGuide: "导入 Markdown",
@@ -4343,7 +4343,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         followUp: "Continue",
         giveUp: "I Give Up",
         completed: "I Finished",
-        autocompletePreview: "Check Completion",
+        autocompletePreview: "Test Completion API",
         waitingTitle: "Ready",
         waitingHint: "Code first; ask for a hint when needed.",
         problemTabGuide: "Import Markdown",
@@ -5115,7 +5115,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       setStatus("正在调用 AI 补全接口...");
       setCoachBusy(true);
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("补全检查中", "aiResponseTitle"));
+      aiResponse.appendChild(textSpan("补全接口检查中", "aiResponseTitle"));
       aiResponse.appendChild(textSpan("只检查光标附近代码。", "hint"));
       vscode.postMessage({ command: "requestAutocompletePreview" });
     }

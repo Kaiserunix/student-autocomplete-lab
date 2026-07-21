@@ -9,7 +9,7 @@ It is not an automatic problem solver or an automatic submitter. AI submission c
 - `AI 教练`: hints, lesson reports after giving up, AI-estimated submission checks, learning scores, optimization review, archiving, and next-problem recommendations.
 - `题目`: import Markdown problem files, search/import Luogu problems, and create starter files.
 - `学习画像`: inspectable and correctable local teaching memory.
-- `安全补全`: inline completion reads student-code context only, not the full problem statement or hidden reference material.
+- `安全补全`: after the student pauses while typing, inline completion runs automatically and reads student-code context only, not the full problem statement or hidden reference material.
 - English beta support: main sidebar labels, explicit English AI-output mode, and English Markdown problem import.
 - Provider settings for OpenAI, OpenAI-compatible services, and Anthropic Messages.
 - Experimental Codeforces submission through a user-installed `online-judge-tools/oj`, with a fresh explicit confirmation for every submission and no automatic resubmission.
