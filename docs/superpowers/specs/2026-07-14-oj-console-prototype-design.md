@@ -2,11 +2,11 @@
 
 Date: 2026-07-14
 
-Status: standalone prototype implemented and verified; authenticated live Codeforces submission remains a separate manual gate.
+Status: standalone prototype implemented and verified. The original Codeforces-only baseline was extended to Codeforces and AtCoder on 2026-07-21; authenticated live submission remains a separate manual gate. The multi-platform source of truth is [2026-07-21-multi-platform-oj-submission-design.md](2026-07-21-multi-platform-oj-submission-design.md).
 
 ## 1. Purpose
 
-Build a standalone local experience for trying the Codeforces submission workflow without opening VS Code or visiting the Codeforces submission page manually.
+Build a standalone local experience for trying the OJ submission workflow without opening VS Code or visiting a submission page manually.
 
 The prototype answers two questions:
 
@@ -20,7 +20,7 @@ It is an experimental local harness, not a second production application. It reu
 - Default to a deterministic safe demo mode.
 - Offer a separately unlocked real mode that may invoke `online-judge-tools/oj`.
 - Accept source through a local file chooser rather than a code textarea.
-- Open a visible PowerShell window for delegated Codeforces login.
+- Open a visible PowerShell window for delegated platform login.
 - Use the dense dark `工具控制台` visual direction.
 - Implement and validate the backend before writing the browser interface.
 - Provide a PowerShell client so the backend can be tried before the frontend exists.
@@ -91,7 +91,7 @@ The server also rejects non-local `Host` values before serving the token-bearing
 
 ### `GET /api/status`
 
-Returns server version, startup time, current mode, real-mode lock state, sanitized `oj` availability/version, active object counts, and the Codeforces-only scope.
+Returns server version, startup time, current mode, real-mode lock state, sanitized `oj` availability/version, active object counts, and the fixed Codeforces/AtCoder capability records.
 
 ### `POST /api/source`
 
@@ -99,11 +99,11 @@ Accepts source bytes with file metadata headers. Allowed suffixes are `.c`, `.cc
 
 ### `POST /api/preview`
 
-Accepts `sourceId`, Codeforces problem URL, optional public handle, requested mode, and optional demo scenario. It returns normalized target/source metadata, tool state, expiry, and one opaque confirmation id. It does not submit.
+Accepts `sourceId`, selected platform, a Codeforces problem URL or AtCoder task URL, an optional Codeforces public handle, requested mode, and optional demo scenario. The selected platform must match the parsed target. It returns normalized target/source metadata, tool state, expiry, and one opaque confirmation id. It does not submit.
 
 ### `POST /api/real-mode/unlock`
 
-Accepts the exact phrase `我确认本次操作可能向 Codeforces 真实提交代码` and unlocks real mode for the current process only. Restarting returns to demo mode.
+Accepts the exact phrase `我确认本次操作可能向在线评测平台真实提交代码` and unlocks real mode for the current process only. Restarting returns to demo mode.
 
 ### `POST /api/confirm`
 
@@ -242,7 +242,7 @@ The complete prototype is ready when the B-layout browser console completes the 
 
 ## 14. Non-Goals
 
-- Platforms other than Codeforces;
+- Platforms other than the registered Codeforces and AtCoder targets;
 - credential or cookie storage/import;
 - CAPTCHA automation;
 - unattended or automatic submission;
@@ -295,3 +295,13 @@ Final verification on 2026-07-14:
 - no live Codeforces login, CAPTCHA interaction, or remote submission was run.
 
 The complete prototype remains an experimental repository harness. Its browser UI is not included in the VSIX; validated behavior can later be absorbed into the extension surface.
+
+Multi-platform extension on 2026-07-21:
+
+- added a shared strict target/capability registry for Codeforces and AtCoder;
+- generalized confirmation, jobs, login, real submission, localhost API, browser console, and VS Code sidebar contracts;
+- added a terminal `submitted` state so AtCoder transport success is not mislabeled as an official verdict;
+- kept Codeforces optional public-API polling and rejected a Codeforces handle for AtCoder;
+- preserved the comment-free frontend-source regression rule;
+- verified `online-judge-tools 11.5.1` help in an ignored Python 3.14 environment after adding its required `setuptools` compatibility dependency;
+- did not perform login, CAPTCHA interaction, or a remote submission.

@@ -2,7 +2,7 @@
 
 Date: 2026-07-12
 
-Status: approved overall design. The first Codeforces delegated-CLI slice is implemented; authenticated live submission remains an explicit manual gate.
+Status: approved overall design. Codeforces and AtCoder delegated-CLI slices are implemented; authenticated live submission remains an explicit manual gate. The concrete multi-platform contract is recorded in [2026-07-21-multi-platform-oj-submission-design.md](2026-07-21-multi-platform-oj-submission-design.md).
 
 ## 1. Decision
 
@@ -288,7 +288,7 @@ Implementation note (2026-07-12): the Codeforces phase-1/2 slice now includes st
 - integrate Codeforces and AtCoder through a pinned, user-installed `online-judge-tools` contract;
 - normalize verdicts and connect them to teaching records.
 
-Codeforces is the only implemented adapter in this phase. It is still marked experimental until the manual dedicated-account smoke gate passes. AtCoder and Kattis remain design targets, not shipped support.
+Codeforces and AtCoder are implemented in this phase and remain experimental until their manual dedicated-account smoke gates pass. Codeforces can optionally poll its public API. AtCoder ends at a confirmed `submitted` state and official submission link; it does not scrape or invent a verdict. Kattis remains a design target, not shipped support.
 
 ### Phase 3: Native Experimental Adapters
 

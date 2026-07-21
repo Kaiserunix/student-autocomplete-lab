@@ -1,6 +1,6 @@
 # Current Gaps And Next Steps
 
-Date: 2026-07-12
+Date: 2026-07-21
 
 Status: internal project note after the DeepSeek autocomplete and Luogu training import repair. This is not a public release note.
 
@@ -17,7 +17,7 @@ Status: internal project note after the DeepSeek autocomplete and Luogu training
 
 ### Product And UI
 
-- A first real OJ slice is implemented for Codeforces through a user-installed `online-judge-tools/oj`: trusted workspace, saved active file, strict URL parsing, two-minute single-use confirmation, one no-shell CLI invocation, and optional bounded public-verdict polling. It still needs a dedicated-account live submission smoke test before public support claims. Luogu, LeetCode, AtCoder, Kattis, native credential storage, and browser-session handoff remain unimplemented. See [superpowers/specs/2026-07-12-oj-submission-design.md](superpowers/specs/2026-07-12-oj-submission-design.md).
+- Real OJ submission is implemented for Codeforces and AtCoder through a user-installed `online-judge-tools/oj`: trusted workspace, saved active file, strict per-platform URL parsing, two-minute single-use confirmation, one no-shell CLI invocation, and sanitized platform-matched result links. Codeforces can optionally use bounded public-verdict polling; AtCoder intentionally stops at `submitted` and links to the official submissions page. Both still need dedicated-account login and one-submit smoke tests before public support claims. Luogu, LeetCode, Kattis, native credential storage, and browser-session handoff remain unimplemented and are rejected. See [superpowers/specs/2026-07-21-multi-platform-oj-submission-design.md](superpowers/specs/2026-07-21-multi-platform-oj-submission-design.md).
 - A standalone localhost OJ Console now provides a verified dark browser console and PowerShell client for the same preview/one-confirmation/job-state contract. Its demo path has an automated Chromium AC proof, but the console is a repository-only evaluation harness, is excluded from the VSIX, trusts a single-user local device, and has not passed the dedicated-account live submission gate. See [superpowers/specs/2026-07-14-oj-console-prototype-design.md](superpowers/specs/2026-07-14-oj-console-prototype-design.md).
 - UI quality still depends too much on manual screenshots. There is no automated screenshot comparison or real VS Code webview interaction gate.
 - The AI coach page is usable, but the information hierarchy still needs polish: current problem, session state, model state, and next action should be impossible to miss.
@@ -70,7 +70,7 @@ Status: internal project note after the DeepSeek autocomplete and Luogu training
 
 ### Near-Term Stabilization
 
-- Keep Codeforces labeled experimental until a dedicated-account smoke test proves delegated login and one-submit behavior. The Playwright feasibility probe remains research-only and is not production code.
+- Keep Codeforces and AtCoder labeled experimental until dedicated-account smoke tests prove delegated login and one-submit behavior. AtCoder's current upstream Turnstile incompatibility must be treated as an availability failure, never bypassed. The Playwright feasibility probe remains research-only and is not production code.
 - Rename legacy `mimo` CLI/runtime labels to neutral `ai` or `openai-compatible` labels.
 - Add a visible provider health check: model list, chat smoke test, FIM smoke test, and clear endpoint/key/model errors.
 - Add per-role API key support for OpenAI-compatible analysis and autocomplete.
