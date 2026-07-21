@@ -28,9 +28,9 @@
   <main class="page-shell">
     <section class="hero reveal reveal-one">
       <div class="hero-copy">
-        <p class="kicker"><span>LOCAL / CF</span> 一次确认，一次提交</p>
+        <p class="kicker"><span>LOCAL / CF + AT</span> 一次确认，一次提交</p>
         <h1>把提交动作<br><span>留在本地。</span></h1>
-        <p class="hero-note">选择源码，核对目标，再触发一次性任务。默认演示模式不会访问 Codeforces，也不会读取或保存你的登录凭据。</p>
+        <p class="hero-note">选择源码，核对目标，再触发一次性任务。默认演示模式不会访问远程评测平台，也不会读取或保存你的登录凭据。</p>
       </div>
       <div class="mode-console" aria-label="提交模式">
         <div class="mode-heading"><span>OPERATING MODE</span><span id="modeSequence">00 / SAFE</span></div>
@@ -72,12 +72,19 @@
         <section class="control-block" aria-labelledby="targetHeading">
           <div class="block-title">
             <span class="step-index">02</span>
-            <div><h2 id="targetHeading">指定目标</h2><p>当前原型仅支持 Codeforces</p></div>
+            <div><h2 id="targetHeading">指定目标</h2><p>Codeforces / AtCoder</p></div>
           </div>
+          <label class="field-label" for="targetPlatform">PLATFORM</label>
+          <select class="text-field select-field" id="targetPlatform">
+            <option value="codeforces">Codeforces</option>
+            <option value="atcoder">AtCoder</option>
+          </select>
           <label class="field-label" for="problemUrl">PROBLEM URL</label>
           <input class="text-field" id="problemUrl" type="url" value="https://codeforces.com/contest/4/problem/A" autocomplete="off" spellcheck="false">
-          <label class="field-label" for="handle">PUBLIC HANDLE <span>可选</span></label>
-          <input class="text-field" id="handle" type="text" placeholder="用于公开判题轮询" autocomplete="off" spellcheck="false">
+          <div id="handleField">
+            <label class="field-label" for="handle">PUBLIC HANDLE <span>可选</span></label>
+            <input class="text-field" id="handle" type="text" placeholder="用于 Codeforces 公开判题轮询" autocomplete="off" spellcheck="false">
+          </div>
         </section>
         <section class="control-block" aria-labelledby="policyHeading">
           <div class="block-title">
@@ -97,7 +104,7 @@
           <div class="real-gate is-hidden" id="realGate">
             <div class="gate-state"><i></i><span id="gateState">REAL MODE LOCKED</span></div>
             <label class="field-label" for="unlockPhrase">UNLOCK PHRASE</label>
-            <code class="unlock-copy" id="unlockCopy">我确认本次操作可能向 Codeforces 真实提交代码</code>
+            <code class="unlock-copy" id="unlockCopy">我确认本次操作可能向在线评测平台真实提交代码</code>
             <input class="text-field phrase-field" id="unlockPhrase" type="text" placeholder="输入设计中的完整确认短语" autocomplete="off">
             <div class="gate-actions">
               <button class="secondary-button" id="unlockButton" type="button">解锁真实模式</button>
@@ -163,7 +170,7 @@
     </section>
     <footer class="footer reveal reveal-three">
       <p><span>NO COOKIE IMPORT</span><span>NO CAPTCHA AUTOMATION</span><span>NO AUTO RETRY</span></p>
-      <small>OJ Console Prototype · Codeforces only · session data disappears on shutdown</small>
+      <small>OJ Console Prototype · Codeforces + AtCoder · session data disappears on shutdown</small>
     </footer>
   </main>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>

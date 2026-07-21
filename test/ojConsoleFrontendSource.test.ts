@@ -17,4 +17,19 @@ describe("OJ console frontend source", () => {
     expect(javascript).not.toContain("/*");
     expect(html.match(/__OJ_CONSOLE_TOKEN__/g)).toHaveLength(1);
   });
+
+  test("renders registered platforms and sends the selected login target", async () => {
+    const root = path.resolve("prototypes/oj-console/frontend");
+    const [html, javascript] = await Promise.all([
+      readFile(path.join(root, "index.html"), "utf8"),
+      readFile(path.join(root, "app.js"), "utf8")
+    ]);
+
+    expect(html).toContain('id="targetPlatform"');
+    expect(html).toContain('<option value="atcoder">AtCoder</option>');
+    expect(html).toContain('id="handleField"');
+    expect(javascript).toContain('platform: elements.targetPlatform.value');
+    expect(javascript).toContain('elements.handleField.classList.toggle("is-hidden", profile.platform !== "codeforces")');
+    expect(javascript).toContain('body: JSON.stringify({ platform: elements.targetPlatform.value })');
+  });
 });

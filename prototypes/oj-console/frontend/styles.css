@@ -1064,6 +1064,10 @@ button:disabled {
   color: var(--acid);
 }
 
+.result-panel.is-submitted .result-code {
+  color: var(--cyan);
+}
+
 .result-panel.is-rejected .result-code,
 .result-panel.is-failed .result-code {
   color: var(--danger);

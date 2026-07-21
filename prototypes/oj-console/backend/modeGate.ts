@@ -1,6 +1,6 @@
 import { OjConsoleError } from "./contracts";
 
-export const REAL_MODE_UNLOCK_PHRASE = "我确认本次操作可能向 Codeforces 真实提交代码";
+export const REAL_MODE_UNLOCK_PHRASE = "我确认本次操作可能向在线评测平台真实提交代码";
 
 export class RealModeGate {
   private unlocked = false;

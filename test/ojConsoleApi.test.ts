@@ -237,6 +237,34 @@ describe("OJ console local API", () => {
     expect(openLogin).toHaveBeenCalledWith("atcoder");
   });
 
+  test("rejects a selected platform that does not match the normalized target", async () => {
+    const { baseUrl } = await startApi({
+      token: "test-token",
+      runtimeRoot: ".runtime/test-oj-console"
+    });
+    const upload = await fetch(`${baseUrl}/api/source`, {
+      method: "POST",
+      headers: tokenHeaders({ "content-type": "application/octet-stream", "x-source-name": "main.cpp" }),
+      body: Buffer.from("int main(){}")
+    });
+    const source = await json(upload);
+
+    const response = await fetch(`${baseUrl}/api/preview`, {
+      method: "POST",
+      headers: tokenHeaders({ "content-type": "application/json" }),
+      body: JSON.stringify({
+        sourceId: source.sourceId,
+        problemUrl: "https://atcoder.jp/contests/abc350/tasks/abc350_a",
+        platform: "codeforces",
+        mode: "demo",
+        scenario: "accepted"
+      })
+    });
+
+    expect(response.status).toBe(400);
+    expect(await json(response)).toMatchObject({ error: { code: "target_invalid" } });
+  });
+
   test("rejects wrong body types and bounds source bytes without leaking them", async () => {
     const { baseUrl } = await startApi({ token: "test-token", runtimeRoot: ".runtime/test-oj-console" });
     const wrongType = await fetch(`${baseUrl}/api/source`, {

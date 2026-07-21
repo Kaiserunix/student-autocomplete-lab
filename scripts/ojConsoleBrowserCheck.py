@@ -27,7 +27,7 @@ with sync_playwright() as playwright:
 
     page.locator("[data-mode='real']").click()
     expect(page.locator("#realGate")).to_be_visible()
-    expect(page.locator("#unlockCopy")).to_have_text("我确认本次操作可能向 Codeforces 真实提交代码")
+    expect(page.locator("#unlockCopy")).to_have_text("我确认本次操作可能向在线评测平台真实提交代码")
     expect(page.locator("#previewButton")).to_be_disabled()
     page.locator("[data-mode='demo']").click()
 

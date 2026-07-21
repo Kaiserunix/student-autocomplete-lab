@@ -197,7 +197,7 @@ describe("problem bank webview script", () => {
     expect(source).not.toContain('command: "requestSolutionScore",\n        problemKey: keyOf(problem),\n        studentRequest: coachQuestion.value.trim(),\n        ojVerdict: {\n          status: "AC"\n        }');
   });
 
-  test("connects a trusted one-time Codeforces submission host flow", async () => {
+  test("connects a trusted one-time multi-platform submission host flow", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
     expect(source).toContain('message.command === "requestOjLogin"');
@@ -206,7 +206,7 @@ describe("problem bank webview script", () => {
     expect(source).toContain("vscode.workspace.isTrusted");
     expect(source).toContain("SubmissionConfirmationStore");
     expect(source).toContain("editor.document.save()");
-    expect(source).toContain("parseCodeforcesProblemUrl");
+    expect(source).toContain("parseSubmissionTarget");
     expect(source).toContain("checkOnlineJudgeTools");
     expect(source).toContain("submitWithOnlineJudgeTools");
     expect(source).toContain("pollCodeforcesVerdict");
@@ -216,10 +216,12 @@ describe("problem bank webview script", () => {
     expect(source).not.toContain("result.stderr");
   });
 
-  test("renders an explicit two-step Codeforces submission confirmation", async () => {
+  test("renders an explicit two-step multi-platform submission confirmation", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
     expect(source).toContain('id="ojProblemUrl"');
+    expect(source).toContain('id="ojPlatform"');
+    expect(source).toContain('<option value="atcoder">AtCoder</option>');
     expect(source).toContain('id="ojCodeforcesHandle"');
     expect(source).toContain('id="ojLogin"');
     expect(source).toContain('id="ojPreviewSubmit"');
@@ -232,6 +234,8 @@ describe("problem bank webview script", () => {
     expect(source).toContain("不会自动重试提交");
     expect(source).toContain("renderOjSubmissionPreview(data)");
     expect(source).toContain("renderOjSubmissionResult(data)");
+    expect(source).toContain('command: "requestOjLogin", platform: ojPlatform.value');
+    expect(source).toContain("platform: ojPlatform.value");
     expect(source).toContain("confirmButton.remove()");
     expect(source).toContain('coachOjVerdict.value = "UNKNOWN";');
     expect(source).toContain('state.ojVerdict = "UNKNOWN";');

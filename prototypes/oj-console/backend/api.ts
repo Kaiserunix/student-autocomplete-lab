@@ -107,6 +107,12 @@ export function createOjConsoleApi(options: OjConsoleApiOptions): RequestListene
           error instanceof Error ? error.message : "题目链接不正确。"
         );
       }
+      const selectedPlatform = body.platform === undefined
+        ? target.platform
+        : requirePlatform(body.platform);
+      if (selectedPlatform !== target.platform) {
+        throw new OjConsoleError("target_invalid", "所选平台与题目链接不一致。");
+      }
       const codeforcesHandle = optionalString(body.codeforcesHandle);
       if (target.platform !== "codeforces" && codeforcesHandle) {
         throw new OjConsoleError("invalid_request", "AtCoder 提交不使用 Codeforces handle。");

@@ -36,11 +36,11 @@ import { searchLuoguProblems, searchLuoguProblemSets } from "../problemBank/luog
 import type { ProblemRecord, ProblemSetRecord } from "../problemBank/types";
 import { appendJsonlRecord, readJsonlRecords, writeJsonlRecords } from "../storage/jsonlStore";
 import { createStudentAutocompleteStoragePaths, type StudentAutocompleteStoragePaths } from "../storage/StoragePaths";
-import { parseCodeforcesProblemUrl } from "../submission/codeforcesTarget";
 import { pollCodeforcesVerdict } from "../submission/codeforcesVerdict";
 import { SubmissionConfirmationStore } from "../submission/confirmationStore";
 import { checkOnlineJudgeTools, submitWithOnlineJudgeTools } from "../submission/onlineJudgeTools";
-import type { EditorSubmissionIdentity, OjSubmissionResult } from "../submission/types";
+import { getSubmissionPlatformCapability, parseSubmissionTarget } from "../submission/submissionTarget";
+import type { EditorSubmissionIdentity, OjSubmissionResult, SubmissionPlatform } from "../submission/types";
 import { buildAttemptEvent, summarizeAttemptEvents, type AttemptEvent } from "../teaching/attemptEvent";
 import { requestMimoCoachFollowUp } from "../teaching/coachFollowUp";
 import { requestMimoLessonReport } from "../teaching/lessonReport";
@@ -371,13 +371,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     if (message.command === "requestOjLogin") {
-      return this.handleOjLoginRequest();
+      return this.handleOjLoginRequest(message.platform);
     }
 
     if (message.command === "requestOjSubmissionPreview") {
       return this.handleOjSubmissionPreviewRequest(
         message.problemKey,
         message.problemUrl,
+        message.platform,
         message.codeforcesHandle
       );
     }
@@ -1655,31 +1656,43 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     };
   }
 
-  private async handleOjLoginRequest(): Promise<Record<string, unknown>> {
+  private async handleOjLoginRequest(platformValue: SubmissionPlatform): Promise<Record<string, unknown>> {
     this.requireTrustedWorkspaceForSubmission();
+    const platform = normalizeSubmissionPlatform(platformValue);
+    const capability = getSubmissionPlatformCapability(platform);
     const availability = await checkOnlineJudgeTools();
     if (!availability.available) {
       throw new Error(availability.message);
     }
 
     const terminal = vscode.window.createTerminal({ name: "OJ 登录" });
-    terminal.sendText("oj login https://codeforces.com/", true);
+    terminal.sendText(`oj login ${capability.loginUrl}`, true);
     terminal.show();
     return {
       type: "status",
-      text: "已打开 OJ 登录终端；请按提示亲自完成 Codeforces 登录和图形验证。"
+      text: `已打开 OJ 登录终端；请按提示亲自完成 ${capability.displayName} 登录和图形验证。`
     };
   }
 
   private async handleOjSubmissionPreviewRequest(
     problemKey: string,
     problemUrl: string,
+    platformValue: SubmissionPlatform,
     codeforcesHandle?: string
   ): Promise<Record<string, unknown>> {
     this.requireTrustedWorkspaceForSubmission();
     await this.requireKnownProblem(problemKey);
-    const target = parseCodeforcesProblemUrl(problemUrl);
-    const handle = normalizeOptionalCodeforcesHandle(codeforcesHandle);
+    const target = parseSubmissionTarget(problemUrl);
+    const platform = normalizeSubmissionPlatform(platformValue);
+    if (target.platform !== platform) {
+      throw new Error("所选平台与题目链接不一致。");
+    }
+    const handle = target.platform === "codeforces"
+      ? normalizeOptionalCodeforcesHandle(codeforcesHandle)
+      : undefined;
+    if (target.platform === "atcoder" && codeforcesHandle?.trim()) {
+      throw new Error("AtCoder 提交不使用 Codeforces handle。");
+    }
     const availability = await checkOnlineJudgeTools();
     if (!availability.available) {
       throw new Error(availability.message);
@@ -3697,17 +3710,24 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
                 <span class="dossierEyebrow">SUBMIT / 01 · EXPERIMENTAL</span>
                 <h2>提交公文夹</h2>
               </div>
-              <span class="posterPin">CODEFORCES</span>
+              <span class="posterPin">CF / AT</span>
             </div>
             <details id="ojSubmissionPanel" class="aiConfigBox">
             <summary>打开真实 OJ 提交流程</summary>
             <div class="panelBody">
               <span class="hint">需要用户自行安装 online-judge-tools。登录在可见终端中完成，扩展不会读取或保存账号、密码、Cookie、验证码。</span>
               <div class="field">
-                <label for="ojProblemUrl">Codeforces 题目链接</label>
-                <input id="ojProblemUrl" type="url" placeholder="https://codeforces.com/contest/1234/problem/A">
+                <label for="ojPlatform">提交平台</label>
+                <select id="ojPlatform">
+                  <option value="codeforces">Codeforces</option>
+                  <option value="atcoder">AtCoder</option>
+                </select>
               </div>
               <div class="field">
+                <label for="ojProblemUrl">题目链接</label>
+                <input id="ojProblemUrl" type="url" placeholder="https://codeforces.com/contest/1234/problem/A">
+              </div>
+              <div class="field" id="ojCodeforcesHandleField">
                 <label for="ojCodeforcesHandle">Codeforces handle（可选）</label>
                 <input id="ojCodeforcesHandle" autocomplete="off" placeholder="用于公开查询本次判题结果">
               </div>
@@ -3903,11 +3923,23 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const practiceLanguage = document.getElementById("practiceLanguage");
     const coachResponseLanguage = document.getElementById("coachResponseLanguage");
     const coachOjVerdict = document.getElementById("coachOjVerdict");
+    const ojPlatform = document.getElementById("ojPlatform");
     const ojProblemUrl = document.getElementById("ojProblemUrl");
+    const ojCodeforcesHandleField = document.getElementById("ojCodeforcesHandleField");
     const ojCodeforcesHandle = document.getElementById("ojCodeforcesHandle");
     const ojLogin = document.getElementById("ojLogin");
     const ojPreviewSubmit = document.getElementById("ojPreviewSubmit");
     const ojSubmissionStatus = document.getElementById("ojSubmissionStatus");
+    const ojPlatformProfiles = {
+      codeforces: {
+        label: "Codeforces",
+        placeholder: "https://codeforces.com/contest/1234/problem/A"
+      },
+      atcoder: {
+        label: "AtCoder",
+        placeholder: "https://atcoder.jp/contests/abc350/tasks/abc350_a"
+      }
+    };
     const aiConfigMode = document.getElementById("aiConfigMode");
     const aiOpenAiAuthModeField = document.getElementById("aiOpenAiAuthModeField");
     const aiOpenAiAuthMode = document.getElementById("aiOpenAiAuthMode");
@@ -4073,6 +4105,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     document.getElementById("coachAutocomplete").addEventListener("click", () => requestAutocompletePreview());
     ojLogin.addEventListener("click", () => requestOjLogin());
     ojPreviewSubmit.addEventListener("click", () => previewOjSubmission());
+    ojPlatform.addEventListener("change", () => setOjPlatform(ojPlatform.value));
     document.getElementById("copyInternalTestSummary").addEventListener("click", () => {
       vscode.postMessage({ command: "copyInternalTestSummary" });
     });
@@ -4199,6 +4232,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     renderStarterPresets();
     switchPage("ai");
+    setOjPlatform("codeforces");
     vscode.postMessage({ command: "loadProblems" });
     vscode.postMessage({ command: "readCodexAuth" });
 
@@ -5126,9 +5160,24 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       });
     }
 
+    function setOjPlatform(platform) {
+      const profile = ojPlatformProfiles[platform] || ojPlatformProfiles.codeforces;
+      ojPlatform.value = platform === "atcoder" ? "atcoder" : "codeforces";
+      ojProblemUrl.placeholder = profile.placeholder;
+      ojCodeforcesHandleField.classList.toggle("is-hidden", ojPlatform.value !== "codeforces");
+      if (ojPlatform.value !== "codeforces") {
+        ojCodeforcesHandle.value = "";
+      }
+      ojLogin.textContent = "登录 " + profile.label;
+      ojSubmissionStatus.innerHTML = "";
+      ojSubmissionStatus.dataset.submissionState = "idle";
+      ojSubmissionStatus.appendChild(textSpan("确认后只会提交一次；网络超时或结果不明时不会自动重试提交。", "hint"));
+    }
+
     function requestOjLogin() {
-      setStatus("正在打开 Codeforces 登录终端...");
-      vscode.postMessage({ command: "requestOjLogin" });
+      const profile = ojPlatformProfiles[ojPlatform.value] || ojPlatformProfiles.codeforces;
+      setStatus("正在打开 " + profile.label + " 登录终端...");
+      vscode.postMessage({ command: "requestOjLogin", platform: ojPlatform.value });
     }
 
     function previewOjSubmission() {
@@ -5139,7 +5188,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         return;
       }
       if (!problemUrl) {
-        setStatus("请先粘贴 Codeforces 题目链接。", "error");
+        setStatus("请先粘贴所选平台的题目链接。", "error");
         ojProblemUrl.focus();
         return;
       }
@@ -5149,21 +5198,24 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       ojSubmissionStatus.dataset.submissionState = "checking";
       ojSubmissionStatus.appendChild(textSpan("正在生成提交预览", "aiResponseTitle"));
       ojSubmissionStatus.appendChild(textSpan("此时只检查链接、当前文件和工具状态，不会发送代码。", "hint"));
-      requestOjSubmissionPreview(keyOf(problem), problemUrl, ojCodeforcesHandle.value.trim());
+      requestOjSubmissionPreview(keyOf(problem), problemUrl, ojPlatform.value, ojCodeforcesHandle.value.trim());
     }
 
-    function requestOjSubmissionPreview(problemKey, problemUrl, codeforcesHandle) {
-      setStatus("正在检查 Codeforces 提交信息...");
+    function requestOjSubmissionPreview(problemKey, problemUrl, platform, codeforcesHandle) {
+      const profile = ojPlatformProfiles[platform] || ojPlatformProfiles.codeforces;
+      setStatus("正在检查 " + profile.label + " 提交信息...");
       vscode.postMessage({
         command: "requestOjSubmissionPreview",
         problemKey,
         problemUrl,
+        platform: ojPlatform.value,
         codeforcesHandle
       });
     }
 
     function confirmOjSubmission(confirmationId) {
-      setStatus("正在提交一次到 Codeforces...");
+      const profile = ojPlatformProfiles[ojPlatform.value] || ojPlatformProfiles.codeforces;
+      setStatus("正在提交一次到 " + profile.label + "...");
       vscode.postMessage({
         command: "confirmOjSubmission",
         confirmationId
@@ -5180,16 +5232,22 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       ojSubmissionStatus.dataset.submissionState = "preview";
       ojSubmissionStatus.appendChild(textSpan("SUBMIT PREVIEW / 尚未发送", "evidenceCode"));
       ojSubmissionStatus.appendChild(textSpan("提交前确认", "aiResponseTitle"));
+      const platformName = target.platform === "atcoder" ? "AtCoder" : "Codeforces";
+      const problemLabel = target.platform === "atcoder"
+        ? (target.contestId || "?") + " / " + (target.taskId || "?")
+        : (target.contestKind || "contest") + " " + (target.contestId || "?") + (target.problemIndex || "?");
       ojSubmissionStatus.appendChild(responseBlock("目标", [
-        "平台：Codeforces",
-        "题目：" + (target.contestKind || "contest") + " " + (target.contestId || "?") + target.problemIndex,
+        "平台：" + platformName,
+        "题目：" + problemLabel,
         "链接：" + (target.canonicalUrl || "?")
       ].join("\\n")));
       ojSubmissionStatus.appendChild(responseBlock("当前文件", [
         "路径：" + (editor.filePath || "?"),
         "语言：" + (editor.languageId || "?"),
         "代码大小：" + (typeof editor.codeSize === "number" ? editor.codeSize + " 字节" : "?"),
-        preview.codeforcesHandle ? "Handle：" + preview.codeforcesHandle : "Handle：未填写（不会自动查询判题）"
+        target.platform === "codeforces"
+          ? preview.codeforcesHandle ? "Handle：" + preview.codeforcesHandle : "Handle：未填写（不会自动查询判题）"
+          : "判题状态：通过 AtCoder 提交链接查看"
       ].join("\\n")));
       ojSubmissionStatus.appendChild(textSpan(
         "确认有效期至 " + formatDateTime(preview.expiresAt) + (data.toolVersion ? " · oj " + data.toolVersion : ""),
@@ -7840,6 +7898,13 @@ function normalizeOptionalCodeforcesHandle(value: string | undefined): string | 
     throw new Error("Codeforces handle 格式不正确。");
   }
   return handle;
+}
+
+function normalizeSubmissionPlatform(value: string): SubmissionPlatform {
+  if (value !== "codeforces" && value !== "atcoder") {
+    throw new Error("OJ 平台必须是 Codeforces 或 AtCoder。");
+  }
+  return value;
 }
 
 function actionToAttemptEventKind(

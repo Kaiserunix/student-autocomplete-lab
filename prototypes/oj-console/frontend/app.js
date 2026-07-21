@@ -19,7 +19,9 @@ const elements = {
   sourceName: document.getElementById("sourceName"),
   sourceMeta: document.getElementById("sourceMeta"),
   sourceDigest: document.getElementById("sourceDigest"),
+  targetPlatform: document.getElementById("targetPlatform"),
   problemUrl: document.getElementById("problemUrl"),
+  handleField: document.getElementById("handleField"),
   handle: document.getElementById("handle"),
   scenario: document.getElementById("scenario"),
   demoControls: document.getElementById("demoControls"),
@@ -61,12 +63,28 @@ const scenarioLabels = {
   login_required: "Login Required"
 };
 
-const terminalStates = new Set(["accepted", "rejected", "unknown", "failed"]);
+const platformProfiles = {
+  codeforces: {
+    platform: "codeforces",
+    label: "Codeforces",
+    defaultUrl: "https://codeforces.com/contest/4/problem/A",
+    placeholder: "https://codeforces.com/contest/1234/problem/A"
+  },
+  atcoder: {
+    platform: "atcoder",
+    label: "AtCoder",
+    defaultUrl: "https://atcoder.jp/contests/abc350/tasks/abc350_a",
+    placeholder: "https://atcoder.jp/contests/abc350/tasks/abc350_a"
+  }
+};
+
+const terminalStates = new Set(["submitted", "accepted", "rejected", "unknown", "failed"]);
 const stageIndexes = {
   created: 0,
   submitting: 1,
   queued: 2,
   judging: 3,
+  submitted: 4,
   accepted: 4,
   rejected: 4,
   unknown: 4,
@@ -191,6 +209,20 @@ function setMode(mode) {
   addActivity("MODE", real ? "切换到真实模式，仍需显式解锁。" : "切换到安全演示模式。");
 }
 
+function setPlatform(platform) {
+  const profile = platformProfiles[platform] || platformProfiles.codeforces;
+  elements.targetPlatform.value = profile.platform;
+  elements.problemUrl.value = profile.defaultUrl;
+  elements.problemUrl.placeholder = profile.placeholder;
+  elements.handleField.classList.toggle("is-hidden", profile.platform !== "codeforces");
+  if (profile.platform !== "codeforces") {
+    elements.handle.value = "";
+  }
+  elements.loginButton.textContent = `登录 ${profile.label}`;
+  clearOperation();
+  addActivity("PLATFORM", `目标平台切换为 ${profile.label}。`);
+}
+
 async function refreshStatus() {
   try {
     const status = await api("/api/status");
@@ -259,8 +291,11 @@ function renderPreview(preview) {
   elements.previewSourceMeta.textContent = `${preview.source.language.toUpperCase()} / ${formatBytes(preview.source.byteSize)}`;
   elements.previewDigest.textContent = preview.source.digest;
   elements.previewScenario.textContent = preview.mode === "demo" ? scenarioLabels[preview.scenario] : "LIVE / ONE SHOT";
-  elements.previewHandle.textContent = preview.codeforcesHandle || "NOT SET";
-  elements.confirmTitle.textContent = preview.mode === "real" ? "只向 Codeforces 提交一次" : "只运行一次演示任务";
+  const platform = platformProfiles[preview.target.platform] || platformProfiles.codeforces;
+  elements.previewHandle.textContent = preview.target.platform === "codeforces"
+    ? preview.codeforcesHandle || "NOT SET"
+    : "SUBMISSION LINK ONLY";
+  elements.confirmTitle.textContent = preview.mode === "real" ? `只向 ${platform.label} 提交一次` : "只运行一次演示任务";
   elements.confirmNote.textContent = preview.mode === "real" ? "不会自动重试；模糊结果会标记 UNKNOWN。" : "确认记录两分钟内有效，使用后立即失效。";
   elements.confirmButton.textContent = preview.mode === "real" ? "确认真实提交一次" : "确认并执行一次";
   elements.confirmButton.disabled = false;
@@ -273,7 +308,7 @@ async function createPreview() {
   }
   const problemUrl = elements.problemUrl.value.trim();
   if (!problemUrl) {
-    showToast("请填写 Codeforces 题目链接。", true);
+    showToast("请填写所选平台的题目链接。", true);
     return;
   }
   setButtonBusy(elements.previewButton, true, "正在固定预览…");
@@ -281,10 +316,11 @@ async function createPreview() {
     const request = {
       sourceId: state.source.sourceId,
       problemUrl,
+      platform: elements.targetPlatform.value,
       mode: state.mode
     };
     const handle = elements.handle.value.trim();
-    if (handle) {
+    if (elements.targetPlatform.value === "codeforces" && handle) {
       request.codeforcesHandle = handle;
     }
     if (state.mode === "demo") {
@@ -395,7 +431,7 @@ async function openLoginTerminal() {
     await api("/api/login-terminal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: "{}"
+      body: JSON.stringify({ platform: elements.targetPlatform.value })
     });
     addActivity("LOGIN", "已请求打开可见 PowerShell 登录终端。")
     showToast("登录终端已打开，请在窗口中完成交互。")
@@ -438,11 +474,13 @@ elements.previewButton.addEventListener("click", createPreview);
 elements.confirmButton.addEventListener("click", confirmSubmission);
 elements.unlockButton.addEventListener("click", unlockRealMode);
 elements.loginButton.addEventListener("click", openLoginTerminal);
+elements.targetPlatform.addEventListener("change", () => setPlatform(elements.targetPlatform.value));
 elements.problemUrl.addEventListener("input", clearOperation);
 elements.handle.addEventListener("input", clearOperation);
 elements.scenario.addEventListener("change", clearOperation);
 
 setClock();
 setInterval(setClock, 1000);
+setPlatform("codeforces");
 setMode("demo");
 refreshStatus();

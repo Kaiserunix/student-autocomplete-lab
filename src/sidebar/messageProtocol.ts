@@ -1,6 +1,7 @@
 import type { AiProviderConfigUpdate } from "../config/modelEnv";
 import type { StudentSkillCorrectionType } from "../teaching/studentSkill";
 import type { OjVerdict } from "../teaching/types";
+import type { SubmissionPlatform } from "../submission/types";
 import type { CompletionReason } from "./problemArchive";
 import type { UiLanguage } from "./stateView";
 
@@ -78,11 +79,12 @@ export type WebviewMessage =
       archiveOnComplete?: boolean;
     }
   | { command: "requestOptimizationReview"; problemKey: string; studentRequest?: string }
-  | { command: "requestOjLogin" }
+  | { command: "requestOjLogin"; platform: SubmissionPlatform }
   | {
       command: "requestOjSubmissionPreview";
       problemKey: string;
       problemUrl: string;
+      platform: SubmissionPlatform;
       codeforcesHandle?: string;
     }
   | { command: "confirmOjSubmission"; confirmationId: string }
