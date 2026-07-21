@@ -259,13 +259,22 @@ describe("problem bank webview script", () => {
   test("shows context boundary audits for AI diagnosis and autocomplete preview", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
-    expect(source).toContain("function autocompletePreviewAudit()");
-    expect(source).toContain('included: ["student_code_prefix_suffix", "language", "file_path", "code_habits"]');
+    expect(source).not.toContain("function autocompletePreviewAudit()");
     expect(source).toContain('"problem_statement"');
-    expect(source).toContain('"teacher_pack"');
     expect(source).toContain('"standard_answer"');
     expect(source).toContain("contextAudit");
     expect(source).toContain("appendContextAudit(data.contextAudit)");
+    expect(source).toContain("data.skillAudit");
+    expect(source).toContain('data.validationStatus === "validator-rejected"');
+    expect(source).toContain('data.validationStatus === "model-empty"');
+    expect(source).toContain("data.rejectionReason");
+    expect(source).toContain("audit.learnerRules");
+    expect(source).toContain("audit.renderer");
+    expect(source).toContain("audit.enforcement");
+    expect(source).toContain("step.renderer");
+    expect(source).toContain("step.validationStatus");
+    expect(source).not.toContain("contextAudit.prefix");
+    expect(source).not.toContain("contextAudit.suffix");
     expect(source).toContain('included: ["problem_statement", "student_code", "recent_hints", "student_profile", "teacher_pack_reference"]');
     expect(source).toContain("lessonReportContextAudit(report)");
     expect(source).toContain("已使用：");
