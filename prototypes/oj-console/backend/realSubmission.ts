@@ -2,7 +2,8 @@ import { mkdir, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pollCodeforcesVerdict } from "../../../src/submission/codeforcesVerdict";
 import { submitWithOnlineJudgeTools } from "../../../src/submission/onlineJudgeTools";
-import type { CodeforcesTarget } from "../../../src/submission/types";
+import { getSubmissionPlatformCapability } from "../../../src/submission/submissionTarget";
+import type { SubmissionTarget } from "../../../src/submission/types";
 import type { SourceRecord } from "./contracts";
 import type { SubmissionJobStore } from "./submissionJobs";
 
@@ -10,7 +11,7 @@ export interface RealSubmissionInput {
   jobs: SubmissionJobStore;
   jobId: string;
   source: SourceRecord;
-  target: CodeforcesTarget;
+  target: SubmissionTarget;
   codeforcesHandle?: string;
   runtimeRoot: string;
 }
@@ -36,21 +37,31 @@ export async function runRealSubmission(
   const removeDirectory = dependencies.removeDirectory ?? rm;
   const jobDirectory = path.join(input.runtimeRoot, input.jobId);
   const filePath = path.join(jobDirectory, input.source.metadata.fileName);
+  const platform = getSubmissionPlatformCapability(input.target.platform);
 
   input.jobs.update(input.jobId, {
     state: "submitting",
-    message: "正在向 Codeforces 提交一次。"
+    message: `正在向 ${platform.displayName} 提交一次。`
   });
 
   try {
     await makeDirectory(jobDirectory, { recursive: true });
     await writeSource(filePath, input.source.bytes);
     const submittedAfterSeconds = Math.floor(now() / 1_000);
-    const cliResult = await submit(input.target.canonicalUrl, filePath, jobDirectory);
+    const cliResult = await submit(input.target, filePath, jobDirectory);
     if (cliResult.status !== "submitted") {
       input.jobs.update(input.jobId, {
         state: "failed",
         message: cliResult.message,
+        ...(cliResult.submissionUrl ? { submissionUrl: cliResult.submissionUrl } : {})
+      });
+      return;
+    }
+
+    if (input.target.platform === "atcoder") {
+      input.jobs.update(input.jobId, {
+        state: "submitted",
+        message: "代码已提交到 AtCoder；请通过提交链接查看判题结果，不会自动重试。",
         ...(cliResult.submissionUrl ? { submissionUrl: cliResult.submissionUrl } : {})
       });
       return;

@@ -1,7 +1,11 @@
 import { timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, RequestListener, ServerResponse } from "node:http";
-import { parseCodeforcesProblemUrl } from "../../../src/submission/codeforcesTarget";
 import { checkOnlineJudgeTools } from "../../../src/submission/onlineJudgeTools";
+import {
+  listSubmissionPlatformCapabilities,
+  parseSubmissionTarget
+} from "../../../src/submission/submissionTarget";
+import type { SubmissionPlatform } from "../../../src/submission/types";
 import { PrototypeConfirmationStore } from "./confirmationStore";
 import {
   OjConsoleError,
@@ -9,7 +13,7 @@ import {
   type SubmissionMode
 } from "./contracts";
 import { runDemoSubmission, type DemoSubmissionInput } from "./demoSubmission";
-import { openCodeforcesLoginTerminal } from "./loginTerminal";
+import { openPlatformLoginTerminal } from "./loginTerminal";
 import { RealModeGate } from "./modeGate";
 import { runRealSubmission, type RealSubmissionInput } from "./realSubmission";
 import { SourceStore } from "./sourceStore";
@@ -26,7 +30,7 @@ export interface OjConsoleApiOptions {
   checkTool?: typeof checkOnlineJudgeTools;
   runDemo?: (input: Omit<DemoSubmissionInput, "sleep">) => Promise<void>;
   runReal?: (input: RealSubmissionInput) => Promise<void>;
-  openLogin?: () => void;
+  openLogin?: (platform: SubmissionPlatform) => void;
 }
 
 const demoScenarios = new Set<DemoScenario>([
@@ -45,7 +49,7 @@ export function createOjConsoleApi(options: OjConsoleApiOptions): RequestListene
   const checkTool = options.checkTool ?? checkOnlineJudgeTools;
   const runDemo = options.runDemo ?? ((input) => runDemoSubmission(input));
   const runReal = options.runReal ?? ((input) => runRealSubmission(input));
-  const openLogin = options.openLogin ?? (() => openCodeforcesLoginTerminal());
+  const openLogin = options.openLogin ?? ((platform) => openPlatformLoginTerminal(platform));
   const startedAt = options.startedAt ?? new Date().toISOString();
   let cachedStatusTool: Awaited<ReturnType<typeof checkOnlineJudgeTools>> | undefined;
   let cachedStatusToolUntil = 0;
@@ -69,11 +73,11 @@ export function createOjConsoleApi(options: OjConsoleApiOptions): RequestListene
     if (request.method === "GET" && url.pathname === "/api/status") {
       const tool = await checkStatusTool();
       sendJson(response, 200, {
-        version: "0.1",
+        version: "0.2",
         startedAt,
         mode: modeGate.isUnlocked() ? "real_unlocked" : "demo",
         realModeUnlocked: modeGate.isUnlocked(),
-        platform: "codeforces",
+        platforms: listSubmissionPlatformCapabilities(),
         tool,
         sources: sources.stats(),
         confirmations: confirmations.stats(),
@@ -96,14 +100,17 @@ export function createOjConsoleApi(options: OjConsoleApiOptions): RequestListene
       const mode = requireMode(body.mode);
       let target;
       try {
-        target = parseCodeforcesProblemUrl(requireString(body, "problemUrl"));
+        target = parseSubmissionTarget(requireString(body, "problemUrl"));
       } catch (error) {
         throw new OjConsoleError(
           "target_invalid",
-          error instanceof Error ? error.message : "Codeforces 题目链接不正确。"
+          error instanceof Error ? error.message : "题目链接不正确。"
         );
       }
       const codeforcesHandle = optionalString(body.codeforcesHandle);
+      if (target.platform !== "codeforces" && codeforcesHandle) {
+        throw new OjConsoleError("invalid_request", "AtCoder 提交不使用 Codeforces handle。");
+      }
       if (mode === "real") {
         modeGate.requireUnlocked();
         const tool = await checkTool();
@@ -176,14 +183,15 @@ export function createOjConsoleApi(options: OjConsoleApiOptions): RequestListene
     }
 
     if (request.method === "POST" && url.pathname === "/api/login-terminal") {
-      await readJsonObject(request);
+      const body = await readJsonObject(request);
       modeGate.requireUnlocked();
       const tool = await checkTool();
       if (!tool.available) {
         throw new OjConsoleError("tool_unavailable", tool.message, 503);
       }
-      openLogin();
-      sendJson(response, 202, { opened: true });
+      const platform = requirePlatform(body.platform);
+      openLogin(platform);
+      sendJson(response, 202, { opened: true, platform });
       return;
     }
 
@@ -193,7 +201,7 @@ export function createOjConsoleApi(options: OjConsoleApiOptions): RequestListene
   function startJob(jobId: string, operation: () => Promise<void>): void {
     void operation().catch(() => {
       const state = jobs.get(jobId).state;
-      if (["accepted", "rejected", "unknown", "failed"].includes(state)) {
+      if (["submitted", "accepted", "rejected", "unknown", "failed"].includes(state)) {
         return;
       }
       jobs.update(jobId, {
@@ -327,6 +335,14 @@ function requireMode(value: unknown): SubmissionMode {
     throw new OjConsoleError("invalid_request", "mode 必须是 demo 或 real。");
   }
   return value;
+}
+
+function requirePlatform(value: unknown): SubmissionPlatform {
+  const platform = value ?? "codeforces";
+  if (platform !== "codeforces" && platform !== "atcoder") {
+    throw new OjConsoleError("invalid_request", "platform 必须是 codeforces 或 atcoder。");
+  }
+  return platform;
 }
 
 function requireScenario(value: unknown): DemoScenario {

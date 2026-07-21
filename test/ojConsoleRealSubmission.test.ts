@@ -2,9 +2,12 @@ import { access, mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, test, vi } from "vitest";
-import type { CodeforcesTarget } from "../src/submission/types";
+import type { AtCoderTarget, CodeforcesTarget, SubmissionTarget } from "../src/submission/types";
 import type { SourceRecord } from "../prototypes/oj-console/backend/contracts";
-import { openCodeforcesLoginTerminal } from "../prototypes/oj-console/backend/loginTerminal";
+import {
+  openCodeforcesLoginTerminal,
+  openPlatformLoginTerminal
+} from "../prototypes/oj-console/backend/loginTerminal";
 import { runRealSubmission } from "../prototypes/oj-console/backend/realSubmission";
 import { SubmissionJobStore } from "../prototypes/oj-console/backend/submissionJobs";
 
@@ -29,6 +32,13 @@ const target: CodeforcesTarget = {
   canonicalUrl: "https://codeforces.com/contest/4/problem/A"
 };
 
+const atCoderTarget: AtCoderTarget = {
+  platform: "atcoder",
+  contestId: "abc350",
+  taskId: "abc350_a",
+  canonicalUrl: "https://atcoder.jp/contests/abc350/tasks/abc350_a"
+};
+
 async function makeJob(handle?: string) {
   const runtimeRoot = await mkdtemp(path.join(tmpdir(), "oj-console-real-"));
   const jobs = new SubmissionJobStore({ createId: () => "job-1", now: () => 10_000 });
@@ -39,7 +49,7 @@ async function makeJob(handle?: string) {
 describe("OJ console real submission", () => {
   test("submits once, polls a public verdict, and always deletes temporary source", async () => {
     const { runtimeRoot, jobs, job } = await makeJob("tourist");
-    const submit = vi.fn(async (_url: string, filePath: string) => {
+    const submit = vi.fn(async (_target: SubmissionTarget, filePath: string) => {
       expect(await readFile(filePath, "utf8")).toBe("SECRET_SOURCE_MARKER");
       return { status: "submitted" as const, message: "submitted", submissionUrl: "https://codeforces.com/contest/4/my" };
     });
@@ -112,6 +122,36 @@ describe("OJ console real submission", () => {
     expect(poll).not.toHaveBeenCalled();
     await expect(access(path.join(runtimeRoot, job.jobId))).rejects.toThrow();
   });
+
+  test("records an AtCoder submission without inventing a verdict or polling", async () => {
+    const runtimeRoot = await mkdtemp(path.join(tmpdir(), "oj-console-atcoder-"));
+    const jobs = new SubmissionJobStore({ createId: () => "job-atcoder", now: () => 10_000 });
+    const job = jobs.create({ mode: "real", source: source.metadata, target: atCoderTarget });
+    const submit = vi.fn(async () => ({
+      status: "submitted" as const,
+      message: "submitted",
+      submissionUrl: "https://atcoder.jp/contests/abc350/submissions/123456"
+    }));
+    const poll = vi.fn();
+
+    await runRealSubmission({
+      jobs,
+      jobId: job.jobId,
+      source,
+      target: atCoderTarget,
+      runtimeRoot
+    }, { submit, poll });
+
+    expect(submit).toHaveBeenCalledWith(atCoderTarget, expect.any(String), expect.any(String));
+    expect(poll).not.toHaveBeenCalled();
+    expect(jobs.get(job.jobId)).toMatchObject({
+      state: "submitted",
+      message: "代码已提交到 AtCoder；请通过提交链接查看判题结果，不会自动重试。",
+      submissionUrl: "https://atcoder.jp/contests/abc350/submissions/123456"
+    });
+    expect(jobs.get(job.jobId).verdict).toBeUndefined();
+    await expect(access(path.join(runtimeRoot, job.jobId))).rejects.toThrow();
+  });
 });
 
 describe("OJ console login terminal", () => {
@@ -133,5 +173,17 @@ describe("OJ console login terminal", () => {
     const launcher = vi.fn();
     expect(() => openCodeforcesLoginTerminal({ platform: "linux", launcher })).toThrow("仅支持 Windows");
     expect(launcher).not.toHaveBeenCalled();
+  });
+
+  test("maps AtCoder to one fixed visible login command", () => {
+    const launcher = vi.fn(() => ({ unref: vi.fn() }));
+
+    openPlatformLoginTerminal("atcoder", { platform: "win32", launcher });
+
+    expect(launcher).toHaveBeenCalledWith(
+      "powershell.exe",
+      ["-NoExit", "-Command", "oj login https://atcoder.jp/"],
+      { detached: true, stdio: "ignore", windowsHide: false }
+    );
   });
 });

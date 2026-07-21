@@ -47,7 +47,7 @@ export interface EditorSubmissionIdentity {
 export interface OjSubmissionPreview {
   confirmationId: string;
   problemKey: string;
-  target: CodeforcesTarget;
+  target: SubmissionTarget;
   editor: EditorSubmissionIdentity;
   codeforcesHandle?: string;
   createdAt: string;

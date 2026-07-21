@@ -191,6 +191,52 @@ describe("OJ console local API", () => {
     expect(openLogin).toHaveBeenCalledOnce();
   });
 
+  test("creates an AtCoder real preview and opens only its registered login flow", async () => {
+    const openLogin = vi.fn();
+    const { baseUrl } = await startApi({
+      token: "test-token",
+      runtimeRoot: ".runtime/test-oj-console",
+      checkTool: async () => ({ available: true, message: "ready", version: "12.0.0" }),
+      openLogin
+    });
+    const upload = await fetch(`${baseUrl}/api/source`, {
+      method: "POST",
+      headers: tokenHeaders({ "content-type": "application/octet-stream", "x-source-name": "main.cpp" }),
+      body: Buffer.from("int main(){}")
+    });
+    const source = await json(upload);
+    await fetch(`${baseUrl}/api/real-mode/unlock`, {
+      method: "POST",
+      headers: tokenHeaders({ "content-type": "application/json" }),
+      body: JSON.stringify({ phrase: REAL_MODE_UNLOCK_PHRASE })
+    });
+
+    const previewResponse = await fetch(`${baseUrl}/api/preview`, {
+      method: "POST",
+      headers: tokenHeaders({ "content-type": "application/json" }),
+      body: JSON.stringify({
+        sourceId: source.sourceId,
+        problemUrl: "https://atcoder.jp/contests/abc350/tasks/abc350_a",
+        mode: "real"
+      })
+    });
+    expect(previewResponse.status).toBe(201);
+    expect(await json(previewResponse)).toMatchObject({
+      target: {
+        platform: "atcoder",
+        canonicalUrl: "https://atcoder.jp/contests/abc350/tasks/abc350_a"
+      }
+    });
+
+    const login = await fetch(`${baseUrl}/api/login-terminal`, {
+      method: "POST",
+      headers: tokenHeaders({ "content-type": "application/json" }),
+      body: JSON.stringify({ platform: "atcoder" })
+    });
+    expect(login.status).toBe(202);
+    expect(openLogin).toHaveBeenCalledWith("atcoder");
+  });
+
   test("rejects wrong body types and bounds source bytes without leaking them", async () => {
     const { baseUrl } = await startApi({ token: "test-token", runtimeRoot: ".runtime/test-oj-console" });
     const wrongType = await fetch(`${baseUrl}/api/source`, {

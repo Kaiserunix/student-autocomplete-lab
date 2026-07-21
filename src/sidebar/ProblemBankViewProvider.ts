@@ -1724,7 +1724,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     );
     const submittedAfterSeconds = Math.floor(Date.now() / 1_000);
     const cliResult = await submitWithOnlineJudgeTools(
-      preview.target.canonicalUrl,
+      preview.target,
       preview.editor.filePath,
       path.dirname(preview.editor.filePath)
     );
@@ -1733,6 +1733,20 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       const result: OjSubmissionResult = {
         status: cliResult.status,
         message: cliResult.message,
+        submissionUrl: cliResult.submissionUrl
+      };
+      return {
+        type: "ojSubmissionResult",
+        problemKey: preview.problemKey,
+        result,
+        status: result.message
+      };
+    }
+
+    if (preview.target.platform === "atcoder") {
+      const result: OjSubmissionResult = {
+        status: "submitted",
+        message: "代码已提交到 AtCoder；请通过提交链接查看判题结果，不会自动重试。",
         submissionUrl: cliResult.submissionUrl
       };
       return {

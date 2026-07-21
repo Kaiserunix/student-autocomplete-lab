@@ -7,11 +7,15 @@ import {
   submitWithOnlineJudgeTools
 } from "../src/submission/onlineJudgeTools";
 import type { ProcessRunner } from "../src/submission/processHost";
+import { parseSubmissionTarget } from "../src/submission/submissionTarget";
+
+const codeforcesTarget = parseSubmissionTarget("https://codeforces.com/contest/1200/problem/F");
+const atCoderTarget = parseSubmissionTarget("https://atcoder.jp/contests/abc350/tasks/abc350_a");
 
 describe("online-judge-tools adapter", () => {
   test("builds fixed availability and non-interactive submit commands", () => {
     expect(buildOjAvailabilityCommand()).toEqual({ command: "oj", args: ["--version"] });
-    expect(buildOjSubmitCommand("https://codeforces.com/contest/1200/problem/F", "C:/work/main.cpp")).toEqual({
+    expect(buildOjSubmitCommand(codeforcesTarget, "C:/work/main.cpp")).toEqual({
       command: "oj",
       args: [
         "submit",
@@ -27,6 +31,7 @@ describe("online-judge-tools adapter", () => {
 
   test("does not expose source previews from oj output", () => {
     const parsed = parseOjSubmitOutput(
+      codeforcesTarget,
       0,
       [
         "[x] code (2341 byte):",
@@ -44,11 +49,11 @@ describe("online-judge-tools adapter", () => {
   });
 
   test("classifies login and generic failures without returning raw output", () => {
-    expect(parseOjSubmitOutput(1, "You are not logged in.\nsecret source")).toEqual({
+    expect(parseOjSubmitOutput(codeforcesTarget, 1, "You are not logged in.\nsecret source")).toEqual({
       status: "login_required",
       message: "Codeforces 登录已失效，请先重新登录。"
     });
-    expect(parseOjSubmitOutput(1, "unexpected upstream body\nsecret source")).toEqual({
+    expect(parseOjSubmitOutput(codeforcesTarget, 1, "unexpected upstream body\nsecret source")).toEqual({
       status: "failed",
       message: "oj 未能确认提交成功；不会自动重试，请检查登录和题目链接。"
     });
@@ -71,12 +76,31 @@ describe("online-judge-tools adapter", () => {
     await expect(checkOnlineJudgeTools(runner)).resolves.toMatchObject({ available: true, version: "11.5.1" });
     await expect(
       submitWithOnlineJudgeTools(
-        "https://codeforces.com/contest/1200/problem/F",
+        codeforcesTarget,
         "C:/work/main.cpp",
         "C:/work",
         runner
       )
     ).resolves.toMatchObject({ status: "submitted" });
-    expect(calls[1]).toEqual(buildOjSubmitCommand("https://codeforces.com/contest/1200/problem/F", "C:/work/main.cpp"));
+    expect(calls[1]).toEqual(buildOjSubmitCommand(codeforcesTarget, "C:/work/main.cpp"));
+  });
+
+  test("recognizes only an AtCoder submission URL without exposing process output", () => {
+    const parsed = parseOjSubmitOutput(
+      atCoderTarget,
+      0,
+      [
+        "[x] code (120 byte):",
+        "secret atcoder source",
+        "[SUCCESS] result: https://atcoder.jp/contests/abc350/submissions/123456"
+      ].join("\n")
+    );
+
+    expect(parsed).toEqual({
+      status: "submitted",
+      submissionUrl: "https://atcoder.jp/contests/abc350/submissions/123456",
+      message: "代码已提交到 AtCoder。"
+    });
+    expect(JSON.stringify(parsed)).not.toContain("secret atcoder source");
   });
 });

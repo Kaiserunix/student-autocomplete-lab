@@ -1,13 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type {
-  CodeforcesTarget,
   EditorSubmissionIdentity,
-  OjSubmissionPreview
+  OjSubmissionPreview,
+  SubmissionTarget
 } from "./types";
 
 export interface CreateSubmissionPreviewInput {
   problemKey: string;
-  target: CodeforcesTarget;
+  target: SubmissionTarget;
   editor: EditorSubmissionIdentity;
   codeforcesHandle?: string;
 }

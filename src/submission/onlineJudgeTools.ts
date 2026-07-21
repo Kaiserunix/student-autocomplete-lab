@@ -1,4 +1,5 @@
-import type { OjCliResult, OjToolAvailability } from "./types";
+import { getSubmissionPlatformCapability } from "./submissionTarget";
+import type { OjCliResult, OjToolAvailability, SubmissionTarget } from "./types";
 import {
   runBoundedProcess,
   type ProcessCommand,
@@ -10,27 +11,32 @@ export function buildOjAvailabilityCommand(): ProcessCommand {
   return { command: "oj", args: ["--version"] };
 }
 
-export function buildOjSubmitCommand(url: string, filePath: string): ProcessCommand {
+export function buildOjSubmitCommand(target: SubmissionTarget, filePath: string): ProcessCommand {
   return {
     command: "oj",
-    args: ["submit", "--yes", "--no-open", "--wait", "0", url, filePath]
+    args: ["submit", "--yes", "--no-open", "--wait", "0", target.canonicalUrl, filePath]
   };
 }
 
-export function parseOjSubmitOutput(exitCode: number | null, output: string): OjCliResult {
+export function parseOjSubmitOutput(
+  target: SubmissionTarget,
+  exitCode: number | null,
+  output: string
+): OjCliResult {
+  const platform = getSubmissionPlatformCapability(target.platform);
   if (/you are not logged in|login required/i.test(output)) {
     return {
       status: "login_required",
-      message: "Codeforces 登录已失效，请先重新登录。"
+      message: `${platform.displayName} 登录已失效，请先重新登录。`
     };
   }
 
-  const successUrl = output.match(/success:\s*result:\s*(https:\/\/codeforces\.com\/[^\s]+)/i)?.[1];
+  const successUrl = /success/i.test(output) ? findSubmissionUrl(target, output) : undefined;
   if (exitCode === 0 && successUrl) {
     return {
       status: "submitted",
-      submissionUrl: trimUrlPunctuation(successUrl),
-      message: "代码已提交到 Codeforces。"
+      submissionUrl: successUrl,
+      message: `代码已提交到 ${platform.displayName}。`
     };
   }
 
@@ -77,12 +83,12 @@ export async function checkOnlineJudgeTools(
 }
 
 export async function submitWithOnlineJudgeTools(
-  url: string,
+  target: SubmissionTarget,
   filePath: string,
   cwd: string,
   runner: ProcessRunner = runBoundedProcess
 ): Promise<OjCliResult> {
-  const command = buildOjSubmitCommand(url, filePath);
+  const command = buildOjSubmitCommand(target, filePath);
   const result = await runner(command.command, command.args, {
     cwd,
     timeoutMs: 120_000,
@@ -93,10 +99,47 @@ export async function submitWithOnlineJudgeTools(
     return { status: "unavailable", message: "未找到 oj 命令，请先安装 online-judge-tools。" };
   }
   if (result.timedOut) {
-    return { status: "failed", message: "oj 提交等待超时；不会自动重试，请先检查 Codeforces 提交记录。" };
+    const platform = getSubmissionPlatformCapability(target.platform);
+    return {
+      status: "failed",
+      message: `oj 提交等待超时；不会自动重试，请先检查 ${platform.displayName} 提交记录。`
+    };
   }
 
-  return parseOjSubmitOutput(result.exitCode, combinedOutput(result));
+  return parseOjSubmitOutput(target, result.exitCode, combinedOutput(result));
+}
+
+function findSubmissionUrl(target: SubmissionTarget, output: string): string | undefined {
+  const candidates = output.match(/https:\/\/[^\s]+/gi) ?? [];
+  for (const candidate of candidates) {
+    const value = trimUrlPunctuation(candidate);
+    let parsed: URL;
+    try {
+      parsed = new URL(value);
+    } catch {
+      continue;
+    }
+    if (isSubmissionUrlForTarget(target, parsed)) {
+      return parsed.toString().replace(/\/$/, "");
+    }
+  }
+  return undefined;
+}
+
+function isSubmissionUrlForTarget(target: SubmissionTarget, parsed: URL): boolean {
+  const hostname = parsed.hostname.toLowerCase();
+  if (target.platform === "codeforces") {
+    if (hostname !== "codeforces.com" && hostname !== "www.codeforces.com") {
+      return false;
+    }
+    const prefix = target.contestKind === "gym" ? "gym" : "contest";
+    return new RegExp(`^/${prefix}/${target.contestId}/(?:my|submission/\\d+)/?$`).test(parsed.pathname);
+  }
+  if (hostname !== "atcoder.jp" && hostname !== "www.atcoder.jp") {
+    return false;
+  }
+  return new RegExp(`^/contests/${escapeRegExp(target.contestId)}/submissions/(?:me|\\d+)/?$`)
+    .test(parsed.pathname);
 }
 
 function combinedOutput(result: ProcessRunResult): string {
@@ -109,4 +152,8 @@ function parseVersion(output: string): string | undefined {
 
 function trimUrlPunctuation(value: string): string {
   return value.replace(/[),.;]+$/, "");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }

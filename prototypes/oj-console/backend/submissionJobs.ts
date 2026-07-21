@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { CodeforcesTarget, OfficialOjVerdict } from "../../../src/submission/types";
+import type { OfficialOjVerdict, SubmissionTarget } from "../../../src/submission/types";
 import {
   OjConsoleError,
   type DemoScenario,
@@ -13,7 +13,7 @@ export interface CreateSubmissionJobInput {
   mode: SubmissionMode;
   scenario?: DemoScenario;
   source: SourceMetadata;
-  target: CodeforcesTarget;
+  target: SubmissionTarget;
   codeforcesHandle?: string;
 }
 
@@ -36,16 +36,17 @@ export interface SubmissionJobStoreOptions {
 
 const allowedTransitions: Record<SubmissionJobState, SubmissionJobState[]> = {
   created: ["submitting", "queued", "failed"],
-  submitting: ["queued", "accepted", "rejected", "unknown", "failed"],
-  queued: ["judging", "accepted", "rejected", "unknown", "failed"],
-  judging: ["accepted", "rejected", "unknown", "failed"],
+  submitting: ["queued", "submitted", "accepted", "rejected", "unknown", "failed"],
+  queued: ["judging", "submitted", "accepted", "rejected", "unknown", "failed"],
+  judging: ["submitted", "accepted", "rejected", "unknown", "failed"],
+  submitted: [],
   accepted: [],
   rejected: [],
   unknown: [],
   failed: []
 };
 
-const terminalStates = new Set<SubmissionJobState>(["accepted", "rejected", "unknown", "failed"]);
+const terminalStates = new Set<SubmissionJobState>(["submitted", "accepted", "rejected", "unknown", "failed"]);
 
 export class SubmissionJobStore {
   private readonly records = new Map<string, SubmissionJobView>();

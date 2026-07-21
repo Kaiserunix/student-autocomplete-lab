@@ -1,4 +1,4 @@
-import type { CodeforcesTarget, OfficialOjVerdict } from "../../../src/submission/types";
+import type { OfficialOjVerdict, SubmissionTarget } from "../../../src/submission/types";
 
 export type SubmissionMode = "demo" | "real";
 export type DemoScenario = "accepted" | "wrong_answer" | "compile_error" | "unknown" | "login_required";
@@ -7,6 +7,7 @@ export type SubmissionJobState =
   | "submitting"
   | "queued"
   | "judging"
+  | "submitted"
   | "accepted"
   | "rejected"
   | "unknown"
@@ -43,7 +44,7 @@ export interface SubmissionPreview {
   mode: SubmissionMode;
   scenario?: DemoScenario;
   source: SourceMetadata;
-  target: CodeforcesTarget;
+  target: SubmissionTarget;
   codeforcesHandle?: string;
   createdAt: string;
   expiresAt: string;
@@ -56,7 +57,7 @@ export interface SubmissionJobView {
   scenario?: DemoScenario;
   state: SubmissionJobState;
   source: SourceMetadata;
-  target: CodeforcesTarget;
+  target: SubmissionTarget;
   codeforcesHandle?: string;
   createdAt: string;
   updatedAt: string;

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { CodeforcesTarget } from "../../../src/submission/types";
+import type { SubmissionTarget } from "../../../src/submission/types";
 import {
   OjConsoleError,
   type DemoScenario,
@@ -10,7 +10,7 @@ import {
 
 export interface CreatePrototypePreviewInput {
   source: SourceRecord;
-  target: CodeforcesTarget;
+  target: SubmissionTarget;
   mode: SubmissionMode;
   scenario?: DemoScenario;
   codeforcesHandle?: string;
