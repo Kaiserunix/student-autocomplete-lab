@@ -19,6 +19,23 @@ export interface CodeforcesTarget {
   canonicalUrl: string;
 }
 
+export interface AtCoderTarget {
+  platform: "atcoder";
+  contestId: string;
+  taskId: string;
+  canonicalUrl: string;
+}
+
+export type SubmissionTarget = CodeforcesTarget | AtCoderTarget;
+export type SubmissionPlatform = SubmissionTarget["platform"];
+
+export interface SubmissionPlatformCapability {
+  platform: SubmissionPlatform;
+  displayName: string;
+  loginUrl: string;
+  verdictPolling: "public_api" | "submission_url";
+}
+
 export interface EditorSubmissionIdentity {
   uri: string;
   filePath: string;
