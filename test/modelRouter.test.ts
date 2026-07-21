@@ -101,4 +101,19 @@ describe("model router", () => {
       config: { transport }
     });
   });
+
+  test("attaches normalized capabilities to autocomplete routes", () => {
+    const route = routeAutocompleteModel({
+      AI_PROVIDER_MODE: "openai-compatible",
+      AI_OPENAI_COMPAT_BASE_URL: "https://api.deepseek.com/v1",
+      AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL: "https://api.deepseek.com/beta",
+      AI_OPENAI_COMPAT_API_KEY: "test-key",
+      AI_OPENAI_COMPAT_CHAT_MODEL: "deepseek-v4-pro",
+      AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL: "deepseek-v4-flash",
+      AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT: "openai-completions"
+    });
+
+    expect(route.capabilities.renderer).toBe("deepseek-fim");
+    expect(route.capabilities.supportsFimSuffix).toBe(true);
+  });
 });

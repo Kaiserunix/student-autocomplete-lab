@@ -1,6 +1,10 @@
 import * as path from "node:path";
 import { describe, expect, test } from "vitest";
-import { resolveCodexServicePaths } from "../src/codex/codexServices";
+import {
+  CODEX_HTTP_MODEL_PROVIDER_ID,
+  codexHttpAppServerArgs,
+  resolveCodexServicePaths
+} from "../src/codex/codexServices";
 
 describe("Codex extension service paths", () => {
   test("keeps OAuth state and runtime cwd below global storage and outside the workspace", () => {
@@ -19,6 +23,17 @@ describe("Codex extension service paths", () => {
     expect(isDescendant(workspacePath, paths.codexHome)).toBe(false);
     expect(isDescendant(workspacePath, paths.runtimeCwd)).toBe(false);
     expect(paths.codexHome).not.toBe(paths.runtimeCwd);
+  });
+
+  test("configures the private app-server transport to use OAuth over Responses HTTP", () => {
+    expect(codexHttpAppServerArgs()).toEqual([
+      "app-server",
+      "-c", `model_providers.${CODEX_HTTP_MODEL_PROVIDER_ID}.name=StudentAutocompleteHttp`,
+      "-c", `model_providers.${CODEX_HTTP_MODEL_PROVIDER_ID}.base_url=https://chatgpt.com/backend-api/codex`,
+      "-c", `model_providers.${CODEX_HTTP_MODEL_PROVIDER_ID}.wire_api=responses`,
+      "-c", `model_providers.${CODEX_HTTP_MODEL_PROVIDER_ID}.requires_openai_auth=true`,
+      "-c", `model_providers.${CODEX_HTTP_MODEL_PROVIDER_ID}.supports_websockets=false`
+    ]);
   });
 });
 

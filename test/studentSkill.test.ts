@@ -230,9 +230,6 @@ describe("student skill", () => {
 
     expect(skill.skills["binary-tree-depth-numbered-children"].status).toBe("mastered");
     expect(studentSkillSummaryForTeaching(skill).activeSkills).toEqual(["binary-tree-depth-numbered-children"]);
-    expect(buildAutocompleteSkillContext(skill, "python").activeSkillNames).toEqual([
-      "binary-tree-depth-numbered-children"
-    ]);
   });
 
   test("builds an autocomplete context that excludes teacher-only evidence", () => {
@@ -259,7 +256,10 @@ describe("student skill", () => {
 
     expect(context.allowFullSolutionAutocomplete).toBe(false);
     expect(context.autocompleteMayReadProblemStatement).toBe(false);
-    expect(context.rules).toEqual(["prefer sys.stdin.readline in OJ scripts"]);
+    expect(context.learnerRuleIds).toEqual([]);
+    expect(context).not.toHaveProperty("activeSkillNames");
+    expect(context).not.toHaveProperty("disabledSkills");
+    expect(JSON.stringify(context)).not.toContain("prefer sys.stdin.readline");
     expect(JSON.stringify(context)).not.toContain("P1030 standard answer");
   });
 

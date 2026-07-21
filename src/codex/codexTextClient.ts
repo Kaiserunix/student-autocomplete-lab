@@ -53,7 +53,8 @@ const TOOL_SERVER_REQUEST_METHODS = new Set([
 export class CodexTextClient implements ModelTextTransport {
   constructor(
     private readonly appServer: CodexTextAppServer,
-    private readonly runtimeCwd: string
+    private readonly runtimeCwd: string,
+    private readonly modelProvider?: string
   ) {}
 
   async generate(request: ModelTextRequest): Promise<string> {
@@ -62,6 +63,7 @@ export class CodexTextClient implements ModelTextTransport {
       "thread/start",
       {
         model: request.model,
+        ...(this.modelProvider ? { modelProvider: this.modelProvider } : {}),
         cwd: this.runtimeCwd,
         approvalPolicy: "never",
         sandbox: "read-only",
@@ -105,7 +107,8 @@ export class CodexTextClient implements ModelTextTransport {
         "turn/start",
         {
           threadId,
-          input: [{ type: "text", text: request.prompt }]
+          input: [{ type: "text", text: request.prompt }],
+          ...(request.purpose === "autocomplete" ? { effort: "low", summary: "none" } : {})
         },
         remainingMs(deadline)
       );

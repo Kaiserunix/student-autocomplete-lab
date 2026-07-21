@@ -5,6 +5,7 @@ import type {
   TeachingProviderConfig
 } from "../config/modelEnv";
 import type { ModelTextTransport } from "./modelTextTransport";
+import type { ProviderCapabilities } from "../skills/types";
 
 export type ModelRoutePurpose = "analysis" | "autocomplete";
 export type ModelProtocolFormat = AutocompleteFormat | "codex-app-server";
@@ -27,5 +28,6 @@ export interface ModelRoute<
   baseUrl: string;
   endpoint: string;
   format: ModelProtocolFormat;
+  capabilities: ProviderCapabilities;
   config: TConfig;
 }

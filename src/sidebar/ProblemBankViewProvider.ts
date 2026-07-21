@@ -5,7 +5,7 @@ import { appendAttemptEventToSession, ensureAttemptSession, loadAttemptSessions 
 import type { AttemptStorePaths, CoachThreadTurn } from "../attempt/schema";
 import { problemRefFromRecord } from "../attempt/session";
 import { buildAutocompleteInputFromText, extractStudentCodeFromText } from "../autocomplete/context";
-import { requestMimoAutocomplete } from "../autocomplete/mimoAutocomplete";
+import { requestMimoAutocompleteDetailed } from "../autocomplete/mimoAutocomplete";
 import type { CodexServices } from "../codex/codexServices";
 import { sanitizeCodexPublicError } from "../codex/codexAuthService";
 import type { CodexModelService, CodexModelsView } from "../codex/codexModelService";
@@ -26,10 +26,12 @@ import {
   type InternalTestRecorder
 } from "../internalTesting/internalTestRecorder";
 import { requestChatCompletionText, type ChatCompletionProviderConfig } from "../models/chatCompletionsClient";
-import { requestCompletion, type CompletionProviderConfig } from "../models/completionsClient";
+import type { CompletionProviderConfig } from "../models/completionsClient";
 import { listProviderModels } from "../models/providerModelsClient";
 import { routeAutocompleteModel, routeTeachingModel } from "../models/modelRouter";
 import type { ModelTextTransport } from "../models/modelTextTransport";
+import { toPublicSkillPlanAudit } from "../skills/auditView";
+import type { SkillPlanAudit } from "../skills/types";
 import { fetchLuoguProblem } from "../problemBank/luoguClient";
 import { fetchLuoguProblemSet } from "../problemBank/luoguProblemSetClient";
 import { searchLuoguProblems, searchLuoguProblemSets } from "../problemBank/luoguSearchClient";
@@ -42,10 +44,10 @@ import { checkOnlineJudgeTools, submitWithOnlineJudgeTools } from "../submission
 import { getSubmissionPlatformCapability, parseSubmissionTarget } from "../submission/submissionTarget";
 import type { EditorSubmissionIdentity, OjSubmissionResult, SubmissionPlatform } from "../submission/types";
 import { buildAttemptEvent, summarizeAttemptEvents, type AttemptEvent } from "../teaching/attemptEvent";
-import { requestMimoCoachFollowUp } from "../teaching/coachFollowUp";
+import { requestMimoCoachFollowUpWithSkills } from "../teaching/coachFollowUp";
 import { requestMimoLessonReport } from "../teaching/lessonReport";
 import { buildLuoguMcpRecommendationCandidates } from "../teaching/luoguMcpRecommendationCandidates";
-import { requestMimoTeachingDiagnosis } from "../teaching/mimoTeacher";
+import { requestMimoTeachingDiagnosisWithSkills } from "../teaching/mimoTeacher";
 import { requestMimoOptimizationReport, type OptimizationReport } from "../teaching/optimizationReport";
 import {
   mergeRecommendationCandidates,
@@ -635,11 +637,25 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const knownSecrets = collectKnownSecrets(baseEnv, env, config);
     const checkedAt = new Date().toISOString();
 
-    const [models, chatSmoke, autocompleteSmoke] = await Promise.all([
-      runModelListHealthCheck(env, mode, config, knownSecrets, this.codexServices.models),
-      runChatSmokeHealthCheck(env, config, knownSecrets, this.codexServices.text),
-      runAutocompleteSmokeHealthCheck(env, config, knownSecrets, this.codexServices.text)
-    ]);
+    const models = await runModelListHealthCheck(
+      env,
+      mode,
+      config,
+      knownSecrets,
+      this.codexServices.models
+    );
+    const chatSmoke = await runChatSmokeHealthCheck(
+      env,
+      config,
+      knownSecrets,
+      this.codexServices.text
+    );
+    const autocompleteSmoke = await runAutocompleteSmokeHealthCheck(
+      env,
+      config,
+      knownSecrets,
+      this.codexServices.text
+    );
     const result: AiHealthCheckResult = {
       checkedAt,
       providerMode: mode,
@@ -823,9 +839,14 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       throw new Error("先打开你的代码文件，AI 才能分析当前卡点。");
     }
 
-    const config = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text).config;
+    const route = routeTeachingModel(
+      await this.loadRuntimeModelEnv(),
+      this.codexServices.text
+    );
+    const config = route.config;
     const profile = await loadStudentProfile(this.profilePath());
     const studentSkill = await this.loadStudentSkillForProfile(profile);
+    let coachSkillAudit: SkillPlanAudit | undefined;
     const teacherPack = await this.ensureTeacherPack(problem, config);
     const occurredAt = new Date().toISOString();
     const context = buildSidebarTeachingContext({
@@ -840,16 +861,26 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     });
 
     if (action === "followUp") {
-      const followUpReport = await requestMimoCoachFollowUp(config, {
-        problem: context.problem,
-        teacherPack: context.teacherPack,
-        language: context.language,
-        studentCode: context.studentCode,
-        studentProfile: context.studentProfile,
-        studentRequest: studentRequest?.trim() || "请把上一条提示讲得更详细但更容易懂。",
-        previousCoachTurn,
-        responseLanguage: context.responseLanguage
-      });
+      const followUpReport = await requestMimoCoachFollowUpWithSkills(
+        config,
+        {
+          problem: context.problem,
+          teacherPack: context.teacherPack,
+          language: context.language,
+          studentCode: context.studentCode,
+          studentProfile: context.studentProfile,
+          studentRequest: studentRequest?.trim() || "请把上一条提示讲得更详细但更容易懂。",
+          previousCoachTurn,
+          responseLanguage: context.responseLanguage
+        },
+        {
+          studentSkill,
+          capabilities: route.capabilities,
+          onAudit: (audit) => {
+            coachSkillAudit = audit;
+          }
+        }
+      );
       const event = buildAttemptEvent({
           problemKey,
           problemId: problem.id,
@@ -886,9 +917,13 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         payload: {
           followUpOnly: true,
           hasPreviousCoachTurn: Boolean(previousCoachTurn?.trim()),
-          hasStudentRequest: Boolean(studentRequest?.trim())
+          hasStudentRequest: Boolean(studentRequest?.trim()),
+          coachSkillAudit
         }
       });
+      const skillAudit = coachSkillAudit
+        ? toPublicSkillPlanAudit("coach", coachSkillAudit)
+        : undefined;
 
       return {
         type: "coachFollowUp",
@@ -896,6 +931,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         problemKey,
         model: config.model,
         report: followUpReport,
+        skillAudit,
         status: `AI 已回答 ${problem.id} 的追问。`
       };
     }
@@ -909,7 +945,19 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       studentSkill,
       occurredAt,
       patchSource: config.model,
-      diagnose: (diagnosisContext) => requestMimoTeachingDiagnosis(config, diagnosisContext)
+      diagnose: (diagnosisContext) =>
+        requestMimoTeachingDiagnosisWithSkills(
+          config,
+          diagnosisContext,
+          {
+            studentSkill,
+            action,
+            capabilities: route.capabilities,
+            onAudit: (audit) => {
+              coachSkillAudit = audit;
+            }
+          }
+        )
     });
     await saveStudentProfile(this.profilePath(), result.updatedProfile);
     await saveStudentSkill(this.studentSkillPath(), result.updatedStudentSkill);
@@ -947,9 +995,13 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       payload: {
         candidateSkill: result.report.skillUpdate?.candidate,
         skillMergeChangeCount: result.studentSkillMerge.changeSummary.length,
-        workflowAudit: result.audit
+        workflowAudit: result.audit,
+        coachSkillAudit
       }
     });
+    const skillAudit = coachSkillAudit
+      ? toPublicSkillPlanAudit("coach", coachSkillAudit)
+      : undefined;
 
     return {
       type: "teachingDiagnosis",
@@ -964,6 +1016,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       studentSkillSummary: studentSkillSummaryForTeaching(result.updatedStudentSkill),
       studentSkillMerge: result.studentSkillMerge,
       workflowAudit: result.audit,
+      skillAudit,
       teacherPack: teacherPack
         ? {
             generatedAt: teacherPack.generatedAt,
@@ -1615,7 +1668,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       throw new Error("先打开你的代码文件，再测试补全。");
     }
 
-    const config = routeAutocompleteModel(await this.loadRuntimeModelEnv(), this.codexServices.text).config;
+    const route = routeAutocompleteModel(
+      await this.loadRuntimeModelEnv(),
+      this.codexServices.text
+    );
     const position = editor.selection.active;
     const input = buildAutocompleteInputFromText({
       text: editor.document.getText(),
@@ -1623,34 +1679,48 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       language: editor.document.languageId,
       filePath: editor.document.uri.fsPath
     });
-    const suggestion = await requestMimoAutocomplete(config, {
+    const profile = await loadStudentProfile(this.profilePath());
+    const studentSkill = await this.loadStudentSkillForProfile(profile);
+    const result = await requestMimoAutocompleteDetailed(route.config, {
       ...input,
-      habits: ["Prefer direct student code.", "Return only the immediate local continuation."]
+      studentSkill,
+      capabilities: route.capabilities
     });
-    const contextAudit = autocompletePreviewAudit();
+    const contextAudit = toPublicSkillPlanAudit(
+      "autocomplete_preview",
+      result.audit
+    );
     await this.recordInternalTestEvent({
       kind: "autocomplete_event",
       action: "preview",
-      model: config.model,
+      model: route.model,
       payload: {
         language: editor.document.languageId,
         line: position.line + 1,
-        empty: !suggestion.trim(),
+        validationStatus: result.status,
+        rejectionReason: result.rejectionReason,
         contextAudit
       }
     });
 
+    const status =
+      result.status === "success"
+        ? "AI 已生成一次补全预览。"
+        : result.status === "model-empty"
+          ? "AI 补全模型返回为空；请换到有局部上下文的代码位置再试。"
+          : "AI 返回内容已被安全策略拦截：" +
+            (result.rejectionReason ?? "unknown");
+
     return {
       type: "autocompletePreview",
-      model: config.model,
-      suggestion,
+      model: route.model,
+      suggestion: result.suggestion,
+      validationStatus: result.status,
+      rejectionReason: result.rejectionReason,
       language: editor.document.languageId,
-      filePath: editor.document.uri.fsPath,
       line: position.line + 1,
       contextAudit,
-      status: suggestion.trim()
-        ? "AI 已生成一次补全预览。"
-        : "AI 补全接口已调用，但这次返回为空。换到有上下文的代码行再试。"
+      status
     };
   }
 
@@ -4760,6 +4830,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       if (item.status === "pass") {
         return "通过";
       }
+      if (item.validationStatus === "validator-rejected") {
+        return "补全被安全检查拦截。";
+      }
+      if (item.validationStatus === "model-empty") {
+        return "模型没有返回补全内容。";
+      }
       return item.errorHint || item.error || healthCheckDefaultHint(kind, item) || "未通过";
     }
 
@@ -5720,6 +5796,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       quickActions.appendChild(simplerButton);
       aiResponse.appendChild(quickActions);
       appendContextAudit(data.workflowAudit || coachContextAudit("follow_up"));
+      appendContextAudit(data.skillAudit);
       appendCoachFollowUpTurn(data.problemKey || state.selectedKey, data, report);
       renderCoach();
     }
@@ -5786,20 +5863,31 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       appendCoachTurn(data.problemKey || state.selectedKey, data, report, localized);
       renderCoach();
       appendContextAudit(data.workflowAudit);
+      appendContextAudit(data.skillAudit);
     }
 
     function renderAutocompletePreview(data) {
       aiResponse.innerHTML = "";
       aiResponse.appendChild(textSpan("补全预览", "aiResponseTitle"));
-      aiResponse.appendChild(textSpan(data.language || "代码", "mini"));
-      if (data.suggestion) {
+      aiResponse.appendChild(
+        textSpan(data.line ? "第 " + data.line + " 行 · " + (data.language || "代码") : (data.language || "代码"), "mini")
+      );
+      if (data.validationStatus === "validator-rejected") {
+        aiResponse.appendChild(
+          responseBlock("已被安全检查拦截", data.rejectionReason || "这段补全不符合当前安全规则。")
+        );
+      } else if (data.validationStatus === "model-empty") {
+        aiResponse.appendChild(
+          responseBlock("没有生成内容", "模型返回为空。把光标放在函数体、循环体或半行代码后再试。")
+        );
+      } else if (data.suggestion) {
         const block = responseBlock("将会补上的代码", "");
         const pre = codeBlock(data.suggestion);
         pre.className = "codePreview";
         block.appendChild(pre);
         aiResponse.appendChild(block);
       } else {
-        aiResponse.appendChild(responseBlock("没有生成内容", "接口被调用了，但模型返回空。把光标放在函数体、循环体或半行代码后再试。"));
+        aiResponse.appendChild(responseBlock("没有生成内容", "没有可展示的补全结果。"));
       }
       appendContextAudit(data.contextAudit);
     }
@@ -7194,21 +7282,6 @@ function mergeSavedProblemRecord(
   };
 }
 
-function autocompletePreviewAudit() {
-  return {
-    action: "autocomplete_preview",
-    included: ["student_code_prefix_suffix", "language", "file_path", "code_habits"],
-    excluded: [
-      "problem_statement",
-      "teacher_pack",
-      "standard_answer",
-      "coach_thread",
-      "lesson_report",
-      "raw_internal_test_records"
-    ]
-  };
-}
-
 function hasProblemDetailsForTeacherPack(problem: ProblemRecord): boolean {
   return Boolean(
     problem.statement.trim() ||
@@ -7497,38 +7570,50 @@ async function runAutocompleteSmokeHealthCheck(
   const startedAt = Date.now();
   try {
     const route = routeAutocompleteModel(env, oauthTransport);
-    const deepSeekHint = deepSeekFimEndpointHint(route.config);
-    if (deepSeekHint) {
+    if (route.capabilities.configurationIssue === "deepseek-fim-beta-required") {
       return failHealthCheckStep({
         endpoint: route.endpoint,
         model: route.model,
         format: route.format,
+        renderer: route.capabilities.renderer,
         keyState: providerKeyState(route.config, config.apiKey),
         latencyMs: elapsedSince(startedAt),
         error: "DeepSeek FIM 补全端点不是 /beta。",
-        errorHint: deepSeekHint
+        errorHint: "DeepSeek FIM 补全需要把补全接口 Base URL 设置为 https://api.deepseek.com/beta；分析接口仍可保留 /v1。"
       });
     }
-    const text = await requestCompletion(
-      route.config,
-      {
-        prompt: "def add(a, b):\n    ",
-        suffix: "\nprint(add(1, 2))",
-        maxTokens: 24,
-        temperature: 0,
-        stop: ["\n\n"]
-      }
-    );
-    if (!text.trim()) {
-      throw new Error("Autocomplete smoke 返回为空。");
-    }
-    return {
-      status: "pass",
+    const result = await requestMimoAutocompleteDetailed(route.config, {
+      prefix: "def add(a, b):\n    ",
+      suffix: "\nprint(add(1, 2))",
+      language: "python",
+      filePath: "health-check.py",
+      capabilities: route.capabilities
+    });
+    const resultInfo = {
       endpoint: route.endpoint,
       model: route.model,
       format: route.format,
+      renderer: result.audit.renderer,
+      validationStatus: result.status,
       keyState: providerKeyState(route.config, config.apiKey),
       latencyMs: elapsedSince(startedAt)
+    };
+    if (result.status === "model-empty") {
+      return failHealthCheckStep({
+        ...resultInfo,
+        error: "Autocomplete smoke model returned empty."
+      });
+    }
+    if (result.status === "validator-rejected") {
+      return failHealthCheckStep({
+        ...resultInfo,
+        error: "Autocomplete smoke rejected by policy: " +
+          (result.rejectionReason ?? "unknown")
+      });
+    }
+    return {
+      status: "pass",
+      ...resultInfo
     };
   } catch (error) {
     const message = redactKnownSecrets(errorMessage(error), knownSecrets);
@@ -7580,6 +7665,7 @@ function safeAutocompleteRouteInfo(
   endpoint?: string;
   model?: string;
   format?: string;
+  renderer?: SkillPlanAudit["renderer"];
   keyState?: AiHealthCheckStep["keyState"];
 } {
   try {
@@ -7588,26 +7674,12 @@ function safeAutocompleteRouteInfo(
       endpoint: route.endpoint,
       model: route.model,
       format: route.format,
+      renderer: route.capabilities.renderer,
       keyState: providerKeyState(route.config, providedApiKey)
     };
   } catch {
     return {};
   }
-}
-
-function deepSeekFimEndpointHint(config: CompletionProviderConfig): string | undefined {
-  if (config.format === "codex-app-server") {
-    return undefined;
-  }
-  if (
-    config.format === "openai-completions" &&
-    sanitizeBaseUrlForDisplay(config.baseUrl).includes("api.deepseek.com") &&
-    !sanitizeBaseUrlForDisplay(config.baseUrl).includes("/beta")
-  ) {
-    return "DeepSeek FIM 补全需要把补全接口 Base URL 设置为 https://api.deepseek.com/beta；分析接口仍可保留 /v1。";
-  }
-
-  return undefined;
 }
 
 function healthCheckErrorHint(message: string, scope: "models" | "chat" | "autocomplete"): string {
@@ -7628,6 +7700,9 @@ function healthCheckErrorHint(message: string, scope: "models" | "chat" | "autoc
   }
   if (/fetch failed|network|ENOTFOUND|ECONNRESET|before HTTP response/i.test(message)) {
     return "检查网络、代理或 Base URL；如果在国内网络，优先用当前可访问的兼容端点。";
+  }
+  if (/timed out|timeout|超时/i.test(message)) {
+    return "模型未在当前等待窗口内返回；先重试一次排除冷启动，仍失败则换更快的补全模型或检查 app-server 状态。";
   }
   if (/response did not include|响应缺少|返回为空|empty/i.test(message)) {
     return "接口已连通，但返回格式不符合当前协议；请确认补全协议和模型类型是否匹配。";

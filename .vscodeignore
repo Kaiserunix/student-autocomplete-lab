@@ -23,6 +23,10 @@ dist/vitest.config.*
 node_modules/**
 *.vsix
 *.log
+*.c
+*.cpp
+*.py
+*.rs
 .gitignore
 package-lock.json
 tsconfig.json

@@ -70,16 +70,26 @@ class FakeAppServerProcess implements AppServerProcess {
 describe("Codex app-server client", () => {
   test("initializes once and correlates JSON-RPC responses", async () => {
     const fake = new FakeAppServerProcess();
+    let spawnedArgs: string[] | undefined;
     const client = new CodexAppServerClient({
       executablePath: "codex",
+      appServerArgs: ["app-server", "-c", "model_providers.test.supports_websockets=false"],
       codexHome: "C:/tmp/codex-home",
       runtimeCwd: "C:/tmp/codex-runtime",
       clientVersion: "0.1.0-beta.1",
       ensureDirectory: async () => undefined,
-      spawnProcess: () => fake
+      spawnProcess: (_executablePath, args) => {
+        spawnedArgs = args;
+        return fake;
+      }
     });
 
     await client.start();
+    expect(spawnedArgs).toEqual([
+      "app-server",
+      "-c",
+      "model_providers.test.supports_websockets=false"
+    ]);
     expect(fake.sent()).toEqual([
       {
         method: "initialize",

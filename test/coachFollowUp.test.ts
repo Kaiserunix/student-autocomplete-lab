@@ -1,9 +1,12 @@
 import { describe, expect, test } from "vitest";
+import type { SkillPlanAudit } from "../src/skills/types";
 import {
   buildCoachFollowUpPrompt,
   parseCoachFollowUpReport,
-  requestMimoCoachFollowUp
+  requestMimoCoachFollowUp,
+  requestMimoCoachFollowUpWithSkills
 } from "../src/teaching/coachFollowUp";
+import { createEmptyStudentSkill } from "../src/teaching/studentSkill";
 
 const context = {
   problem: {
@@ -105,5 +108,59 @@ describe("coach follow-up", () => {
     expect(calls[0].url).toBe("https://mimo.example.test/v1/chat/completions");
     expect(String(calls[0].init?.body)).toContain("student_request");
     expect(String(calls[0].init?.body)).not.toContain("student_error_model");
+  });
+
+  test("uses the common coach layers with the follow-up JSON footer", async () => {
+    const calls: Array<{ init?: RequestInit }> = [];
+    const fakeFetch = async (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      calls.push({ init });
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              answer: "因为输入格式已经给出 n。",
+              next_action: "把循环次数改成 n。"
+            })
+          }
+        }]
+      }), { status: 200 });
+    };
+    const skill = createEmptyStudentSkill("student-a", "2026-07-14T00:00:00.000Z");
+    skill.codeHabits.languageRules.python = [
+      "Check loop boundary.",
+      "unmapped-follow-up-secret-456"
+    ];
+    let audit: SkillPlanAudit | undefined;
+
+    await requestMimoCoachFollowUpWithSkills(
+      {
+        baseUrl: "https://api.example.test/v1",
+        apiKey: "test-key",
+        model: "teacher-model"
+      },
+      context,
+      {
+        studentSkill: skill,
+        onAudit: (value) => {
+          audit = value;
+        }
+      },
+      fakeFetch as typeof fetch
+    );
+
+    const body = JSON.parse(String(calls[0].init?.body));
+    const system = String(body.messages[0].content);
+    const user = String(body.messages[1].content);
+    expect(system).not.toContain("[tail]");
+    expect(user).toContain("Check the first and last valid loop or range boundary");
+    expect(user.indexOf("[tail]")).toBeLessThan(user.indexOf("[footer]"));
+    expect(user).toContain("follow-up JSON object");
+    expect(user.indexOf("Answer the student's follow-up")).toBeLessThan(
+      user.indexOf("follow-up JSON object")
+    );
+    expect(user.trimEnd().endsWith("</action-output-footer>")).toBe(true);
+    expect(user).not.toContain("unmapped-follow-up-secret-456");
+    expect(audit?.includedRuleIds).toContain("output.coach.follow-up-json");
+    expect(JSON.stringify(audit)).not.toContain("follow-up-secret");
   });
 });

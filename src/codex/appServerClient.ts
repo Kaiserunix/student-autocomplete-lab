@@ -37,6 +37,7 @@ export interface Disposable {
 
 export interface CodexAppServerClientOptions {
   executablePath: string;
+  appServerArgs?: string[];
   codexHome: string;
   runtimeCwd: string;
   clientVersion: string;
@@ -129,7 +130,7 @@ export class CodexAppServerClient {
     const ensureDirectory = this.options.ensureDirectory ?? ((target) => mkdir(target, { recursive: true }).then(() => undefined));
     await Promise.all([ensureDirectory(this.options.codexHome), ensureDirectory(this.options.runtimeCwd)]);
     const spawnProcess = this.options.spawnProcess ?? defaultSpawnProcess;
-    const child = spawnProcess(this.options.executablePath, ["app-server"], {
+    const child = spawnProcess(this.options.executablePath, this.options.appServerArgs ?? ["app-server"], {
       cwd: this.options.runtimeCwd,
       env: { ...process.env, CODEX_HOME: this.options.codexHome }
     });

@@ -2,6 +2,7 @@ import type { TeachingDiagnosisReport } from "./teachingReport";
 import type { StudentProfile } from "./studentProfile";
 import type { TeachingStudentProfileSummary } from "./types";
 import { isStudentSkillDisabled, isStudentSkillTeachingActive } from "./studentSkillLifecycle";
+import { selectLearnerRules } from "../skills/habitSelector";
 
 export type StudentSkillSchemaVersion = "student-skill/v1";
 export type StudentSkillStatus = "candidate" | "active" | "mastered" | "disabled";
@@ -137,12 +138,10 @@ export interface StudentSkillPatchMeta {
   topic?: string;
 }
 
-export interface AutocompleteSkillContext {
+export interface AutocompleteStudentSkillContext {
   allowFullSolutionAutocomplete: false;
   autocompleteMayReadProblemStatement: false;
-  disabledSkills: string[];
-  activeSkillNames: string[];
-  rules: string[];
+  learnerRuleIds: string[];
 }
 
 const ACTIVE_EVIDENCE_COUNT = 3;
@@ -313,16 +312,20 @@ export function studentSkillSummaryForTeaching(skill: StudentSkill): TeachingStu
   return { painPointCounts, activeSkills, recentCorrections };
 }
 
-export function buildAutocompleteSkillContext(skill: StudentSkill, language: string): AutocompleteSkillContext {
+export function buildAutocompleteSkillContext(
+  skill: StudentSkill,
+  language: string,
+  localCode = ""
+): AutocompleteStudentSkillContext {
   return {
     allowFullSolutionAutocomplete: skill.hardRules.allowFullSolutionAutocomplete,
     autocompleteMayReadProblemStatement: skill.hardRules.autocompleteMayReadProblemStatement,
-    disabledSkills: [...skill.hardRules.disabledSkills].sort(),
-    activeSkillNames: Object.values(skill.skills)
-      .filter((entry) => isStudentSkillTeachingActive(entry.status))
-      .map((entry) => entry.name)
-      .sort(),
-    rules: unique([...skill.codeHabits.globalRules, ...(skill.codeHabits.languageRules[language] ?? [])])
+    learnerRuleIds: selectLearnerRules({
+      skill,
+      route: "autocomplete",
+      language,
+      localCode
+    }).rules.map((rule) => rule.id)
   };
 }
 

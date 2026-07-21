@@ -1,4 +1,8 @@
 import type { ModelTextTransport } from "./modelTextTransport";
+import type { ProviderCapabilities } from "../skills/types";
+import { providerCapabilitiesFor } from "./providerCapabilities";
+
+const DEFAULT_CODEX_AUTOCOMPLETE_TIMEOUT_MS = 15_000;
 
 export interface HttpCompletionProviderConfig {
   baseUrl: string;
@@ -22,6 +26,8 @@ export type CompletionProviderConfig = HttpCompletionProviderConfig | CodexCompl
 
 export interface CompletionRequest {
   prompt: string;
+  systemInstruction?: string;
+  capabilities?: ProviderCapabilities;
   suffix?: string;
   maxTokens: number;
   temperature: number;
@@ -81,6 +87,11 @@ export async function requestCompletion(
   request: CompletionRequest,
   fetchImpl: typeof fetch = fetch
 ): Promise<string> {
+  const capabilities = request.capabilities ?? providerCapabilitiesFor({
+    format: config.format ?? "openai-completions",
+    baseUrl: "baseUrl" in config ? config.baseUrl : "codex://app-server"
+  });
+
   if (config.format === "codex-app-server") {
     return config.transport.generate({
       purpose: "autocomplete",
@@ -88,7 +99,7 @@ export async function requestCompletion(
       prompt: serializeCompletionPrompt(request),
       maxOutputTokens: request.maxTokens,
       temperature: request.temperature,
-      timeoutMs: request.timeoutMs ?? 5_000,
+      timeoutMs: request.timeoutMs ?? DEFAULT_CODEX_AUTOCOMPLETE_TIMEOUT_MS,
       signal: request.signal
     });
   }
@@ -112,11 +123,12 @@ export async function requestCompletion(
       body: JSON.stringify({
         model: config.model,
         prompt: request.prompt,
-        ...(shouldSendFimSuffix(config, request) ? { suffix: request.suffix } : {}),
+        ...(shouldSendFimSuffix(capabilities, request) ? { suffix: request.suffix } : {}),
         max_tokens: request.maxTokens,
         temperature: request.temperature,
         stop: request.stop
-      })
+      }),
+      signal: request.signal
     },
     fetchImpl,
     { operation: "Completion", endpoint, config }
@@ -149,7 +161,8 @@ async function requestChatCompletion(
         messages: [
           {
             role: "system",
-            content: "Return only the immediate code continuation. Do not explain."
+            content: request.systemInstruction ??
+              "Return only the immediate code continuation. Do not explain."
           },
           {
             role: "user",
@@ -159,7 +172,8 @@ async function requestChatCompletion(
         max_tokens: request.maxTokens,
         temperature: request.temperature,
         stop: request.stop
-      })
+      }),
+      signal: request.signal
     },
     fetchImpl,
     { operation: "Chat completion", endpoint, config }
@@ -192,14 +206,16 @@ async function requestAnthropicCompletion(
         model: config.model,
         max_tokens: request.maxTokens,
         temperature: request.temperature,
-        system: "Return only the immediate code continuation. Do not explain.",
+        system: request.systemInstruction ??
+          "Return only the immediate code continuation. Do not explain.",
         messages: [
           {
             role: "user",
             content: request.prompt
           }
         ]
-      })
+      }),
+      signal: request.signal
     },
     fetchImpl,
     { operation: "Anthropic messages", endpoint, config }
@@ -300,14 +316,11 @@ function sanitizeBaseUrl(baseUrl: string): string {
   }
 }
 
-function shouldSendFimSuffix(config: HttpCompletionProviderConfig, request: CompletionRequest): boolean {
-  return Boolean(
-    request.suffix &&
-      config.format !== "openai-chat" &&
-      config.format !== "anthropic-messages" &&
-      sanitizeBaseUrl(config.baseUrl).includes("api.deepseek.com") &&
-      sanitizeBaseUrl(config.baseUrl).includes("/beta")
-  );
+function shouldSendFimSuffix(
+  capabilities: ProviderCapabilities,
+  request: CompletionRequest
+): boolean {
+  return Boolean(request.suffix && capabilities.supportsFimSuffix);
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -319,8 +332,20 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 }
 
 function serializeCompletionPrompt(request: CompletionRequest): string {
-  if (request.suffix === undefined) {
-    return request.prompt;
+  if (!request.systemInstruction) {
+    if (request.suffix === undefined) {
+      return request.prompt;
+    }
+    return request.prompt +
+      "\n\n<suffix>\n" +
+      request.suffix +
+      "\n</suffix>";
   }
-  return `${request.prompt}\n\n<suffix>\n${request.suffix}\n</suffix>`;
+  const sections: string[] = [];
+  sections.push("<system>", request.systemInstruction, "</system>");
+  sections.push(request.prompt);
+  if (request.suffix !== undefined) {
+    sections.push("<suffix>", request.suffix, "</suffix>");
+  }
+  return sections.join("\n");
 }

@@ -167,6 +167,9 @@ describe("problem bank webview script", () => {
     expect(source).toContain('command: "fetchAiModels"');
     expect(source).toContain('command: "runAiHealthCheck"');
     expect(source).toContain("连接检测");
+    expect(source).toContain("模型未在当前等待窗口内返回");
+    expect(source).not.toContain("const [models, chatSmoke, autocompleteSmoke] = await Promise.all");
+    expect(source).toContain("const autocompleteSmoke = await runAutocompleteSmokeHealthCheck");
     expect(source).toContain('type: "aiHealthCheckResult"');
     expect(source).toContain("renderAiHealthCheckResult(data)");
     expect(source).toContain('renderAiModelResults(data)');
@@ -265,13 +268,17 @@ describe("problem bank webview script", () => {
   test("keeps context boundary audits in data without rendering diagnostic prose", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
-    expect(source).toContain("function autocompletePreviewAudit()");
-    expect(source).toContain('included: ["student_code_prefix_suffix", "language", "file_path", "code_habits"]');
+    expect(source).not.toContain("function autocompletePreviewAudit()");
     expect(source).toContain('"problem_statement"');
-    expect(source).toContain('"teacher_pack"');
     expect(source).toContain('"standard_answer"');
     expect(source).toContain("contextAudit");
     expect(source).toContain("appendContextAudit(data.contextAudit)");
+    expect(source).toContain("data.skillAudit");
+    expect(source).toContain('data.validationStatus === "validator-rejected"');
+    expect(source).toContain('data.validationStatus === "model-empty"');
+    expect(source).toContain("data.rejectionReason");
+    expect(source).not.toContain("contextAudit.prefix");
+    expect(source).not.toContain("contextAudit.suffix");
     expect(source).toContain('included: ["problem_statement", "student_code", "recent_hints", "student_profile", "teacher_pack_reference"]');
     expect(source).toContain("lessonReportContextAudit(report)");
     expect(source).toContain("function appendContextAudit() {}");

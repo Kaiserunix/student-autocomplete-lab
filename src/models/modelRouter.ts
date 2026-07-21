@@ -7,6 +7,7 @@ import {
 } from "../config/modelEnv";
 import type { CodexOAuthProviderConfig, ModelRoute } from "./providerContracts";
 import type { ModelTextTransport } from "./modelTextTransport";
+import { providerCapabilitiesFor } from "./providerCapabilities";
 
 export function routeTeachingModel(
   env: ModelEnv,
@@ -24,6 +25,10 @@ export function routeTeachingModel(
     baseUrl: config.baseUrl,
     endpoint: endpointForFormat(config.baseUrl, format),
     format,
+    capabilities: providerCapabilitiesFor({
+      format,
+      baseUrl: config.baseUrl
+    }),
     config
   };
 }
@@ -48,6 +53,10 @@ export function routeAutocompleteModel(
     baseUrl: config.baseUrl,
     endpoint: endpointForFormat(config.baseUrl, format),
     format,
+    capabilities: providerCapabilitiesFor({
+      format,
+      baseUrl: config.baseUrl
+    }),
     config
   };
 }
@@ -83,6 +92,10 @@ function codexOAuthRoute(
     baseUrl: "codex://app-server",
     endpoint: "codex://app-server",
     format: "codex-app-server",
+    capabilities: providerCapabilitiesFor({
+      format: "codex-app-server",
+      baseUrl: "codex://app-server"
+    }),
     config
   };
 }

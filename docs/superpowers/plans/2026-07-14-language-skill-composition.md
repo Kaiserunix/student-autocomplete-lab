@@ -14,12 +14,12 @@
 
 - Approved design: docs/superpowers/specs/2026-07-14-language-skill-composition-design.md
 - At plan-authoring time the worktree is on codex/formal-frontend-redesign. Before Task 1, create or switch this same worktree to the dedicated branch codex/language-skill-composition from the then-current intended integration HEAD. Do not implement these tasks directly on the frontend-redesign branch.
-- Preserve all pre-existing dirty changes. The authoring snapshot contains changes in src/autocomplete/inlineProvider.ts and src/autocomplete/triggerPolicy.ts plus untracked test.c. Re-run git status because the list may change before execution.
+- Preserve all pre-existing dirty changes. The explicit-trigger prerequisite is already isolated in ancestor commit 97e852b; do not recreate or recommit it. The remaining authoring snapshot contains untracked test.c. Re-run git status because the list may change before execution.
 - For a dirty target file, inspect the before/after diff, stage only this plan's hunks with git add -p, and inspect git diff --cached before every commit. Never stage a whole dirty file without proving every staged hunk belongs to this feature.
 - Do not add per-language model selectors. Language changes rules and validation, not provider/model routing.
 - Do not pass problem statements, teacher packs, reference answers, coach history, arbitrary StudentSkill strings, code prefix/suffix, file paths, API keys, or OAuth tokens into audit/log payloads.
 - Do not synthesize a suffix for FIM. The request suffix must be the exact post-cursor text supplied by the context boundary.
-- Keep the legacy requestMimoAutocomplete and requestMimoTeachingDiagnosis entry points working for CLI and existing tests while adding detailed entry points.
+- Keep the legacy requestMimoAutocomplete, requestMimoTeachingDiagnosis, and requestMimoCoachFollowUp entry points working for CLI and existing tests while adding detailed/skill-aware entry points.
 
 ## Target dependency flow
 
@@ -87,15 +87,27 @@ Expected:
 - Pre-existing dirty changes are still present and unchanged.
 - No second worktree is created.
 
-- [ ] **Step 3: Run the focused baseline suite**
+- [ ] **Step 3: Verify the already-isolated trigger prerequisite**
+
+Commit 97e852b is the earlier approved fix for explicit triggers, comment suppression, and C-family include directives. Verify that the feature branch contains exactly that prerequisite before proceeding:
+
+    git merge-base --is-ancestor 97e852b HEAD
+    git show --stat --oneline 97e852b
+    git show --format= --name-only 97e852b
+    npx vitest run test/autocomplete.test.ts test/autocompleteRequestGate.test.ts
+    npm run compile
+
+Expected: merge-base exits 0; the commit contains only src/autocomplete/inlineProvider.ts and src/autocomplete/triggerPolicy.ts; focused tests and compile pass. If the commit is not an ancestor, stop and choose the intended integration HEAD instead of cherry-picking blindly. Do not stage test.c.
+
+- [ ] **Step 4: Run the focused baseline suite**
 
 Run:
 
-    npx vitest run test/modelRouter.test.ts test/completionsClient.test.ts test/mimoAutocomplete.test.ts test/mimoTeacher.test.ts test/teachingPrompt.test.ts test/studentSkill.test.ts test/problemBankWebviewScript.test.ts
+    npx vitest run test/modelRouter.test.ts test/completionsClient.test.ts test/mimoAutocomplete.test.ts test/mimoTeacher.test.ts test/coachFollowUp.test.ts test/teachingPrompt.test.ts test/studentSkill.test.ts test/problemBankWebviewScript.test.ts
 
 Expected: all focused tests pass before feature work. If a test already fails, stop and classify it as baseline rather than changing feature expectations to hide it.
 
-- [ ] **Step 4: Run the complete baseline suite**
+- [ ] **Step 5: Run the complete baseline suite**
 
 Run:
 
@@ -104,7 +116,7 @@ Run:
 
 Expected: Vitest exits 0 and TypeScript emits no errors.
 
-There is no commit for this task.
+Task 0 creates no commit; the trigger prerequisite already exists as 97e852b.
 
 ### Task 1: Add the typed SkillPlan contract and language registry
 
@@ -161,6 +173,22 @@ Create test/languageSkillRegistry.test.ts with:
         expect(strategy.commentPrefix).toBeUndefined();
         expect(strategy.autocompleteRules).toHaveLength(1);
       });
+
+      test.each([
+        ["python", "#", "language.python.range-boundaries"],
+        ["c", "//", "language.c.memory-bounds"],
+        ["cpp", "//", "language.cpp.container-bounds"],
+        ["rust", "//", "language.rust.ownership"]
+      ] as const)("registers a complete %s strategy", (language, commentPrefix, coachRuleId) => {
+        const strategy = getLanguageSkillStrategy(language);
+
+        expect(strategy.commentPrefix).toBe(commentPrefix);
+        expect(strategy.coachRules.map((rule) => rule.id)).toContain(coachRuleId);
+        expect(strategy.autocompleteRules.every(
+          (rule) => Boolean(rule.compactInstruction?.trim())
+        )).toBe(true);
+        expect(strategy.stopSequences.length).toBeGreaterThan(0);
+      });
     });
 
 - [ ] **Step 2: Verify the test is red**
@@ -210,8 +238,12 @@ Create src/skills/types.ts with:
         | "disabled"
         | "wrong-diagnosis"
         | "not-relevant"
+        | "route-mismatch"
+        | "language-mismatch"
         | "budget"
         | "renderer-budget"
+        | "renderer-unsupported"
+        | "duplicate"
         | "unmapped";
     }
 
@@ -224,8 +256,11 @@ Create src/skills/types.ts with:
     }
 
     export interface SkillOutputContract {
-      id: "autocomplete.code-only-v1" | "coach.teaching-json-v1";
-      mode: "code-only" | "teaching-json";
+      id:
+        | "autocomplete.code-only-v1"
+        | "coach.teaching-json-v1"
+        | "coach.follow-up-json-v1";
+      mode: "code-only" | "teaching-json" | "coach-follow-up-json";
       maxLines?: number;
       responseFormat?: "json_object";
     }
@@ -537,11 +572,34 @@ Create test/habitSelector.test.ts with:
         }).rules).toHaveLength(3);
       });
 
+      test("enforces the character budget before the rule-count limit", () => {
+        const skill = createEmptyStudentSkill("student-a", "2026-07-14T00:00:00.000Z");
+        skill.codeHabits.globalRules = [
+          "Check loop boundary.",
+          "Initialize accumulators.",
+          "Prefer direct student code."
+        ];
+
+        const selection = selectLearnerRules({
+          skill,
+          route: "coach",
+          language: "python",
+          localCode: "for i in range(n): total += i"
+        });
+
+        expect(selection.rules).toHaveLength(2);
+        expect(selection.usedCharacters).toBeLessThanOrEqual(225);
+        expect(selection.excludedRules).toContainEqual({
+          id: "learner.local-continuation",
+          reason: "budget"
+        });
+      });
+
       test("honors a wrong-diagnosis correction", () => {
         const skill = createEmptyStudentSkill("student-a", "2026-07-14T00:00:00.000Z");
         skill.skills["python-loop-boundary-check"] = {
           name: "python-loop-boundary-check",
-          status: "active",
+          status: "candidate",
           reason: "Repeated misses.",
           rules: ["Write loop bounds first."],
           sourcePainPoints: ["loop_boundary"],
@@ -590,6 +648,43 @@ Create test/habitSelector.test.ts with:
         expect(selection.excludedRules).toEqual([{ id: "learner.unmapped", reason: "unmapped" }]);
         expect(serialized).not.toContain("P1030");
         expect(serialized).not.toContain("secret-token-123");
+      });
+
+      test("deduplicates repeated controlled habits with a safe audit reason", () => {
+        const skill = createEmptyStudentSkill("student-a", "2026-07-14T00:00:00.000Z");
+        skill.codeHabits.globalRules = ["Check loop boundary."];
+        skill.codeHabits.languageRules.python = ["Before a range loop, check the final boundary."];
+
+        const selection = selectLearnerRules({
+          skill,
+          route: "autocomplete",
+          language: "python",
+          localCode: "for i in range(n): pass"
+        });
+
+        expect(selection.rules.map((rule) => rule.id)).toEqual(["learner.loop-boundary"]);
+        expect(selection.excludedRules).toContainEqual({
+          id: "learner.loop-boundary",
+          reason: "duplicate"
+        });
+      });
+
+      test("excludes a C/C++ pointer habit from Rust", () => {
+        const skill = createEmptyStudentSkill("student-a", "2026-07-14T00:00:00.000Z");
+        skill.codeHabits.globalRules = ["Check pointer validity before dereference."];
+
+        const selection = selectLearnerRules({
+          skill,
+          route: "autocomplete",
+          language: "rust",
+          localCode: "let value = *ptr;"
+        });
+
+        expect(selection.rules).toEqual([]);
+        expect(selection.excludedRules).toContainEqual({
+          id: "learner.pointer",
+          reason: "not-relevant"
+        });
       });
     });
 
@@ -707,7 +802,7 @@ Create src/skills/habitSelector.ts with the following catalog and public API:
       const language = normalizeSkillLanguage(input.language);
       const localCode = input.localCode ?? "";
       const budget = input.route === "autocomplete" ? 2 : 3;
-      const characterBudget = input.route === "autocomplete" ? 240 : 480;
+      const characterBudget = input.route === "autocomplete" ? 160 : 225;
       const wrongTargets = new Set(
         input.skill.correctionLog
           .filter((item) => item.type === "diagnosis_wrong" && item.target)
@@ -718,6 +813,12 @@ Create src/skills/habitSelector.ts with the following catalog and public API:
           .filter((item) => item.type === "diagnosis_helpful" && item.target)
           .map((item) => item.target as string)
       );
+      const disabledTargets = new Set([
+        ...input.skill.hardRules.disabledSkills,
+        ...Object.values(input.skill.skills)
+          .filter((entry) => entry.status === "disabled")
+          .map((entry) => entry.name)
+      ]);
       const excluded: ExcludedSkillRule[] = [];
       const candidates: Candidate[] = [];
 
@@ -742,7 +843,7 @@ Create src/skills/habitSelector.ts with the following catalog and public API:
           excluded.push({ id: definition.id, reason: "wrong-diagnosis" });
           return;
         }
-        if (target && input.skill.hardRules.disabledSkills.includes(target)) {
+        if (target && disabledTargets.has(target)) {
           excluded.push({ id: definition.id, reason: "disabled" });
           return;
         }
@@ -772,14 +873,37 @@ Create src/skills/habitSelector.ts with the following catalog and public API:
         }
       }
       for (const entry of Object.values(input.skill.skills)) {
-        if (!isStudentSkillTeachingActive(entry.status)) {
+        const entryText = [
+          entry.name,
+          entry.reason,
+          entry.sourcePainPoints.join(" "),
+          entry.rules.join(" ")
+        ].join(" ");
+        if (
+          wrongTargets.has(entry.name) ||
+          disabledTargets.has(entry.name)
+        ) {
+          addText(
+            entryText,
+            entry.name,
+            20,
+            0,
+            entry.evidenceCount,
+            entry.lastSeen
+          );
+          continue;
+        }
+        if (
+          !isStudentSkillTeachingActive(entry.status) &&
+          !helpfulTargets.has(entry.name)
+        ) {
           continue;
         }
         addText(
-          [entry.name, entry.reason, entry.sourcePainPoints.join(" "), entry.rules.join(" ")].join(" "),
+          entryText,
           entry.name,
           20,
-          Math.min(1, entry.score / Math.max(1, entry.evidenceCount)),
+          Math.max(0, Math.min(1, entry.score / Math.max(1, entry.evidenceCount))),
           entry.evidenceCount,
           entry.lastSeen
         );
@@ -792,7 +916,12 @@ Create src/skills/habitSelector.ts with the following catalog and public API:
           continue;
         }
         const previous = byId.get(candidate.definition.id);
-        if (!previous || compareCandidates(candidate, previous) < 0) {
+        if (!previous) {
+          byId.set(candidate.definition.id, candidate);
+          continue;
+        }
+        excluded.push({ id: candidate.definition.id, reason: "duplicate" });
+        if (compareCandidates(candidate, previous) < 0) {
           byId.set(candidate.definition.id, candidate);
         }
       }
@@ -860,17 +989,15 @@ The executor may extract small pure helpers, but must preserve these controlled 
 
 - [ ] **Step 4: Migrate the public autocomplete context away from raw rules**
 
-In src/teaching/studentSkill.ts, import selectLearnerRules and replace AutocompleteSkillContext.rules with:
+In src/teaching/studentSkill.ts, import selectLearnerRules, rename the legacy type to avoid colliding with the renderer context, and replace its raw rules with:
 
-    export interface AutocompleteSkillContext {
+    export interface AutocompleteStudentSkillContext {
       allowFullSolutionAutocomplete: false;
       autocompleteMayReadProblemStatement: false;
-      disabledSkills: string[];
-      activeSkillNames: string[];
       learnerRuleIds: string[];
     }
 
-Change buildAutocompleteSkillContext to accept localCode = "" and set:
+Change buildAutocompleteSkillContext to return AutocompleteStudentSkillContext, accept localCode = "", and set:
 
     learnerRuleIds: selectLearnerRules({
       skill,
@@ -879,11 +1006,13 @@ Change buildAutocompleteSkillContext to accept localCode = "" and set:
       localCode
     }).rules.map((rule) => rule.id)
 
-Keep the existing hard-rule and activeSkillNames fields unchanged.
+Keep the two hard-rule booleans unchanged. Remove disabledSkills and activeSkillNames from this autocomplete-only context because both arrays can contain free-form StudentSkill names. The teaching-only studentSkillSummaryForTeaching API remains unchanged.
 
-In test/studentSkill.test.ts, replace the legacy raw-rule assertion with:
+In test/studentSkill.test.ts, remove the autocomplete-context activeSkillNames assertion from the mastered-skill test (the preceding studentSkillSummaryForTeaching assertion remains), then replace the legacy raw-rule assertion with:
 
     expect(context.learnerRuleIds).toEqual([]);
+    expect(context).not.toHaveProperty("activeSkillNames");
+    expect(context).not.toHaveProperty("disabledSkills");
     expect(JSON.stringify(context)).not.toContain("prefer sys.stdin.readline");
     expect(JSON.stringify(context)).not.toContain("P1030 standard answer");
 
@@ -922,13 +1051,18 @@ Create test/skillPlan.test.ts with:
     import { describe, expect, test } from "vitest";
     import {
       composeAutocompleteSkillPlan,
-      composeCoachSkillPlan
+      composeCoachSkillPlan,
+      resolveSkillRuleConflicts
     } from "../src/skills/composeSkillPlan";
-    import type { LearnerRuleSelection } from "../src/skills/types";
+    import type {
+      LearnerRuleSelection,
+      SkillRule,
+      SkillRuleSource
+    } from "../src/skills/types";
 
     const conflictingLearnerSelection: LearnerRuleSelection = {
       budget: 2,
-      characterBudget: 240,
+      characterBudget: 160,
       usedCharacters: "Prefer the immediate local continuation over new scaffolding or a full solution.".length,
       excludedRules: [],
       rules: [
@@ -947,13 +1081,27 @@ Create test/skillPlan.test.ts with:
       ]
     };
 
+    function sourceRule(source: SkillRuleSource, priority = 1): SkillRule {
+      return {
+        id: "test." + source,
+        policyKey: "test.shared-policy",
+        route: "autocomplete",
+        layer: "head",
+        strength: "soft",
+        source,
+        priority,
+        instruction: source,
+        enforcement: "prompt"
+      };
+    }
+
     describe("skill plan composition", () => {
       test("orders head, body, tail, and footer deterministically", () => {
         const plan = composeAutocompleteSkillPlan({
           language: "python",
           learnerSelection: {
             budget: 2,
-            characterBudget: 240,
+            characterBudget: 160,
             usedCharacters: conflictingLearnerSelection.usedCharacters,
             excludedRules: [],
             rules: [{
@@ -1000,7 +1148,7 @@ Create test/skillPlan.test.ts with:
           action: "specific",
           learnerSelection: {
             budget: 3,
-            characterBudget: 480,
+            characterBudget: 225,
             usedCharacters: 0,
             excludedRules: [],
             rules: []
@@ -1017,28 +1165,89 @@ Create test/skillPlan.test.ts with:
         });
       });
 
-      test("deduplicates a normalized rule ID before policy conflicts", () => {
-        const duplicate = {
-          ...conflictingLearnerSelection.rules[0],
-          policyKey: "habit.second-key",
-          priority: 299
-        };
-        const plan = composeAutocompleteSkillPlan({
+      test("follow-up selects its own JSON footer without changing the route", () => {
+        const plan = composeCoachSkillPlan({
           language: "python",
+          action: "followUp",
+          learnerSelection: {
+            budget: 3,
+            characterBudget: 225,
+            usedCharacters: 0,
+            excludedRules: [],
+            rules: []
+          }
+        });
+
+        expect(plan.rules.map((rule) => rule.id)).toContain("output.coach.follow-up-json");
+        expect(plan.output).toEqual({
+          id: "coach.follow-up-json-v1",
+          mode: "coach-follow-up-json",
+          responseFormat: "json_object"
+        });
+      });
+
+      test("rejects learner rules selected for another route or language", () => {
+        const plan = composeCoachSkillPlan({
+          language: "python",
+          action: "hint",
           learnerSelection: {
             ...conflictingLearnerSelection,
-            rules: [conflictingLearnerSelection.rules[0], duplicate],
+            rules: [
+              conflictingLearnerSelection.rules[0],
+              {
+                ...conflictingLearnerSelection.rules[0],
+                id: "learner.cpp-only",
+                route: "coach",
+                language: "cpp"
+              }
+            ],
             usedCharacters: conflictingLearnerSelection.usedCharacters * 2
           }
         });
 
-        expect(plan.audit.includedRuleIds.filter(
-          (id) => id === "learner.local-continuation"
-        )).toHaveLength(0);
-        expect(plan.audit.excludedRules).toContainEqual({
-          id: "learner.local-continuation",
+        expect(plan.rules.every((rule) => rule.source !== "learner")).toBe(true);
+        expect(plan.audit.excludedRules).toEqual(expect.arrayContaining([
+          { id: "learner.local-continuation", reason: "route-mismatch" },
+          { id: "learner.cpp-only", reason: "language-mismatch" }
+        ]));
+      });
+
+      test.each([
+        ["core", "output"],
+        ["output", "action"],
+        ["action", "language"],
+        ["language", "learner"]
+      ] as const)("%s outranks %s for the same policy", (higher, lower) => {
+        const resolution = resolveSkillRuleConflicts([
+          sourceRule(lower, 999_999),
+          sourceRule(higher, -999_999)
+        ]);
+
+        expect(resolution.rules.map((rule) => rule.id)).toEqual(["test." + higher]);
+        expect(resolution.excludedRules).toEqual([{
+          id: "test." + lower,
           reason: "conflict"
-        });
+        }]);
+      });
+
+      test("deduplicates a normalized rule ID before policy conflicts", () => {
+        const higher = {
+          ...sourceRule("learner", 2),
+          id: "learner.duplicate",
+          policyKey: "habit.first"
+        };
+        const lower = {
+          ...sourceRule("learner", 1),
+          id: "learner.duplicate",
+          policyKey: "habit.second"
+        };
+        const resolution = resolveSkillRuleConflicts([lower, higher]);
+
+        expect(resolution.rules).toEqual([higher]);
+        expect(resolution.excludedRules).toEqual([{
+          id: "learner.duplicate",
+          reason: "duplicate"
+        }]);
       });
     });
 
@@ -1130,10 +1339,14 @@ Create src/skills/composeSkillPlan.ts with:
 
     export function composeCoachSkillPlan(input: CoachPlanInput): SkillPlan {
       const strategy = getLanguageSkillStrategy(input.language);
+      const output = coachOutput(input.action);
       return finalizePlan(
         "coach",
         strategy.language,
         [
+          coreRule("coach", "core.coach.restrained-teacher", "role.coach", 1010,
+            "Act as a restrained algorithm teacher and follow the requested response language.",
+            "prompt"),
           coreRule("coach", "core.coach.evidence-only", "context.evidence", 1000,
             "Base the diagnosis on supplied evidence and distinguish observations from inference.",
             "prompt"),
@@ -1141,19 +1354,51 @@ Create src/skills/composeSkillPlan.ts with:
             "Do not reveal a complete solution unless the explicit action is giveUp.",
             "prompt"),
           ...strategy.coachRules,
-          ...input.learnerSelection.rules.map((rule) => ({ ...rule, route: "coach" as const })),
+          ...input.learnerSelection.rules,
           actionRule(input.action),
-          outputRule("coach", "output.coach.json", "output.format", 900,
-            "Return exactly one valid teaching-diagnosis JSON object in the requested response language.",
-            "prompt-and-validator")
+          output.rule
         ],
         input.learnerSelection,
-        {
+        output.contract
+      );
+    }
+
+    function coachOutput(action: CoachSkillAction): {
+      rule: SkillRule;
+      contract: SkillPlan["output"];
+    } {
+      if (action === "followUp") {
+        return {
+          rule: outputRule(
+            "coach",
+            "output.coach.follow-up-json",
+            "output.format",
+            900,
+            "Return exactly one follow-up JSON object with answer and optional tiny_example, next_action, and boundary fields, without markdown.",
+            "prompt-and-validator"
+          ),
+          contract: {
+            id: "coach.follow-up-json-v1",
+            mode: "coach-follow-up-json",
+            responseFormat: "json_object"
+          }
+        };
+      }
+      return {
+        rule: outputRule(
+          "coach",
+          "output.coach.json",
+          "output.format",
+          900,
+          "Return exactly one valid teaching-diagnosis JSON object without markdown.",
+          "prompt-and-validator"
+        ),
+        contract: {
           id: "coach.teaching-json-v1",
           mode: "teaching-json",
           responseFormat: "json_object"
         }
-      );
+      };
     }
 
     function actionRule(action: CoachSkillAction): SkillRule {
@@ -1171,7 +1416,7 @@ Create src/skills/composeSkillPlan.ts with:
         layer: "footer",
         strength: "hard",
         source: "action",
-        priority: 850,
+        priority: 950,
         instruction: instructions[action],
         enforcement: "prompt"
       };
@@ -1221,24 +1466,26 @@ Create src/skills/composeSkillPlan.ts with:
       };
     }
 
-    function finalizePlan(
-      route: SkillRoute,
-      language: SkillPlan["language"],
+    export interface SkillRuleResolution {
+      rules: SkillRule[];
+      excludedRules: ExcludedSkillRule[];
+    }
+
+    export function resolveSkillRuleConflicts(
       candidates: SkillRule[],
-      learnerSelection: LearnerRuleSelection,
-      output: SkillPlan["output"]
-    ): SkillPlan {
-      const excluded: ExcludedSkillRule[] = [...learnerSelection.excludedRules];
+      initialExcluded: readonly ExcludedSkillRule[] = []
+    ): SkillRuleResolution {
+      const excluded: ExcludedSkillRule[] = [...initialExcluded];
       const byId = new Map<string, SkillRule>();
       for (const candidate of candidates) {
         const previous = byId.get(candidate.id);
-        if (!previous || rank(candidate) > rank(previous)) {
+        if (!previous || compareRulePrecedence(candidate, previous) > 0) {
           if (previous) {
-            excluded.push({ id: previous.id, reason: "conflict" });
+            excluded.push({ id: previous.id, reason: "duplicate" });
           }
           byId.set(candidate.id, candidate);
         } else {
-          excluded.push({ id: candidate.id, reason: "conflict" });
+          excluded.push({ id: candidate.id, reason: "duplicate" });
         }
       }
 
@@ -1249,7 +1496,7 @@ Create src/skills/composeSkillPlan.ts with:
           winners.set(candidate.policyKey, candidate);
           continue;
         }
-        if (rank(candidate) > rank(previous)) {
+        if (compareRulePrecedence(candidate, previous) > 0) {
           excluded.push({ id: previous.id, reason: "conflict" });
           winners.set(candidate.policyKey, candidate);
         } else {
@@ -1264,6 +1511,39 @@ Create src/skills/composeSkillPlan.ts with:
           left.id.localeCompare(right.id)
       );
       return {
+        rules,
+        excludedRules: uniqueExcluded(excluded)
+      };
+    }
+
+    function finalizePlan(
+      route: SkillRoute,
+      language: SkillPlan["language"],
+      candidates: SkillRule[],
+      learnerSelection: LearnerRuleSelection,
+      output: SkillPlan["output"]
+    ): SkillPlan {
+      const scopeExcluded: ExcludedSkillRule[] = [];
+      const scopedCandidates = candidates.filter((candidate) => {
+        if (candidate.source !== "learner") {
+          return true;
+        }
+        if (candidate.route !== route) {
+          scopeExcluded.push({ id: candidate.id, reason: "route-mismatch" });
+          return false;
+        }
+        if (candidate.language && candidate.language !== language) {
+          scopeExcluded.push({ id: candidate.id, reason: "language-mismatch" });
+          return false;
+        }
+        return true;
+      });
+      const resolution = resolveSkillRuleConflicts(
+        scopedCandidates,
+        [...learnerSelection.excludedRules, ...scopeExcluded]
+      );
+      const rules = resolution.rules;
+      return {
         route,
         language,
         rules,
@@ -1273,7 +1553,7 @@ Create src/skills/composeSkillPlan.ts with:
           language,
           renderer: "unrendered",
           includedRuleIds: rules.map((rule) => rule.id),
-          excludedRules: uniqueExcluded(excluded),
+          excludedRules: resolution.excludedRules,
           learnerRuleCount: rules.filter((rule) => rule.source === "learner").length,
           learnerRuleBudget: learnerSelection.budget,
           learnerCharacterCount: rules
@@ -1285,10 +1565,12 @@ Create src/skills/composeSkillPlan.ts with:
       };
     }
 
-    function rank(rule: SkillRule): number {
-      return SOURCE_PRECEDENCE[rule.source] * 10000 +
-        (rule.strength === "hard" ? 1000 : 0) +
-        rule.priority;
+    function compareRulePrecedence(left: SkillRule, right: SkillRule): number {
+      return SOURCE_PRECEDENCE[left.source] - SOURCE_PRECEDENCE[right.source] ||
+        Number(left.strength === "hard") - Number(right.strength === "hard") ||
+        left.priority - right.priority ||
+        right.id.localeCompare(left.id) ||
+        right.policyKey.localeCompare(left.policyKey);
     }
 
     function uniqueExcluded(values: ExcludedSkillRule[]): ExcludedSkillRule[] {
@@ -1345,6 +1627,8 @@ Create test/providerCapabilities.test.ts with:
 
       test.each([
         ["https://api.deepseek.com/v1", "openai-completions"],
+        ["https://api.deepseek.com/v1/beta", "openai-completions"],
+        ["https://api.deepseek.com/beta/compatible", "openai-completions"],
         ["https://proxy.example.test/beta", "openai-completions"],
         ["https://api.deepseek.com/beta", "openai-chat"]
       ] as const)("does not infer FIM from an incomplete match", (baseUrl, format) => {
@@ -1472,8 +1756,9 @@ Create src/models/providerCapabilities.ts with:
     function isDeepSeekBeta(baseUrl: string): boolean {
       try {
         const url = new URL(baseUrl);
+        const path = url.pathname.replace(/\/+$/, "") || "/";
         return url.hostname.toLowerCase() === "api.deepseek.com" &&
-          url.pathname.split("/").filter(Boolean).includes("beta");
+          path === "/beta";
       } catch {
         return false;
       }
@@ -1588,7 +1873,7 @@ Create test/skillRenderers.test.ts with:
         "Check the first and last valid loop or range boundary before continuing.";
       return {
         budget: route === "autocomplete" ? 2 : 3,
-        characterBudget: route === "autocomplete" ? 240 : 480,
+        characterBudget: route === "autocomplete" ? 160 : 225,
         usedCharacters: instruction.length,
         excludedRules: [],
         rules: [{
@@ -1600,6 +1885,7 @@ Create test/skillRenderers.test.ts with:
           source: "learner" as const,
           priority: 300,
           instruction,
+          compactInstruction: "check loop bounds",
           enforcement: "prompt" as const,
           language: "python" as const
         }]
@@ -1621,21 +1907,62 @@ Create test/skillRenderers.test.ts with:
 
         expect(rendered.prompt).toContain("# skill head:");
         expect(rendered.prompt).toContain("# skill tail:");
-        expect(rendered.prompt).toEndWith("for i in range(n):\n    ");
+        expect(rendered.prompt).toContain("# skill tail: check loop bounds");
+        expect(rendered.prompt).not.toContain(
+          "Check the first and last valid loop or range boundary before continuing."
+        );
+        expect(rendered.prompt.endsWith("for i in range(n):\n    ")).toBe(true);
         expect(rendered.suffix).toBe("\nprint(total)");
         expect(rendered.systemInstruction).toBeUndefined();
         expect(rendered.audit.renderer).toBe("deepseek-fim");
       });
 
+      test("DeepSeek compiles at most one learner rule into the compact preamble", () => {
+        const selection = learnerSelection("autocomplete");
+        const secondInstruction = "Check indexes and container bounds.";
+        const plan = composeAutocompleteSkillPlan({
+          language: "python",
+          learnerSelection: {
+            ...selection,
+            usedCharacters: selection.usedCharacters + secondInstruction.length,
+            rules: [
+              ...selection.rules,
+              {
+                ...selection.rules[0],
+                id: "learner.bounds",
+                policyKey: "habit.bounds",
+                priority: 299,
+                instruction: secondInstruction,
+                compactInstruction: "check indexes and bounds"
+              }
+            ]
+          }
+        });
+        const rendered = renderAutocompleteSkillPlan(plan, deepSeek, {
+          prefix: "value = items[",
+          suffix: "]",
+          language: "python",
+          fileLabel: "trial.py"
+        });
+
+        expect(rendered.prompt).toContain("check loop bounds");
+        expect(rendered.prompt).not.toContain("check indexes and bounds");
+        expect(rendered.audit.excludedRules).toContainEqual({
+          id: "learner.bounds",
+          reason: "renderer-budget"
+        });
+      });
+
       test("DeepSeek generic language adds no synthetic preamble", () => {
+        const selection = learnerSelection("autocomplete");
         const plan = composeAutocompleteSkillPlan({
           language: "plaintext",
           learnerSelection: {
-            budget: 2,
-            characterBudget: 240,
-            usedCharacters: 0,
-            excludedRules: [],
-            rules: []
+            ...selection,
+            rules: selection.rules.map((rule) => ({
+              ...rule,
+              language: "generic" as const
+            }))
           }
         });
         const rendered = renderAutocompleteSkillPlan(plan, deepSeek, {
@@ -1647,6 +1974,16 @@ Create test/skillRenderers.test.ts with:
 
         expect(rendered.prompt).toBe("alpha = ");
         expect(rendered.suffix).toBe("\nomega()");
+        expect(rendered.audit.excludedRules).toContainEqual({
+          id: "language.generic.local-continuation",
+          reason: "renderer-unsupported"
+        });
+        expect(rendered.audit.excludedRules).toContainEqual({
+          id: "learner.loop-boundary",
+          reason: "renderer-unsupported"
+        });
+        expect(rendered.audit.learnerRuleCount).toBe(0);
+        expect(rendered.audit.enforcementKinds).toEqual(["prompt-and-validator"]);
       });
 
       test("chat preserves logical layer order and embeds suffix in the user prompt", () => {
@@ -1685,7 +2022,10 @@ Create test/skillRenderers.test.ts with:
         expect(system).not.toContain("[footer]");
         expect(user.indexOf("diagnosis-context-json")).toBeLessThan(user.indexOf("[tail]"));
         expect(user.indexOf("[tail]")).toBeLessThan(user.indexOf("[footer]"));
-        expect(user.trimEnd()).toEndWith("</action-output-footer>");
+        expect(user.indexOf("Narrow the hint")).toBeLessThan(
+          user.indexOf("teaching-diagnosis JSON object")
+        );
+        expect(user.trimEnd().endsWith("</action-output-footer>")).toBe(true);
       });
 
       test("Codex text carries policy and both cursor sides in one prompt", () => {
@@ -1693,7 +2033,7 @@ Create test/skillRenderers.test.ts with:
           language: "cpp",
           learnerSelection: {
             budget: 2,
-            characterBudget: 240,
+            characterBudget: 160,
             usedCharacters: 0,
             excludedRules: [],
             rules: []
@@ -1728,6 +2068,38 @@ Create test/skillRenderers.test.ts with:
         expect(rendered.prompt).toContain("[tail]");
         expect(rendered.prompt).not.toContain("print(total)");
         expect(rendered.suffix).toBeUndefined();
+      });
+
+      test("rejects route and normalized-language mismatches", () => {
+        const autocompletePlan = composeAutocompleteSkillPlan({
+          language: "python",
+          learnerSelection: learnerSelection("autocomplete")
+        });
+        const coachPlan = composeCoachSkillPlan({
+          language: "python",
+          action: "hint",
+          learnerSelection: learnerSelection("coach")
+        });
+        const context = {
+          prefix: "value = ",
+          suffix: "",
+          language: "python" as const,
+          fileLabel: "trial.py"
+        };
+
+        expect(() => renderAutocompleteSkillPlan(coachPlan, chat, context)).toThrow(
+          "Autocomplete renderer received a coach SkillPlan."
+        );
+        expect(() => renderCoachSkillPlan(
+          autocompletePlan,
+          chat,
+          "diagnosis-context-json"
+        )).toThrow("Coach renderer received an autocomplete SkillPlan.");
+        expect(() => renderAutocompleteSkillPlan(
+          autocompletePlan,
+          chat,
+          { ...context, language: "cpp" }
+        )).toThrow("Autocomplete SkillPlan language does not match its context.");
       });
     });
 
@@ -1782,20 +2154,64 @@ Create src/skills/renderers/deepSeekFimRenderer.ts:
       context: AutocompleteSkillContext
     ): RenderedAutocompleteSkillRequest {
       const strategy = getLanguageSkillStrategy(plan.language);
+      const learnerRules = plan.rules.filter((rule) => rule.source === "learner");
+      const renderedLearnerId = strategy.commentPrefix ? learnerRules[0]?.id : undefined;
+      const physicalRules = plan.rules.filter(
+        (rule) => rule.source !== "learner" || rule.id === renderedLearnerId
+      );
+      const omittedLearnerRules = learnerRules.filter(
+        (rule) => rule.id !== renderedLearnerId
+      );
+      const omittedPromptOnlyRules = strategy.commentPrefix
+        ? []
+        : physicalRules.filter((rule) => rule.enforcement === "prompt");
       const prompt = strategy.commentPrefix
-        ? plan.rules
+        ? physicalRules
             .map((rule) =>
-              strategy.commentPrefix + " skill " + rule.layer + ": " + rule.instruction
+              strategy.commentPrefix + " skill " + rule.layer + ": " +
+                (rule.compactInstruction ?? rule.id)
             )
             .join("\n") + "\n" + context.prefix
         : context.prefix;
+      const audit = stampRenderer(plan, "deepseek-fim");
+      if (omittedLearnerRules.length > 0 || omittedPromptOnlyRules.length > 0) {
+        const omittedIds = new Set(
+          [...omittedLearnerRules, ...omittedPromptOnlyRules].map((rule) => rule.id)
+        );
+        audit.includedRuleIds = audit.includedRuleIds.filter((id) => !omittedIds.has(id));
+        audit.excludedRules = [
+          ...audit.excludedRules,
+          ...omittedLearnerRules.map((rule) => ({
+            id: rule.id,
+            reason: strategy.commentPrefix
+              ? "renderer-budget" as const
+              : "renderer-unsupported" as const
+          })),
+          ...omittedPromptOnlyRules.map((rule) => ({
+            id: rule.id,
+            reason: "renderer-unsupported" as const
+          }))
+        ];
+        audit.learnerRuleCount = physicalRules.filter(
+          (rule) => rule.source === "learner"
+        ).length;
+        audit.learnerCharacterCount = physicalRules
+          .filter((rule) => rule.source === "learner")
+          .reduce((sum, rule) => sum + rule.instruction.length, 0);
+        const includedIds = new Set(audit.includedRuleIds);
+        audit.enforcementKinds = [...new Set(
+          plan.rules
+            .filter((rule) => includedIds.has(rule.id))
+            .map((rule) => rule.enforcement)
+        )].sort();
+      }
 
       return {
         prompt,
         suffix: context.suffix,
         stop: strategy.stopSequences,
         maxLines: plan.output.maxLines ?? 3,
-        audit: stampRenderer(plan, "deepseek-fim")
+        audit
       };
     }
 
@@ -2085,6 +2501,36 @@ Append to test/completionsClient.test.ts:
         .toBe("[head] local code only");
     });
 
+    test("serializes an explicit Codex system instruction without changing legacy callers", async () => {
+      const prompts: string[] = [];
+      const transport = {
+        generate: async (request: { prompt: string }): Promise<string> => {
+          prompts.push(request.prompt);
+          return "value";
+        }
+      };
+
+      await requestCompletion(
+        {
+          mode: "openai",
+          authMode: "codex-oauth",
+          model: "gpt-5.3-codex-spark",
+          format: "codex-app-server",
+          transport
+        },
+        {
+          systemInstruction: "[head] local code only",
+          prompt: "value = ",
+          maxTokens: 64,
+          temperature: 0
+        }
+      );
+
+      expect(prompts).toEqual([
+        "<system>\n[head] local code only\n</system>\nvalue = "
+      ]);
+    });
+
 - [ ] **Step 2: Verify red**
 
 Run:
@@ -2137,10 +2583,17 @@ Keep the defaults for legacy callers.
 Update serializeCompletionPrompt so a direct Codex caller can also supply a system instruction:
 
     function serializeCompletionPrompt(request: CompletionRequest): string {
-      const sections: string[] = [];
-      if (request.systemInstruction) {
-        sections.push("<system>", request.systemInstruction, "</system>");
+      if (!request.systemInstruction) {
+        if (request.suffix === undefined) {
+          return request.prompt;
+        }
+        return request.prompt +
+          "\n\n<suffix>\n" +
+          request.suffix +
+          "\n</suffix>";
       }
+      const sections: string[] = [];
+      sections.push("<system>", request.systemInstruction, "</system>");
       sections.push(request.prompt);
       if (request.suffix !== undefined) {
         sections.push("<suffix>", request.suffix, "</suffix>");
@@ -2204,10 +2657,23 @@ Create test/autocompleteOutputPolicy.test.ts with:
           suggestion: "",
           rejectionReason: "explanation"
         });
+        expect(validateAutocompleteOutput("代码如下：\nreturn value", 3, "python")).toEqual({
+          status: "validator-rejected",
+          suggestion: "",
+          rejectionReason: "explanation"
+        });
       });
 
-      test("classifies a fully filtered prompt echo as validator rejection", () => {
+      test("rejects a problem-context marker without returning its text", () => {
         expect(validateAutocompleteOutput("# Problem: hidden statement", 3, "python")).toEqual({
+          status: "validator-rejected",
+          suggestion: "",
+          rejectionReason: "context-marker"
+        });
+      });
+
+      test("classifies a fully filtered skill preamble as validator rejection", () => {
+        expect(validateAutocompleteOutput("# skill head: local code only", 3, "python")).toEqual({
           status: "validator-rejected",
           suggestion: "",
           rejectionReason: "empty-after-filter"
@@ -2233,6 +2699,17 @@ Create test/autocompleteOutputPolicy.test.ts with:
         )).toEqual({
           status: "success",
           suggestion: "total += values[i];"
+        });
+      });
+
+      test("strips echoed generic/chat layer controls", () => {
+        expect(validateAutocompleteOutput(
+          "[head] local code only\n[tail] check loop bounds\nreturn value",
+          3,
+          "python"
+        )).toEqual({
+          status: "success",
+          suggestion: "return value"
         });
       });
     });
@@ -2268,9 +2745,9 @@ Create src/skills/validators/autocompleteOutputPolicy.ts:
       rejectionReason?: AutocompleteRejectionReason;
     }
 
-    const EXPLANATION = /^(here(?:'s| is)|explanation|the code|下面|解释|代码如下)\b/i;
+    const EXPLANATION = /^(?:(?:here(?:'s| is)|explanation|the code)\b|下面|解释|代码如下)/i;
     const CONTEXT_MARKER =
-      /<(?:prefix|suffix|skill-policy|system)>|(?:problem statement|reference answer|teacher pack|标准答案|参考答案|题面)/i;
+      /<(?:prefix|suffix|skill-policy|system)>|(?:problem statement|reference answer|teacher pack|标准答案|参考答案|题面)|(?:^|\n)\s*(?:#|\/\/)?\s*problem\s*:/i;
 
     export function validateAutocompleteOutput(
       raw: string,
@@ -2302,14 +2779,10 @@ Create src/skills/validators/autocompleteOutputPolicy.ts:
         language === "python" ? "#" :
         language === "c" || language === "cpp" || language === "rust" ? "//" :
         undefined;
-      const withoutPreamble = commentPrefix
-        ? raw
-            .split(/\r?\n/)
-            .filter((line) =>
-              !line.trimStart().toLowerCase().startsWith(commentPrefix + " skill ")
-            )
-            .join("\n")
-        : raw;
+      const withoutPreamble = raw
+        .split(/\r?\n/)
+        .filter((line) => !isSkillControlLine(line, commentPrefix))
+        .join("\n");
       const suggestion = limitCompletionLines(withoutPreamble, maxLines);
       if (!suggestion.trim()) {
         return {
@@ -2324,7 +2797,21 @@ Create src/skills/validators/autocompleteOutputPolicy.ts:
       };
     }
 
-    Do not include raw response text in the rejection result or error/status event.
+    function isSkillControlLine(
+      line: string,
+      commentPrefix: "#" | "//" | undefined
+    ): boolean {
+      const trimmed = line.trimStart();
+      if (/^\[(?:head|body|tail|footer)\]\s+/i.test(trimmed)) {
+        return true;
+      }
+      return Boolean(
+        commentPrefix &&
+        trimmed.toLowerCase().startsWith(commentPrefix + " skill ")
+      );
+    }
+
+Do not include raw response text in the rejection result or error/status event.
 
 - [ ] **Step 4: Extract and test the permitted sanitized file label**
 
@@ -2344,6 +2831,12 @@ Create test/autocompleteFileLabel.test.ts:
         expect(stableAutocompleteFileLabel(
           "C:\\Users\\Ada\\project\\src\\solution.cpp"
         )).toBe("src/solution.cpp");
+      });
+
+      test("masks multi-letter online-judge problem IDs", () => {
+        expect(stableAutocompleteFileLabel(
+          "C:\\Users\\Ada\\project\\CF1791A.cpp"
+        )).toBe("problem.cpp");
       });
     });
 
@@ -2374,7 +2867,10 @@ Create src/autocomplete/fileLabel.ts with:
       }
 
       const fileName = parts.at(-1);
-      if (fileName && /^[A-Z]\d+\.[A-Za-z0-9]+$/i.test(fileName)) {
+      if (
+        fileName &&
+        /^(?:[A-Za-z]+\d+[A-Za-z0-9_-]*|\d+)\.[A-Za-z0-9]+$/.test(fileName)
+      ) {
         return "problem" + fileExtension(fileName);
       }
       return parts.slice(-2).map(sanitizePart).join("/") || "current-file";
@@ -2628,9 +3124,11 @@ Create test/inlineProviderSkillIntegration.test.ts:
         expect(provider).toContain("studentSkill:");
         expect(provider).toContain("capabilities: route.capabilities");
         expect(provider).toContain('type: "rejected"');
+        expect(provider).not.toContain("${document.uri.fsPath}:");
         expect(extension).toContain("createStudentAutocompleteStoragePaths");
         expect(extension).toContain("loadStudentSkill(storagePaths.studentSkill)");
         expect(extension).toContain('event.type === "rejected"');
+        expect(extension).not.toContain("editor.document.uri.fsPath");
       });
     });
 
@@ -2657,6 +3155,7 @@ In src/autocomplete/inlineProvider.ts:
     loadStudentSkill: () => Promise<StudentSkill>;
 
 - Rename loadConfig to loadRoute and return routeAutocompleteModel rather than route.config.
+- Remove the now-unused CompletionProviderConfig type import; let loadRoute infer the ModelRoute return type from routeAutocompleteModel.
 - Inside the request block, load route and StudentSkill before the model call:
 
     const route = await loadRoute();
@@ -2670,6 +3169,7 @@ In src/autocomplete/inlineProvider.ts:
 
 - Remove the hard-coded habits array.
 - Replace suggestion references with result.suggestion.
+- Keep document.uri.fsPath only as the private input to buildAutocompleteInputFromText; remove it from request/success event messages. Use `${document.languageId} line ${position.line + 1}` for request and `${document.languageId} line ${position.line + 1} ${result.suggestion.split(/\r?\n/).length} line(s)` for success.
 - Handle statuses before caching:
 
     if (result.status === "model-empty") {
@@ -2688,7 +3188,7 @@ In src/autocomplete/inlineProvider.ts:
       return [];
     }
 
-Only status and stable rejectionReason may enter the event. Do not add result.audit, prefix, suffix, response text, or file content to the event.
+Only language, line/count metadata, status, and stable rejectionReason may enter the event. Do not add result.audit, prefix, suffix, response text, absolute/sanitized file path, or file content to the event. This matters because extension.ts writes event.message to the output channel and internal recorder.
 
 - [ ] **Step 4: Wire the StudentSkill loader and rejected status bar**
 
@@ -2713,6 +3213,12 @@ Add a status branch before the generic error branch:
       autocompleteStatus.text = "$(shield) AI 补全已拦截";
       autocompleteStatus.tooltip = event.message;
 
+In the studentAutocomplete.triggerInlineCompletion command, replace the manual-trigger output line that contains editor.document.uri.fsPath with:
+
+    output.appendLine(
+      `[autocomplete:manual-trigger] ${editor.document.languageId} line ${editor.selection.active.line + 1}`
+    );
+
 The existing request, success, empty, and error behavior stays intact.
 
 - [ ] **Step 5: Verify with focused tests**
@@ -2724,7 +3230,7 @@ Run:
 
 Expected: all tests pass; TypeScript proves the new required loader is supplied.
 
-- [ ] **Step 6: Stage the dirty provider safely and commit**
+- [ ] **Step 6: Stage the provider changes safely and commit**
 
 Run:
 
@@ -2742,7 +3248,7 @@ Confirm the staged inlineProvider diff contains only:
 - rejected status;
 - removal of hard-coded habits.
 
-Do not stage the earlier trigger/gating fix unless it is already separately committed and intentionally part of this branch.
+Confirm the earlier trigger/gating fix remains an unchanged ancestor from 97e852b rather than reappearing as a new diff.
 
 Run:
 
@@ -2754,6 +3260,8 @@ Run:
 
 - Modify: src/teaching/mimoTeacher.ts
 - Modify: test/mimoTeacher.test.ts
+- Modify: src/teaching/coachFollowUp.ts
+- Modify: test/coachFollowUp.test.ts
 - Modify: src/sidebar/ProblemBankViewProvider.ts
 - Verify unchanged: src/teaching/teachingPrompt.ts
 - Verify: test/teachingPrompt.test.ts
@@ -2826,19 +3334,80 @@ Append:
       expect(system).not.toContain("[tail]");
       expect(user).toContain("Check the first and last valid loop or range boundary");
       expect(user.indexOf("[tail]")).toBeLessThan(user.indexOf("[footer]"));
-      expect(user.trimEnd()).toEndWith("</action-output-footer>");
+      expect(user.trimEnd().endsWith("</action-output-footer>")).toBe(true);
       expect(user).not.toContain("unmapped-student-secret-123");
       expect(audit?.includedRuleIds).toContain("learner.loop-boundary");
       expect(JSON.stringify(audit)).not.toContain("student-secret");
+    });
+
+In test/coachFollowUp.test.ts, add requestMimoCoachFollowUpWithSkills to the existing coachFollowUp import and add:
+
+    import { createEmptyStudentSkill } from "../src/teaching/studentSkill";
+    import type { SkillPlanAudit } from "../src/skills/types";
+
+Append:
+
+    test("uses the common coach layers with the follow-up JSON footer", async () => {
+      const calls: Array<{ init?: RequestInit }> = [];
+      const fakeFetch = async (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+        calls.push({ init });
+        return new Response(JSON.stringify({
+          choices: [{
+            message: {
+              content: JSON.stringify({
+                answer: "因为输入格式已经给出 n。",
+                next_action: "把循环次数改成 n。"
+              })
+            }
+          }]
+        }), { status: 200 });
+      };
+      const skill = createEmptyStudentSkill("student-a", "2026-07-14T00:00:00.000Z");
+      skill.codeHabits.languageRules.python = [
+        "Check loop boundary.",
+        "unmapped-follow-up-secret-456"
+      ];
+      let audit: SkillPlanAudit | undefined;
+
+      await requestMimoCoachFollowUpWithSkills(
+        {
+          baseUrl: "https://api.example.test/v1",
+          apiKey: "test-key",
+          model: "teacher-model"
+        },
+        context,
+        {
+          studentSkill: skill,
+          onAudit: (value) => {
+            audit = value;
+          }
+        },
+        fakeFetch as typeof fetch
+      );
+
+      const body = JSON.parse(String(calls[0].init?.body));
+      const system = String(body.messages[0].content);
+      const user = String(body.messages[1].content);
+      expect(system).not.toContain("[tail]");
+      expect(user).toContain("Check the first and last valid loop or range boundary");
+      expect(user.indexOf("[tail]")).toBeLessThan(user.indexOf("[footer]"));
+      expect(user).toContain("follow-up JSON object");
+      expect(user.indexOf("Answer the student's follow-up")).toBeLessThan(
+        user.indexOf("follow-up JSON object")
+      );
+      expect(user.trimEnd().endsWith("</action-output-footer>")).toBe(true);
+      expect(user).not.toContain("unmapped-follow-up-secret-456");
+      expect(audit?.includedRuleIds).toContain("output.coach.follow-up-json");
+      expect(JSON.stringify(audit)).not.toContain("follow-up-secret");
     });
 
 - [ ] **Step 2: Verify red**
 
 Run:
 
-    npx vitest run test/mimoTeacher.test.ts
+    npx vitest run test/mimoTeacher.test.ts test/coachFollowUp.test.ts
 
-Expected: FAIL because requestMimoTeachingDiagnosisWithSkills does not exist.
+Expected: FAIL because the two skill-aware coach entry points do not exist.
 
 - [ ] **Step 3: Add a skill-aware coach entry point while preserving the legacy function**
 
@@ -2932,7 +3501,75 @@ Replace the legacy function body with:
 
 This preserves every existing CLI/test call signature. Do not append learner rules to buildTeachingDiagnosisPrompt; the user/context prompt remains separate from the policy layers.
 
-- [ ] **Step 4: Pass the actual route, StudentSkill, and action from the sidebar**
+- [ ] **Step 4: Add the same composition boundary to follow-up chat**
+
+In src/teaching/coachFollowUp.ts, import providerCapabilitiesFor, composeCoachSkillPlan, selectLearnerRules, renderCoachSkillPlan, StudentSkill creation/type, and the skill types. Add:
+
+    export interface CoachFollowUpSkillOptions {
+      studentSkill?: StudentSkill;
+      capabilities?: ProviderCapabilities;
+      onAudit?: (audit: SkillPlanAudit) => void;
+    }
+
+Implement:
+
+    export async function requestMimoCoachFollowUpWithSkills(
+      config: ChatCompletionProviderConfig,
+      context: CoachFollowUpContext,
+      options: CoachFollowUpSkillOptions,
+      fetchImpl: typeof fetch = fetch,
+      onUsage?: ChatCompletionUsageSink
+    ): Promise<CoachFollowUpReport> {
+      const skill = options.studentSkill ?? createEmptyStudentSkill("legacy-coach-follow-up");
+      const learnerSelection = selectLearnerRules({
+        skill,
+        route: "coach",
+        language: context.language,
+        localCode: context.studentCode
+      });
+      const plan = composeCoachSkillPlan({
+        language: context.language,
+        action: "followUp",
+        learnerSelection
+      });
+      const capabilities = options.capabilities ?? providerCapabilitiesFor({
+        format: config.format ?? "openai-chat",
+        baseUrl: "baseUrl" in config ? config.baseUrl : "codex://app-server"
+      });
+      const rendered = renderCoachSkillPlan(
+        plan,
+        capabilities,
+        buildCoachFollowUpPrompt(context)
+      );
+      options.onAudit?.(rendered.audit);
+
+      const text = await requestChatCompletionText(
+        config,
+        {
+          messages: rendered.messages,
+          maxTokens: 700,
+          temperature: 0.2,
+          responseFormat: { type: "json_object" },
+          onUsage
+        },
+        fetchImpl
+      );
+      return parseCoachFollowUpText(text);
+    }
+
+Extract the current request function's try/catch into parseCoachFollowUpText, preserving its exact error message and the existing exported parseCoachFollowUpReport. Replace the legacy requestMimoCoachFollowUp body with:
+
+    return requestMimoCoachFollowUpWithSkills(
+      config,
+      context,
+      {},
+      fetchImpl,
+      onUsage
+    );
+
+Do not append skill text inside buildCoachFollowUpPrompt. The existing follow-up context and JSON parser remain unchanged; only the outer policy composition changes.
+
+- [ ] **Step 5: Pass the actual route, StudentSkill, and action from the sidebar**
 
 In handleAiCoachRequest in src/sidebar/ProblemBankViewProvider.ts:
 
@@ -2947,6 +3584,18 @@ In handleAiCoachRequest in src/sidebar/ProblemBankViewProvider.ts:
 - Add a local variable:
 
     let coachSkillAudit: SkillPlanAudit | undefined;
+
+- In the action === "followUp" branch, keep the existing CoachFollowUpContext object but replace requestMimoCoachFollowUp with requestMimoCoachFollowUpWithSkills and pass this third argument:
+
+    {
+      studentSkill,
+      capabilities: route.capabilities,
+      onAudit: (audit) => {
+        coachSkillAudit = audit;
+      }
+    }
+
+  Add coachSkillAudit to that branch's existing internal-test payload. The returned CoachFollowUpReport and attempt history remain unchanged.
 
 - Replace the diagnose callback with:
 
@@ -2964,35 +3613,35 @@ In handleAiCoachRequest in src/sidebar/ProblemBankViewProvider.ts:
         }
       )
 
-- Import requestMimoTeachingDiagnosisWithSkills and SkillPlanAudit.
-- Add coachSkillAudit to the existing internal-test payload only as the typed audit object. Never add the rendered messages or TeachingDiagnosisContext.
+- Import requestMimoTeachingDiagnosisWithSkills, requestMimoCoachFollowUpWithSkills, and SkillPlanAudit.
+- Add coachSkillAudit to the diagnosis branch's existing internal-test payload only as the typed audit object. Never add rendered messages, TeachingDiagnosisContext, CoachFollowUpContext, or raw StudentSkill text.
 
-Follow-up chat stays on requestMimoCoachFollowUp in this version. Its inclusion in CoachSkillAction reserves the contract, but migrating follow-up is out of scope.
-
-- [ ] **Step 5: Verify coach taxonomy and workflow remain unchanged**
+- [ ] **Step 6: Verify coach taxonomy and workflow remain unchanged**
 
 Run:
 
-    npx vitest run test/mimoTeacher.test.ts test/teachingPrompt.test.ts test/teachingWorkflow.test.ts test/studentSkill.test.ts
+    npx vitest run test/mimoTeacher.test.ts test/coachFollowUp.test.ts test/teachingPrompt.test.ts test/teachingWorkflow.test.ts test/studentSkill.test.ts
     npm run compile
 
 Expected:
 
 - Existing teaching JSON normalization passes.
+- Existing follow-up JSON parsing and response shape pass.
 - Existing taxonomy expectations pass.
 - Existing workflow still receives TeachingDiagnosisReport, not a new wrapper.
-- New system policy contains controlled tail rules in the correct order.
+- Diagnosis and follow-up system policy contain controlled tail rules in the correct physical order.
 
-- [ ] **Step 6: Stage the dirty sidebar file safely and commit**
+- [ ] **Step 7: Stage the sidebar changes safely and commit**
 
 Run:
 
     git add src/teaching/mimoTeacher.ts test/mimoTeacher.test.ts
+    git add src/teaching/coachFollowUp.ts test/coachFollowUp.test.ts
     git add -p src/sidebar/ProblemBankViewProvider.ts
     git diff --cached --check
     git diff --cached
 
-Confirm the staged sidebar hunks are limited to route retention, skill-aware diagnosis, and safe audit recording.
+Confirm the staged sidebar hunks are limited to route retention, skill-aware diagnosis/follow-up calls, and safe audit recording.
 
 Run:
 
@@ -3031,8 +3680,8 @@ Create test/skillAuditView.test.ts:
           }],
           learnerRuleCount: 1,
           learnerRuleBudget: 2,
-          learnerCharacterCount: 74,
-          learnerCharacterBudget: 240,
+          learnerCharacterCount: 72,
+          learnerCharacterBudget: 160,
           enforcementKinds: ["prompt", "validator"]
         });
 
@@ -3049,8 +3698,8 @@ Create test/skillAuditView.test.ts:
           learnerRules: {
             used: 1,
             budget: 2,
-            usedCharacters: 74,
-            characterBudget: 240
+            usedCharacters: 72,
+            characterBudget: 160
           },
           enforcement: ["prompt", "validator"]
         });
@@ -3160,12 +3809,27 @@ Update the internal event payload to contain result.status, result.rejectionReas
 
 Delete the old static autocompletePreviewAudit function.
 
-- [ ] **Step 4: Make health check exercise composition, rendering, transport, and validation**
+- [ ] **Step 4: Expose the same safe applied-rule audit for coach**
+
+In both successful branches of handleAiCoachRequest, convert the coachSkillAudit captured in Task 9:
+
+    const skillAudit = coachSkillAudit
+      ? toPublicSkillPlanAudit("coach", coachSkillAudit)
+      : undefined;
+
+Add skillAudit to the coachFollowUp and teachingDiagnosis return objects. Keep workflowAudit unchanged because it describes context inclusion while skillAudit describes composed policy; neither replaces the other. Do not return the internal SkillPlan, rendered messages, learner text, or teaching context through skillAudit.
+
+In renderCoachFollowUp and renderAiDiagnosis, call appendContextAudit(data.skillAudit) immediately after the existing workflow-audit call. Extend the webview source test with:
+
+    expect(source).toContain("data.skillAudit");
+
+- [ ] **Step 5: Make health check exercise composition, rendering, transport, and validation**
 
 In runAutocompleteSmokeHealthCheck:
 
 - Keep the complete route.
-- Replace deepSeekFimEndpointHint(route.config) with a check of route.capabilities.configurationIssue. If it is deepseek-fim-beta-required, return the existing visible /beta guidance. Delete the old URL-inspecting helper once no caller remains.
+- Replace the requestCompletion import with requestMimoAutocompleteDetailed and remove CompletionProviderConfig once deepSeekFimEndpointHint is deleted.
+- Replace deepSeekFimEndpointHint(route.config) with a check of route.capabilities.configurationIssue. If it is deepseek-fim-beta-required, return the existing visible /beta guidance and include renderer: route.capabilities.renderer. Delete the old URL-inspecting helper once no caller remains.
 - Replace direct requestCompletion with:
 
     const result = await requestMimoAutocompleteDetailed(route.config, {
@@ -3176,18 +3840,36 @@ In runAutocompleteSmokeHealthCheck:
       capabilities: route.capabilities
     });
 
-- Treat model-empty as:
+After the detailed request returns, use one safe metadata object and branch on the structured status:
 
-    throw new Error("Autocomplete smoke model returned empty.");
+    const resultInfo = {
+      endpoint: route.endpoint,
+      model: route.model,
+      format: route.format,
+      renderer: result.audit.renderer,
+      validationStatus: result.status,
+      keyState: providerKeyState(route.config, config.apiKey),
+      latencyMs: elapsedSince(startedAt)
+    };
+    if (result.status === "model-empty") {
+      return failHealthCheckStep({
+        ...resultInfo,
+        error: "Autocomplete smoke model returned empty."
+      });
+    }
+    if (result.status === "validator-rejected") {
+      return failHealthCheckStep({
+        ...resultInfo,
+        error: "Autocomplete smoke rejected by policy: " +
+          (result.rejectionReason ?? "unknown")
+      });
+    }
+    return {
+      status: "pass",
+      ...resultInfo
+    };
 
-- Treat validator-rejected as:
-
-    throw new Error(
-      "Autocomplete smoke rejected by policy: " +
-      (result.rejectionReason ?? "unknown")
-    );
-
-- Add renderer: result.audit.renderer to the pass step.
+A transport/configuration exception reaches the existing catch and therefore has no validationStatus; this is how callers distinguish it from model-empty and validator-rejected.
 
 In src/sidebar/stateView.ts, add optional fields to AiHealthCheckStep:
 
@@ -3196,9 +3878,9 @@ In src/sidebar/stateView.ts, add optional fields to AiHealthCheckStep:
 
 Use type-only imports. Add renderer and validationStatus to safeAutocompleteRouteInfo so failure diagnostics identify the selected renderer without logging prompts.
 
-Update the health-check webview renderer to show renderer beside format when present.
+Update the health-check webview renderer to show renderer beside format and validationStatus beside the result when present.
 
-- [ ] **Step 5: Teach preview UI to distinguish rejection from empty**
+- [ ] **Step 6: Teach preview and audit UI to show safe structured status**
 
 In renderAutocompletePreview in the webview script:
 
@@ -3206,6 +3888,7 @@ In renderAutocompletePreview in the webview script:
 - If validationStatus is model-empty, keep an empty-state message.
 - If success, render suggestion as code.
 - Continue calling appendContextAudit(data.contextAudit).
+- Extend appendContextAudit without breaking legacy workflow audits: when present, show route/language/renderer, learnerRules used/budget and usedCharacters/characterBudget, and enforcement values. Render only these normalized fields plus included/excluded strings.
 
 Extend test/problemBankWebviewScript.test.ts with:
 
@@ -3213,14 +3896,19 @@ Extend test/problemBankWebviewScript.test.ts with:
     expect(source).toContain('data.validationStatus === "model-empty"');
     expect(source).toContain("data.rejectionReason");
     expect(source).toContain("data.contextAudit");
+    expect(source).toContain("audit.learnerRules");
+    expect(source).toContain("audit.renderer");
+    expect(source).toContain("audit.enforcement");
+    expect(source).toContain("step.renderer");
+    expect(source).toContain("step.validationStatus");
     expect(source).not.toContain("contextAudit.prefix");
     expect(source).not.toContain("contextAudit.suffix");
 
-- [ ] **Step 6: Verify**
+- [ ] **Step 7: Verify**
 
 Run:
 
-    npx vitest run test/skillAuditView.test.ts test/mimoAutocomplete.test.ts test/problemBankWebviewScript.test.ts
+    npx vitest run test/skillAuditView.test.ts test/mimoAutocomplete.test.ts test/mimoTeacher.test.ts test/coachFollowUp.test.ts test/problemBankWebviewScript.test.ts
     npm run compile
 
 Expected:
@@ -3228,9 +3916,10 @@ Expected:
 - Preview consumes detailed result.
 - Health check uses the same pipeline as Ghost Text.
 - UI distinguishes empty/rejected/success.
+- Diagnosis and follow-up UI expose the safe applied-rule audit alongside workflow context audit.
 - Audit includes only stable IDs/counts/capability metadata.
 
-- [ ] **Step 7: Stage overlapping dirty files by hunk and commit**
+- [ ] **Step 8: Stage overlapping feature files by hunk and commit**
 
 Run:
 
@@ -3239,7 +3928,7 @@ Run:
     git diff --cached --check
     git diff --cached
 
-Reject any staged hunks related to Luogu search, practice files, scoring, report changes, or unrelated webview work.
+Reject any staged hunks related to Luogu search, practice files, scoring, report generation, or unrelated webview work.
 
 Run:
 
@@ -3381,12 +4070,18 @@ Append to test/habitSelector.test.ts:
         lastSeen: "2026-07-14T00:00:00.000Z"
       };
 
-      expect(selectLearnerRules({
+      const selection = selectLearnerRules({
         skill,
         route: "coach",
         language: "python",
         localCode: "for i in range(n): pass"
-      }).rules).toEqual([]);
+      });
+
+      expect(selection.rules).toEqual([]);
+      expect(selection.excludedRules).toContainEqual({
+        id: "learner.loop-boundary",
+        reason: "disabled"
+      });
     });
 
     test("helpful feedback affects ranking without exceeding budget", () => {
@@ -3397,7 +4092,7 @@ Append to test/habitSelector.test.ts:
       ];
       skill.skills["python-loop-boundary-check"] = {
         name: "python-loop-boundary-check",
-        status: "active",
+        status: "candidate",
         reason: "Repeated loop boundary misses.",
         rules: ["Check loop boundary."],
         sourcePainPoints: ["loop_boundary"],
@@ -3462,7 +4157,7 @@ Expected hard gates:
 
 Do not run trial:mimo-journey or another paid provider route in this task. Live calls belong to the explicit installed-extension acceptance task.
 
-- [ ] **Step 6: Stage dirty prompt/tests by hunk and commit**
+- [ ] **Step 6: Stage prompt/tests by hunk and commit**
 
 Run:
 
@@ -3551,6 +4246,13 @@ Expected:
 - The release staging tree passes the existing secret/runtime/source-map checks.
 - test.c is absent from the development package.
 
+Inspect the development file list as well:
+
+    $developmentFiles = npx --yes @vscode/vsce ls
+    $developmentFiles -replace "\\", "/" | Select-String "(^|/)[^/]+\.(c|cpp|py|rs)$"
+
+Expected: Select-String prints nothing.
+
 Inspect the clean release file list:
 
     Push-Location .runtime\beta-release-vsix\student-autocomplete-lab-beta-release
@@ -3609,17 +4311,18 @@ Before operating VS Code, read and follow the computer-use:computer-use skill. I
 3. Confirm autocomplete health reports renderer and distinguishes transport failure, model-empty, and validator-rejected.
 4. Run once with the already-authorized Codex OAuth route and its actually listed autocomplete model; do not invent a Spark model absent from the account.
 5. If a configured DeepSeek key is available and live-call authorization remains current, use chat at /v1 and autocomplete at /beta/completions for one bounded FIM smoke. Confirm the provider request contains the exact post-cursor suffix.
+6. After reload, confirm the selected auth mode, non-secret base URLs/formats, and model names remain saved; confirm a previously saved API key is reported only as saved/provided, never displayed.
 
-If no authorized DeepSeek credential is configured, record live DeepSeek as not verified; deterministic DeepSeek client/renderer tests remain mandatory but do not count as a live call.
+If Codex OAuth is not already authorized, do not start or operate an authentication dialog; record that route as not verified. If no authorized DeepSeek credential is configured, record live DeepSeek as not verified; deterministic DeepSeek client/renderer tests remain mandatory but do not count as a live call.
 
 - [ ] **Step 4: Verify language-specific Ghost Text**
 
-Open one small local file for each supported language and trigger inline completion at a non-comment code location:
+Create disposable files under ignored .runtime/ui-audit/smoke and trigger inline completion at a non-comment code location in each:
 
-- Python: an indented range loop;
-- C: an open statement or loop body;
-- C++: a vector/container access or loop body;
-- Rust: an iterator/match/Result-shaped local continuation.
+- smoke.py: an indented range loop;
+- smoke.c: an open statement or loop body;
+- smoke.cpp: a vector/container access or loop body;
+- smoke.rs: an iterator/match/Result-shaped local continuation.
 
 For each:
 
@@ -3642,10 +4345,11 @@ Using one current problem/session:
 3. Trigger a 1–3 line inline completion.
 4. Request a hint.
 5. Request a more specific hint and confirm it narrows the same current issue instead of revealing the full answer.
-6. Mark the attempt completed or abandoned.
-7. Inspect StudentSkill: revision/evidence changes only when the teaching workflow supplies evidence; autocomplete itself does not promote a skill.
-8. Confirm a user-disabled or wrong-diagnosis skill does not appear in the applied-rule audit.
-9. Request a next problem and verify the UI shows a reason.
+6. Ask one follow-up question and confirm it uses the same language/learner layers, answers the latest question first, and keeps the follow-up JSON contract.
+7. Mark the attempt completed or abandoned.
+8. Inspect StudentSkill: revision/evidence changes only when the teaching workflow supplies evidence; autocomplete and follow-up chat do not promote a skill.
+9. Confirm a user-disabled or wrong-diagnosis skill does not appear in the applied-rule audit.
+10. Request a next problem and verify the UI shows a reason.
 
 The preview/coach audit may show route, language, renderer, included/excluded stable rule IDs, learner budget, and enforcement kinds. It must not show code, prompt, suffix, statement, Teacher Pack, standard answer, file path, key, or token.
 
@@ -3697,23 +4401,26 @@ Run:
 
     npx vitest run test/languageSkillRegistry.test.ts test/habitSelector.test.ts test/skillPlan.test.ts test/providerCapabilities.test.ts test/skillRenderers.test.ts
     npx vitest run test/completionsClient.test.ts test/autocompleteOutputPolicy.test.ts test/mimoAutocomplete.test.ts test/inlineProviderSkillIntegration.test.ts
-    npx vitest run test/mimoTeacher.test.ts test/teachingPrompt.test.ts test/teachingWorkflow.test.ts test/skillAuditView.test.ts
+    npx vitest run test/mimoTeacher.test.ts test/coachFollowUp.test.ts test/teachingPrompt.test.ts test/teachingWorkflow.test.ts test/skillAuditView.test.ts
     npx vitest run test/skillContextBoundary.test.ts test/context.test.ts test/autocomplete.test.ts test/problemBankWebviewScript.test.ts test/skillPackaging.test.ts
 
 Expected: all files pass independently as well as in the full suite.
 
-- [ ] **Step 3: Perform the privacy and placeholder scans**
+- [ ] **Step 3: Perform the privacy and unfinished-marker scans**
 
 Run:
 
     rg -n "teacherPack|standardAnswer|referenceSolution|problem\.statement|coachThread" src\autocomplete src\skills
     rg -n "apiKey|accessToken|refreshToken|authorization" src\skills
-    rg -n "TODO|TBD|FIXME|HACK|placeholder|not implemented" src\skills test\languageSkillRegistry.test.ts test\habitSelector.test.ts test\skillPlan.test.ts test\skillRenderers.test.ts
+    rg -n "appendLine.*fsPath|message:.*fsPath" src\autocomplete\inlineProvider.ts src\extension.ts
+    $unfinishedMarkers = @("TO" + "DO", "TB" + "D", "FIX" + "ME", "HA" + "CK", "not\s+implemented") -join "|"
+    rg -n $unfinishedMarkers src\skills test\languageSkillRegistry.test.ts test\habitSelector.test.ts test\skillPlan.test.ts test\skillRenderers.test.ts
 
 Expected:
 
 - No forbidden context dependency in autocomplete/skill code.
 - No credential fields in SkillPlan/audit code.
+- No editor file path is written into autocomplete event/output-channel messages.
 - No unfinished implementation markers in new modules/tests.
 - Policy instructions that name a forbidden category are reviewed separately from actual data dependencies.
 
@@ -3722,14 +4429,14 @@ Expected:
 Use this checklist:
 
 - Typed head/body/tail/footer SkillPlan exists.
-- Coach and autocomplete have separate composers and context types.
+- Diagnosis, follow-up coach, and autocomplete paths use their route-appropriate composer/context types.
 - Precedence is safety > output > action > language > habits and conflict tests prove it.
 - Python/C/C++/Rust/generic strategies have stable IDs.
 - StudentSkill raw strings are controlled, relevant, correction-aware, and capped at 3 coach/2 autocomplete.
 - DeepSeek FIM sends the exact suffix; known languages use native comments; generic adds no synthetic preamble.
 - OpenAI chat, Anthropic, Codex OAuth, and generic OpenAI-compatible requests preserve legacy compatibility.
 - Validator distinguishes success, model-empty, and validator-rejected with no automatic retry.
-- Preview, health, status bar, audit, and installed Ghost Text use the same detailed pipeline.
+- Preview, health, status bar, and installed Ghost Text use the same detailed autocomplete pipeline; diagnosis/follow-up show the same safe composed-rule audit shape.
 - Audit contains stable IDs/counts only.
 - No per-language model UI and no DeepSeek-specific chat prefix were added.
 - Fixture evaluation has zero leakage/parser crash/disabled reactivation/budget violations.

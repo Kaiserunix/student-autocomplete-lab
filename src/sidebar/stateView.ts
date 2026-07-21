@@ -4,6 +4,8 @@ import type { CodexModelInfo } from "../codex/codexModelService";
 import type { AttemptSession } from "../attempt/schema";
 import type { InternalTestSummary } from "../internalTesting/internalTestRecorder";
 import type { ProblemRecord } from "../problemBank/types";
+import type { SkillPlanAudit } from "../skills/types";
+import type { AutocompleteValidationStatus } from "../skills/validators/autocompleteOutputPolicy";
 import type { StudentSkill } from "../teaching/studentSkill";
 import type { CompletedProblemRecord } from "./problemArchive";
 
@@ -29,6 +31,8 @@ export interface AiHealthCheckStep {
   endpoint?: string;
   model?: string;
   format?: string;
+  renderer?: SkillPlanAudit["renderer"];
+  validationStatus?: AutocompleteValidationStatus;
   keyState?: "provided" | "saved" | "missing";
   count?: number;
   error?: string;
