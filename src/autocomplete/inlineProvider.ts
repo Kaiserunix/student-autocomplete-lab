@@ -1,16 +1,16 @@
 import * as path from "node:path";
 import * as vscode from "vscode";
 import { loadModelEnvFromVsCode } from "../config/vscodeModelEnv";
-import type { CompletionProviderConfig } from "../models/completionsClient";
 import { routeAutocompleteModel } from "../models/modelRouter";
 import type { ModelTextTransport } from "../models/modelTextTransport";
+import type { StudentSkill } from "../teaching/studentSkill";
 import { buildAutocompleteInputFromText } from "./context";
-import { requestMimoAutocomplete } from "./mimoAutocomplete";
+import { requestMimoAutocompleteDetailed } from "./mimoAutocomplete";
 import { AutocompleteRequestGate } from "./requestGate";
 import { isSupportedAutocompleteLanguage, shouldRequestInlineCompletion } from "./triggerPolicy";
 
 export interface InlineCompletionEvent {
-  type: "request" | "success" | "empty" | "error";
+  type: "request" | "success" | "empty" | "rejected" | "error";
   message: string;
 }
 
@@ -20,6 +20,7 @@ interface InlineCompletionProviderOptions {
   minAutomaticIntervalMs?: number;
   cacheTtlMs?: number;
   oauthTransport: ModelTextTransport;
+  loadStudentSkill: () => Promise<StudentSkill>;
 }
 
 export function createMimoInlineCompletionProvider(
@@ -30,7 +31,7 @@ export function createMimoInlineCompletionProvider(
     cacheTtlMs: options.cacheTtlMs
   });
 
-  async function loadConfig(): Promise<CompletionProviderConfig> {
+  async function loadRoute() {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     if (!workspaceFolder) {
       throw new Error("Open a workspace folder before using Student Autocomplete inline completion.");
@@ -40,7 +41,7 @@ export function createMimoInlineCompletionProvider(
     return routeAutocompleteModel(
       await loadModelEnvFromVsCode(options.extensionContext, envPath),
       options.oauthTransport
-    ).config;
+    );
   }
 
   return {
@@ -76,12 +77,13 @@ export function createMimoInlineCompletionProvider(
       try {
         options.onEvent?.({
           type: "request",
-          message: `${document.languageId} ${document.uri.fsPath}:${position.line + 1}`
+          message: `${document.languageId} line ${position.line + 1}`
         });
         if (token?.isCancellationRequested) {
           return [];
         }
-        const config = await loadConfig();
+        const route = await loadRoute();
+        const studentSkill = await options.loadStudentSkill();
         const offset = document.offsetAt(position);
         const input = buildAutocompleteInputFromText({
           text: document.getText(),
@@ -96,29 +98,38 @@ export function createMimoInlineCompletionProvider(
           });
           return [];
         }
-        const suggestion = await requestMimoAutocomplete(config, {
+        const result = await requestMimoAutocompleteDetailed(route.config, {
           ...input,
-          habits: ["Prefer direct student code.", "Return only the immediate local continuation."],
+          studentSkill: studentSkill,
+          capabilities: route.capabilities,
           signal: abortController.signal
         });
 
         if (token?.isCancellationRequested) {
           return [];
         }
-        if (!suggestion.trim()) {
+        if (result.status === "model-empty") {
           options.onEvent?.({
             type: "empty",
-            message: "MiMo returned an empty inline completion."
+            message: "The autocomplete model returned no continuation."
+          });
+          return [];
+        }
+        if (result.status === "validator-rejected") {
+          options.onEvent?.({
+            type: "rejected",
+            message: "Autocomplete output rejected by policy: " +
+              (result.rejectionReason ?? "unknown")
           });
           return [];
         }
 
         options.onEvent?.({
           type: "success",
-          message: `${document.languageId} ${document.uri.fsPath}:${position.line + 1} ${suggestion.split(/\r?\n/).length} line(s)`
+          message: `${document.languageId} line ${position.line + 1} ${result.suggestion.split(/\r?\n/).length} line(s)`
         });
-        requestGate.completeSuccess(requestKey, suggestion);
-        return [new vscode.InlineCompletionItem(suggestion)];
+        requestGate.completeSuccess(requestKey, result.suggestion);
+        return [new vscode.InlineCompletionItem(result.suggestion)];
       } catch (error) {
         options.onEvent?.({
           type: "error",

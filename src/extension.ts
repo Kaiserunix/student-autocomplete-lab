@@ -3,6 +3,8 @@ import { createMimoInlineCompletionProvider } from "./autocomplete/inlineProvide
 import { createCodexServices, resolveCodexServicePaths } from "./codex/codexServices";
 import { createInternalTestRecorder } from "./internalTesting/internalTestRecorder";
 import { ProblemBankViewProvider } from "./sidebar/ProblemBankViewProvider";
+import { createStudentAutocompleteStoragePaths } from "./storage/StoragePaths";
+import { loadStudentSkill } from "./teaching/studentSkillStore";
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("AI 做题陪练");
@@ -23,6 +25,9 @@ export function activate(context: vscode.ExtensionContext): void {
     version: String(context.extension.packageJSON.version ?? ""),
     workspaceFolder: vscode.workspace.workspaceFolders?.[0]?.uri.fsPath
   });
+  const storagePaths = createStudentAutocompleteStoragePaths(
+    context.globalStorageUri.fsPath
+  );
   const provider = new ProblemBankViewProvider(context, codexServices);
   const autocompleteStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
   autocompleteStatus.name = "AI 做题陪练补全";
@@ -46,6 +51,7 @@ export function activate(context: vscode.ExtensionContext): void {
       createMimoInlineCompletionProvider({
         extensionContext: context,
         oauthTransport: codexServices.text,
+        loadStudentSkill: () => loadStudentSkill(storagePaths.studentSkill),
         onEvent: (event) => {
           output.appendLine(`[autocomplete:${event.type}] ${event.message}`);
           void internalRecorder.record({
@@ -60,6 +66,9 @@ export function activate(context: vscode.ExtensionContext): void {
             autocompleteStatus.tooltip = event.message;
           } else if (event.type === "empty") {
             autocompleteStatus.text = "$(circle-slash) AI 返回空补全";
+            autocompleteStatus.tooltip = event.message;
+          } else if (event.type === "rejected") {
+            autocompleteStatus.text = "$(shield) AI 补全已拦截";
             autocompleteStatus.tooltip = event.message;
           } else {
             autocompleteStatus.text = "$(warning) AI 补全异常";
@@ -93,7 +102,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
       await vscode.window.showTextDocument(editor.document, editor.viewColumn, false);
       autocompleteStatus.text = "$(sync~spin) 正在触发 AI 补全";
-      output.appendLine(`[autocomplete:manual-trigger] ${editor.document.uri.fsPath}:${editor.selection.active.line + 1}`);
+      output.appendLine(
+        `[autocomplete:manual-trigger] ${editor.document.languageId} line ${editor.selection.active.line + 1}`
+      );
       await vscode.commands.executeCommand("editor.action.inlineSuggest.trigger");
     })
   );
