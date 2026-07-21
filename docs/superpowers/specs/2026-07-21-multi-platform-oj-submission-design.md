@@ -165,5 +165,5 @@ Final verification on 2026-07-21:
 - the browser screenshot was inspected and preserved only under ignored `.runtime` output;
 - `npm audit` reported zero vulnerabilities after the existing indirect `body-parser` dependency was updated from 2.2.2 to 2.3.0 in the lockfile;
 - full beta and clean beta-release VSIX packages completed, project hygiene passed, and the clean package contained production submission modules but not the standalone prototype or browser test;
-- the clean beta-release VSIX was force-installed successfully as `kaiserunix.student-autocomplete-lab-beta-release@0.1.0-beta.1`;
+- a same-version `--force` install reported success but left the previous directory contents, so the beta-release channel was explicitly uninstalled and reinstalled; file-level inspection then confirmed `submissionTarget.js`, the AtCoder allowlist, platform selector, and submitted-link behavior under `kaiserunix.student-autocomplete-lab-beta-release@0.1.0-beta.1`;
 - no authenticated login, graphical challenge interaction, or remote submission was performed.
