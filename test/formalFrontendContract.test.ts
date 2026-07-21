@@ -97,16 +97,63 @@ describe("formal sidebar frontend contract", () => {
     expect(source).toContain('goCoachButton.className = "posterPrimaryAction"');
   });
 
-  test("derives the session masthead and attempt evidence from live state", async () => {
+  test("derives one compact session summary from live state", async () => {
     const source = await providerSource();
 
     expect(source).toContain("function renderSessionMasthead()");
     expect(source).toContain('setElementText("sessionProblemTitle"');
     expect(source).toContain('setElementText("sessionEditorState"');
     expect(source).toContain('setElementText("sessionAttemptState"');
-    expect(source).toContain('textSpan("ATTEMPT / "');
-    expect(source).toContain('className = "attemptEvidenceRail"');
+    expect(source).toContain('className = "coachSummary"');
+    expect(source).not.toContain('className = "attemptEvidenceRail"');
+    expect(source).not.toContain('className = "coachMetaGrid"');
     expect(source).toContain("renderSessionMasthead();");
+  });
+
+  test("keeps the default attempt surface concise and drawers secondary controls", async () => {
+    const source = await providerSource();
+    const attemptStart = source.indexOf('<section id="aiPage"');
+    const attemptEnd = source.indexOf('<section id="skillPage"', attemptStart);
+    const attemptMarkup = source.slice(attemptStart, attemptEnd);
+
+    expect(attemptMarkup).toContain('id="attemptOptionsDrawer"');
+    expect(attemptMarkup).toContain('id="coachMoreDrawer"');
+    expect(attemptMarkup).toContain('class="utilityShelf"');
+    expect(attemptMarkup.indexOf('id="coachHint"')).toBeLessThan(attemptMarkup.indexOf('id="coachMoreDrawer"'));
+    expect(attemptMarkup.indexOf('id="submissionDocket"')).toBeGreaterThan(attemptMarkup.indexOf('class="utilityShelf"'));
+    expect(source).toContain('aiProvider.textContent = "AI 已就绪"');
+  });
+
+  test("uses one compact session summary without duplicate dashboard furniture", async () => {
+    const source = await providerSource();
+    const headerStart = source.indexOf('<header id="sessionMasthead"');
+    const headerEnd = source.indexOf("</header>", headerStart);
+    const headerMarkup = source.slice(headerStart, headerEnd);
+
+    expect(headerMarkup).toContain('class="sessionBrief"');
+    expect(headerMarkup).not.toContain("mastheadEyebrow");
+    expect(headerMarkup).not.toContain("sessionTrace");
+    expect(headerMarkup).not.toContain('id="stats"');
+    expect(headerMarkup).toContain('id="sessionProblemTitle"');
+    expect(headerMarkup).toContain('id="sessionEditorState"');
+  });
+
+  test("keeps provider metadata and context audits out of coaching results", async () => {
+    const source = await providerSource();
+
+    expect(source).not.toContain('(data.model || "unknown model")');
+    expect(source).not.toContain('(data?.model || "unknown model")');
+    expect(source).not.toContain('responseBlock(\n          "上下文边界"');
+    expect(source).toContain('textSpan("连接检测", "aiResponseTitle")');
+  });
+
+  test("collapses archived evidence and secondary actions inside each card", async () => {
+    const source = await providerSource();
+
+    expect(source).toContain('details.className = "archiveDetails"');
+    expect(source).toContain('actionsDrawer.className = "archiveActionsDrawer compactDrawer"');
+    expect(source).toContain('event.target?.closest?.("button, summary, details")');
+    expect(source).toContain('chatButton.textContent = "继续复盘"');
   });
 
   test("distinguishes account, preview, and official verdict states", async () => {

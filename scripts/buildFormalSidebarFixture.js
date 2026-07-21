@@ -19,12 +19,25 @@ const problem = {
   hint: "把时间看作容量。每株草药只能采一次。"
 };
 
+const completedProblem = {
+  ...problem,
+  id: "P1428",
+  title: "小鱼比可爱",
+  tags: ["数组", "循环"],
+  completedAt: "2026-07-14T11:12:00.000Z",
+  completionReason: "completed",
+  painSummary: "循环边界 · 数组计数",
+  optimizationReport: {
+    optimizationNeeded: false
+  }
+};
+
 const state = {
   type: "problemBankState",
   problems: [problem],
-  completedProblems: [],
+  completedProblems: [completedProblem],
   selectedKey: "luogu:P1048",
-  status: "已加载 1 道题；当前简报 P1048。",
+  status: "已就绪",
   activeEditor: {
     fileName: "P1048.cpp",
     relativePath: "practice/P1048.cpp",

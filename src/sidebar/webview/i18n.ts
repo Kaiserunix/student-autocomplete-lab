@@ -13,15 +13,15 @@ export interface SidebarUiCopy {
 
 export const sidebarUiCopy: Record<UiLanguage, SidebarUiCopy> = {
   zh: {
-    tabAi: "AI 教练",
-    tabProblem: "题目",
-    tabSkill: "学习画像",
-    askAi: "问 AI",
+    tabAi: "作答现场",
+    tabProblem: "题目张贴板",
+    tabSkill: "学习档案",
+    askAi: "追问",
     send: "发送",
-    continueChat: "继续聊",
-    learningProfile: "AI 根据你的做题记录形成的可纠偏教学记忆",
+    continueChat: "继续复盘",
+    learningProfile: "可查看、可纠正",
     deleteProblem: "直接删除",
-    },
+  },
   en: {
     tabAi: "AI Coach",
     tabProblem: "Problems",
@@ -29,7 +29,7 @@ export const sidebarUiCopy: Record<UiLanguage, SidebarUiCopy> = {
     askAi: "Ask AI",
     send: "Send",
     continueChat: "Continue",
-    learningProfile: "Correctable teaching memory built from your attempts.",
+    learningProfile: "Reviewable and correctable.",
     deleteProblem: "Delete",
   }
 };

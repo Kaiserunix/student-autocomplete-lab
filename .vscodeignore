@@ -1,6 +1,8 @@
 .vscode/**
 .superpowers/**
 .runtime/**
+.playwright-cli/**
+output/**
 secrets/**
 .student-autocomplete/**
 .student-autocomplete-smoke/**
