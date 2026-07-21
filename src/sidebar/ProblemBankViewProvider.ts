@@ -3254,7 +3254,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
             <button id="coachFollowUp" class="secondary" type="button">继续聊</button>
             <button id="coachGiveUp" class="secondary" type="button">我放弃了</button>
             <button id="coachCompleted" class="secondary" type="button">我已完成</button>
-            <button id="coachAutocomplete" class="secondary" type="button">测试补全</button>
+            <button id="coachAutocomplete" class="secondary" type="button">测试补全接口</button>
           </div>
           <details id="ojSubmissionPanel" class="aiConfigBox">
             <summary>OJ 提交（Codeforces 实验）</summary>
@@ -3778,7 +3778,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         followUp: "继续聊",
         giveUp: "我放弃了",
         completed: "我已完成",
-        autocompletePreview: "测试补全",
+        autocompletePreview: "测试补全接口",
         waitingTitle: "等待 AI 交互",
         waitingHint: "选择题目，打开你的代码文件，然后点“给点提示”。题面只会进入提示分析，不会塞进自动补全提示词。",
         problemTabGuide: "Markdown 文件导入",
@@ -3811,7 +3811,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         followUp: "Continue",
         giveUp: "I Give Up",
         completed: "I Finished",
-        autocompletePreview: "Test Completion",
+        autocompletePreview: "Test Completion API",
         waitingTitle: "Waiting for AI",
         waitingHint: "Choose a problem, open your code file, then ask for a hint. The problem statement is only used for coaching, not autocomplete.",
         problemTabGuide: "Markdown File Import",
@@ -4415,7 +4415,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         {
           label: "自动补全",
           data: statusData.autocomplete,
-          readyText: "编辑器 Ghost Text，触发 " + endpointText(statusData.autocomplete)
+          readyText: "停下输入后自动显示编辑器 Ghost Text；" + endpointText(statusData.autocomplete)
         },
         {
           label: "AI 提示",
@@ -4621,7 +4621,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       setStatus("正在调用 AI 补全接口...");
       setCoachBusy(true);
       aiResponse.innerHTML = "";
-      aiResponse.appendChild(textSpan("AI 补全测试中", "aiResponseTitle"));
+      aiResponse.appendChild(textSpan("AI 补全接口测试中", "aiResponseTitle"));
       aiResponse.appendChild(textSpan("这只读取当前编辑器光标附近的代码、语言和安全习惯；不会读取题面、Teacher Pack 或标准答案。", "hint"));
       vscode.postMessage({ command: "requestAutocompletePreview" });
     }
