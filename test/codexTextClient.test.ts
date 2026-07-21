@@ -55,7 +55,11 @@ class FakeTextAppServer implements CodexTextAppServer {
 describe("Codex text client", () => {
   test("runs one ephemeral read-only turn and returns only the final agent message", async () => {
     const appServer = new FakeTextAppServer();
-    const transport = new CodexTextClient(appServer, "C:/runtime/student-autocomplete");
+    const transport = new CodexTextClient(
+      appServer,
+      "C:/runtime/student-autocomplete",
+      "student-autocomplete-http"
+    );
 
     const pending = transport.generate({
       purpose: "autocomplete",
@@ -89,6 +93,7 @@ describe("Codex text client", () => {
       method: "thread/start",
       params: {
         model: "gpt-5.3-codex-spark",
+        modelProvider: "student-autocomplete-http",
         cwd: "C:/runtime/student-autocomplete",
         approvalPolicy: "never",
         sandbox: "read-only",
@@ -99,7 +104,9 @@ describe("Codex text client", () => {
       method: "turn/start",
       params: {
         threadId: "thread-1",
-        input: [{ type: "text", text: "return code only" }]
+        input: [{ type: "text", text: "return code only" }],
+        effort: "low",
+        summary: "none"
       }
     });
     expect(appServer.calls.at(-1)).toMatchObject({

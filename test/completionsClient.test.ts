@@ -4,6 +4,7 @@ import { requestCompletion } from "../src/models/completionsClient";
 describe("OpenAI-compatible completions client", () => {
   test("posts a completions request and returns the first text choice", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const signal = new AbortController().signal;
     const fakeFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
       calls.push({ url: String(url), init });
       return new Response(
@@ -27,7 +28,8 @@ describe("OpenAI-compatible completions client", () => {
         prompt: "def add(a, b):\n    ",
         maxTokens: 64,
         temperature: 0.1,
-        stop: ["</suffix>"]
+        stop: ["</suffix>"],
+        signal
       },
       fakeFetch as typeof fetch
     );
@@ -35,6 +37,7 @@ describe("OpenAI-compatible completions client", () => {
     expect(text).toBe("return a + b\n");
     expect(calls[0].url).toBe("https://api.example.test/v1/completions");
     expect(calls[0].init?.method).toBe("POST");
+    expect(calls[0].init?.signal).toBe(signal);
     expect((calls[0].init?.headers as Record<string, string>).Authorization).toBe("Bearer test-key");
     expect(JSON.parse(String(calls[0].init?.body))).toMatchObject({
       model: "mimo-v2.5-pro",
@@ -47,6 +50,7 @@ describe("OpenAI-compatible completions client", () => {
 
   test("can use OpenAI chat completions for autocomplete", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const signal = new AbortController().signal;
     const fakeFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
       calls.push({ url: String(url), init });
       return new Response(JSON.stringify({ choices: [{ message: { content: "return a + b\n" } }] }), {
@@ -65,13 +69,15 @@ describe("OpenAI-compatible completions client", () => {
       {
         prompt: "def add(a, b):\n    ",
         maxTokens: 64,
-        temperature: 0.1
+        temperature: 0.1,
+        signal
       },
       fakeFetch as typeof fetch
     );
 
     expect(text).toBe("return a + b\n");
     expect(calls[0].url).toBe("https://api.openai.com/v1/chat/completions");
+    expect(calls[0].init?.signal).toBe(signal);
   });
 
   test("sends suffix for DeepSeek FIM completions on the beta endpoint", async () => {
@@ -140,6 +146,7 @@ describe("OpenAI-compatible completions client", () => {
 
   test("can use Anthropic Native messages for autocomplete", async () => {
     const calls: Array<{ url: string; init?: RequestInit }> = [];
+    const signal = new AbortController().signal;
     const fakeFetch = async (url: string | URL | Request, init?: RequestInit): Promise<Response> => {
       calls.push({ url: String(url), init });
       return new Response(JSON.stringify({ content: [{ type: "text", text: "return a + b\n" }] }), {
@@ -158,7 +165,8 @@ describe("OpenAI-compatible completions client", () => {
       {
         prompt: "def add(a, b):\n    ",
         maxTokens: 64,
-        temperature: 0.1
+        temperature: 0.1,
+        signal
       },
       fakeFetch as typeof fetch
     );
@@ -167,6 +175,7 @@ describe("OpenAI-compatible completions client", () => {
     expect(text).toBe("return a + b\n");
     expect(calls[0].url).toBe("https://api.anthropic.com/v1/messages");
     expect(headers["x-api-key"]).toBe("anthropic-key");
+    expect(calls[0].init?.signal).toBe(signal);
   });
 
   test("explains OpenAI-compatible completion fetch failures with endpoint and model", async () => {

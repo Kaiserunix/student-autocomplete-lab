@@ -127,7 +127,8 @@ export async function requestCompletion(
         max_tokens: request.maxTokens,
         temperature: request.temperature,
         stop: request.stop
-      })
+      }),
+      signal: request.signal
     },
     fetchImpl,
     { operation: "Completion", endpoint, config }
@@ -171,7 +172,8 @@ async function requestChatCompletion(
         max_tokens: request.maxTokens,
         temperature: request.temperature,
         stop: request.stop
-      })
+      }),
+      signal: request.signal
     },
     fetchImpl,
     { operation: "Chat completion", endpoint, config }
@@ -212,7 +214,8 @@ async function requestAnthropicCompletion(
             content: request.prompt
           }
         ]
-      })
+      }),
+      signal: request.signal
     },
     fetchImpl,
     { operation: "Anthropic messages", endpoint, config }

@@ -4,6 +4,20 @@ import { CodexAuthService } from "./codexAuthService";
 import { CodexModelService } from "./codexModelService";
 import { CodexTextClient } from "./codexTextClient";
 
+export const CODEX_HTTP_MODEL_PROVIDER_ID = "student-autocomplete-http";
+
+export function codexHttpAppServerArgs(): string[] {
+  const provider = `model_providers.${CODEX_HTTP_MODEL_PROVIDER_ID}`;
+  return [
+    "app-server",
+    "-c", `${provider}.name=StudentAutocompleteHttp`,
+    "-c", `${provider}.base_url=https://chatgpt.com/backend-api/codex`,
+    "-c", `${provider}.wire_api=responses`,
+    "-c", `${provider}.requires_openai_auth=true`,
+    "-c", `${provider}.supports_websockets=false`
+  ];
+}
+
 export interface CodexServicePaths {
   executablePath: string;
   codexHome: string;
@@ -41,6 +55,7 @@ export function createCodexServices(
 ): CodexServices {
   const appServer = new CodexAppServerClient({
     executablePath: paths.executablePath,
+    appServerArgs: codexHttpAppServerArgs(),
     codexHome: paths.codexHome,
     runtimeCwd: paths.runtimeCwd,
     clientVersion: paths.extensionVersion,
@@ -51,7 +66,7 @@ export function createCodexServices(
     appServer,
     auth,
     models: new CodexModelService(appServer),
-    text: new CodexTextClient(appServer, paths.runtimeCwd),
+    text: new CodexTextClient(appServer, paths.runtimeCwd, CODEX_HTTP_MODEL_PROVIDER_ID),
     dispose: () => {
       auth.dispose();
       void appServer.dispose();
