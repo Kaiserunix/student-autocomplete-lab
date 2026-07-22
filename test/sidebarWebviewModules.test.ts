@@ -1,7 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 import { createWebviewNonce, htmlLanguage, renderWebviewDocumentShell } from "../src/sidebar/html";
-import { disabledReasonForCoachAction, primaryCoachButtonIds, sidebarPageIds } from "../src/sidebar/webview/main";
+import {
+  codexOAuthControlIds,
+  disabledReasonForCoachAction,
+  formalWorkflowControlIds,
+  ojActionButtonIds,
+  primaryCoachButtonIds,
+  sidebarPageIds
+} from "../src/sidebar/webview/main";
 import { getSidebarUiCopy, normalizeUiLanguage } from "../src/sidebar/webview/i18n";
 import { normalizeMathText, parseMarkdownBlocks, renderMarkdownToHtml } from "../src/sidebar/webview/markdown";
 
@@ -24,9 +31,9 @@ describe("sidebar webview modules", () => {
     expect(normalizeUiLanguage(undefined)).toBe("zh");
     expect(normalizeUiLanguage("en")).toBe("en");
     expect(getSidebarUiCopy("zh")).toMatchObject({
-      tabAi: "AI 教练",
-      tabProblem: "题目",
-      tabSkill: "学习画像",
+      tabAi: "作答现场",
+      tabProblem: "题目张贴板",
+      tabSkill: "学习档案",
       send: "发送"
     });
     expect(getSidebarUiCopy("en")).toMatchObject({
@@ -41,6 +48,13 @@ describe("sidebar webview modules", () => {
     expect([...sidebarPageIds]).toEqual(["aiPage", "problemPage", "skillPage"]);
     expect([...primaryCoachButtonIds]).toContain("coachSendCustom");
     expect([...primaryCoachButtonIds]).toContain("coachRecommendRule");
+    expect([...ojActionButtonIds]).toEqual(["ojLogin", "ojPreviewSubmit"]);
+    expect([...formalWorkflowControlIds]).toEqual(expect.arrayContaining([
+      "coachHint",
+      "importManualMarkdownFile",
+      "ojPreviewSubmit",
+      "codexBrowserLogin"
+    ]));
     expect(disabledReasonForCoachAction({ hasProblem: false, isBusy: false })).toContain("先导入");
     expect(disabledReasonForCoachAction({ hasProblem: true, isBusy: true })).toContain("正在处理");
   });
@@ -74,5 +88,22 @@ describe("sidebar webview modules", () => {
 
     expect(css).toContain(".markdownBody");
     expect(css).toContain(".coachPrimaryAction");
+    expect(css).toContain(".codexOAuthPanel");
+    expect(css).toContain(".codexOAuthPanel[hidden]");
+  });
+
+  test("keeps Codex OAuth control inventory explicit", () => {
+    expect(codexOAuthControlIds).toEqual([
+      "aiOpenAiAuthMode",
+      "codexOAuthPanel",
+      "codexAuthStatus",
+      "codexBrowserLogin",
+      "codexDeviceLogin",
+      "codexCancelLogin",
+      "codexLogout",
+      "codexRefreshModels",
+      "codexTeachingModel",
+      "codexAutocompleteModel"
+    ]);
   });
 });

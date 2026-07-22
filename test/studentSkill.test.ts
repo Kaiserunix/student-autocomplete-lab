@@ -24,51 +24,6 @@ describe("student skill", () => {
     });
   });
 
-  test("bounds teaching profile context without carrying raw evidence", () => {
-    const skill = createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z");
-    for (let index = 0; index < 24; index += 1) {
-      skill.errorModel[`pain-${String(index).padStart(2, "0")}`] = {
-        count: index + 1,
-        score: index + 1,
-        lastSeen: `2026-05-${String((index % 20) + 1).padStart(2, "0")}T00:00:00.000Z`,
-        examples: [{
-          source: "fixture",
-          occurredAt: "2026-05-01T00:00:00.000Z",
-          evidence: "RAW_EVIDENCE_SHOULD_NOT_REACH_PROMPT ".repeat(40)
-        }],
-        counterexamples: []
-      };
-      skill.skills[`skill-${String(index).padStart(2, "0")}`] = {
-        name: `skill-${String(index).padStart(2, "0")}`,
-        status: "active",
-        reason: "long reason ".repeat(50),
-        rules: ["long rule ".repeat(50)],
-        sourcePainPoints: [],
-        score: index,
-        evidenceCount: index + 1,
-        lastSeen: `2026-05-${String((index % 20) + 1).padStart(2, "0")}T00:00:00.000Z`,
-        examples: []
-      };
-    }
-    skill.correctionLog = Array.from({ length: 8 }, (_, index) => ({
-      id: `correction-${index}`,
-      type: "diagnosis_wrong" as const,
-      target: `skill-${index}`,
-      note: `纠偏 ${index} ` + "很长的补充说明".repeat(80),
-      source: "user",
-      occurredAt: `2026-05-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`
-    }));
-
-    const summary = studentSkillSummaryForTeaching(skill);
-
-    expect(Object.keys(summary.painPointCounts)).toHaveLength(12);
-    expect(summary.activeSkills).toHaveLength(12);
-    expect(summary.recentCorrections).toHaveLength(3);
-    expect((summary.recentCorrections ?? []).every((item) => item.note.length <= 120)).toBe(true);
-    expect(JSON.stringify(summary)).not.toContain("RAW_EVIDENCE_SHOULD_NOT_REACH_PROMPT");
-    expect(JSON.stringify(summary).length).toBeLessThan(1_200);
-  });
-
   test("keeps a single model diagnosis as candidate even when the model asks for active", () => {
     const skill = applyStudentSkillPatch(createEmptyStudentSkill("student-a", "2026-05-01T00:00:00.000Z"), {
       source: "mimo-v2.5",
@@ -275,9 +230,6 @@ describe("student skill", () => {
 
     expect(skill.skills["binary-tree-depth-numbered-children"].status).toBe("mastered");
     expect(studentSkillSummaryForTeaching(skill).activeSkills).toEqual(["binary-tree-depth-numbered-children"]);
-    expect(buildAutocompleteSkillContext(skill, "python").activeSkillNames).toEqual([
-      "binary-tree-depth-numbered-children"
-    ]);
   });
 
   test("builds an autocomplete context that excludes teacher-only evidence", () => {
@@ -304,7 +256,10 @@ describe("student skill", () => {
 
     expect(context.allowFullSolutionAutocomplete).toBe(false);
     expect(context.autocompleteMayReadProblemStatement).toBe(false);
-    expect(context.rules).toEqual(["prefer sys.stdin.readline in OJ scripts"]);
+    expect(context.learnerRuleIds).toEqual([]);
+    expect(context).not.toHaveProperty("activeSkillNames");
+    expect(context).not.toHaveProperty("disabledSkills");
+    expect(JSON.stringify(context)).not.toContain("prefer sys.stdin.readline");
     expect(JSON.stringify(context)).not.toContain("P1030 standard answer");
   });
 

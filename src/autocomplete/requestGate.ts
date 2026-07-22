@@ -63,7 +63,6 @@ export class AutocompleteRequestGate {
       suggestion,
       createdAt: this.now()
     };
-    this.finishRequest();
   }
 
   finishRequest(): void {

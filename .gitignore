@@ -4,8 +4,11 @@ secrets/
 node_modules/
 dist/
 .runtime/
+.superpowers/
 .student-autocomplete/
 .student-autocomplete-smoke/
+.playwright-cli/
+output/
 /practice/
 test/*.py
 *.vsix

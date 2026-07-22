@@ -2,6 +2,51 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, test } from "vitest";
 
 describe("problem bank webview script", () => {
+  test("keeps the embedded webview JavaScript syntactically valid", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+    const rawScript = source.match(/<script nonce="\$\{nonce\}">([\s\S]*?)<\/script>/)?.[1];
+
+    expect(rawScript).toBeTruthy();
+    const script = new Function(
+      "starterPresetsJson",
+      "practiceLanguageOptionsJson",
+      `return \`${rawScript}\`;`
+    )("[]", "[]") as string;
+    expect(() => new Function(script!)).not.toThrow();
+  });
+
+  test("exposes Codex OAuth account actions and separate role model selectors", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    for (const id of [
+      "aiOpenAiAuthMode",
+      "codexOAuthPanel",
+      "codexAuthStatus",
+      "codexBrowserLogin",
+      "codexDeviceLogin",
+      "codexCancelLogin",
+      "codexLogout",
+      "codexRefreshModels",
+      "codexTeachingModel",
+      "codexAutocompleteModel"
+    ]) {
+      expect(source).toContain(`id="${id}"`);
+    }
+    for (const command of [
+      "readCodexAuth",
+      "startCodexBrowserLogin",
+      "startCodexDeviceLogin",
+      "cancelCodexLogin",
+      "logoutCodex",
+      "refreshCodexModels"
+    ]) {
+      expect(source).toContain(`command: "${command}"`);
+    }
+    expect(source).toContain('value="api-key"');
+    expect(source).toContain('value="codex-oauth"');
+    expect(source).toContain(".codexOAuthPanel[hidden]");
+  });
+
   test("keeps fix-hint newlines escaped inside the embedded script", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
@@ -36,7 +81,8 @@ describe("problem bank webview script", () => {
     expect(source).toContain("const isArchivedCoachProblem = Boolean(selectedArchivedProblem());");
     expect(source).toContain("coachGiveUp.disabled = Boolean(isBusy || isArchivedCoachProblem);");
     expect(source).toContain("coachCompleted.disabled = Boolean(isBusy || isArchivedCoachProblem);");
-    expect(source).toContain("复盘归档题");
+    expect(source).toContain('tags.appendChild(textSpan("已归档"');
+    expect(source).toContain('chatButton.textContent = "继续复盘"');
   });
 
   test("exposes direct problem deletion without archiving", async () => {
@@ -54,7 +100,7 @@ describe("problem bank webview script", () => {
     expect(source).not.toContain("requestDeleteProblem(reason)");
   });
 
-  test("makes the AI coach the first screen and keeps three Chinese UI layers", async () => {
+  test("makes the formal attempt workspace the first screen and keeps three Chinese dossier layers", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
     expect(source).toContain('activePage: "ai"');
@@ -67,10 +113,10 @@ describe("problem bank webview script", () => {
     expect(source).toContain('id="aiPage"');
     expect(source).not.toContain('id="searchPage"');
     expect(source).toContain('id="tabSkill"');
-    expect(source).toContain(">AI 教练<");
-    expect(source).toContain(">题目<");
-    expect(source).toContain(">学习画像<");
-    expect(source).toContain("AI 根据你的做题记录形成的可纠偏教学记忆");
+    expect(source).toContain(">作答现场<");
+    expect(source).toContain(">题目张贴板<");
+    expect(source).toContain(">学习档案<");
+    expect(source).toContain("LEARNING FILE / 学习档案");
     expect(source).toContain('id="coachQuestion"');
     expect(source).toContain('id="coachHint"');
     expect(source).toContain('id="coachFollowUp"');
@@ -81,14 +127,13 @@ describe("problem bank webview script", () => {
     expect(source).not.toContain('id="coachSolved"');
     expect(source).not.toContain('id="coachSubmitCheck"');
     expect(source).toContain('id="coachAutocomplete"');
+    expect(source).toContain('autocompletePreview: "测试补全接口"');
+    expect(source).toContain('autocompletePreview: "Test Completion API"');
     expect(source).toContain('class="coachQuestionActions"');
-    expect(source).toContain('<label for="coachQuestion">追问</label>');
-    expect(source).toContain('placeholder="输入问题或补充思路"');
-    expect(source).not.toContain("吐槽两句都可以");
-    expect(source).not.toContain('id="aiStatusGrid"');
-    expect(source).not.toContain("编辑器 Ghost Text，触发");
+    expect(source).toContain('coachQuestionLabel: "追问"');
+    expect(source).toContain('coachQuestionPlaceholder: "输入问题，Ctrl+Enter 发送"');
     expect(source).toContain(">发送<");
-    expect(source).toContain(">继续聊<");
+    expect(source).toContain(">继续追问<");
     expect(source).toContain('function sendCustomFollowUp()');
     expect(source).toContain('document.getElementById("coachSendCustom").addEventListener("click", () => sendCustomFollowUp())');
     expect(source).toContain('document.getElementById("coachFollowUp").addEventListener("click", () => requestAiCoach("followUp"))');
@@ -108,10 +153,10 @@ describe("problem bank webview script", () => {
     expect(source).toContain("renderCoachFollowUp(data)");
     expect(source).toContain("appendCoachFollowUpTurn");
     expect(source).toContain('id="coachOjVerdict"');
-    expect(source).toContain('<details class="aiConfigBox">');
-    expect(source).toContain("<summary>AI 接口配置</summary>");
-    expect(source.indexOf('<div class="field coachAskBox">')).toBeLessThan(source.indexOf('<details class="aiConfigBox">'));
-    expect(source.indexOf('<div id="aiResponse" class="aiResponse">')).toBeLessThan(source.indexOf('<details class="aiConfigBox">'));
+    expect(source).toContain('<details id="accountModelDrawer" class="aiConfigBox accountModelDrawer">');
+    expect(source).toContain("<summary>账户与模型</summary>");
+    expect(source.indexOf('<div class="field coachAskBox">')).toBeLessThan(source.indexOf('id="accountModelDrawer"'));
+    expect(source.indexOf('<div id="aiResponse" class="aiResponse">')).toBeLessThan(source.indexOf('id="accountModelDrawer"'));
     expect(source).toContain('label for="aiBaseUrl">分析接口 Base URL</label>');
     expect(source).toContain('label for="aiAutocompleteBaseUrl">补全接口 Base URL</label>');
     expect(source).toContain('label for="aiApiKey">API Key / 密钥</label>');
@@ -123,7 +168,10 @@ describe("problem bank webview script", () => {
     expect(source).toContain('id="aiModelResults"');
     expect(source).toContain('command: "fetchAiModels"');
     expect(source).toContain('command: "runAiHealthCheck"');
-    expect(source).toContain("Provider Health Check");
+    expect(source).toContain("连接检测");
+    expect(source).toContain("模型未在当前等待窗口内返回");
+    expect(source).not.toContain("const [models, chatSmoke, autocompleteSmoke] = await Promise.all");
+    expect(source).toContain("const autocompleteSmoke = await runAutocompleteSmokeHealthCheck");
     expect(source).toContain('type: "aiHealthCheckResult"');
     expect(source).toContain("renderAiHealthCheckResult(data)");
     expect(source).toContain('renderAiModelResults(data)');
@@ -132,11 +180,11 @@ describe("problem bank webview script", () => {
     expect(source).toContain('command: "requestOptimizationReview"');
     expect(source).toContain("renderOptimizationReport(data.optimizationReport)");
     expect(source).toContain("buildLuoguMcpRecommendationCandidates");
-    expect(source).toContain("Luogu MCP：搜索 ");
+    expect(source).toContain("部分在线候选未返回");
     expect(source).toContain("luoguMcpQueryCount");
-    expect(source).toContain("课程调度解释");
+    expect(source).toContain("为什么推荐");
     expect(source).toContain("为什么不是更难");
-    expect(source).toContain("为什么不是重复上一题");
+    expect(source).toContain("为什么不重复");
     expect(source).toContain("requestSubmissionJudge(keyOf(problem))");
     expect(source).toContain("找错复盘");
     expect(source).toContain("requestSolutionScore(keyOf(problem))");
@@ -151,44 +199,94 @@ describe("problem bank webview script", () => {
     expect(source).toContain("appendCoachTurn(problemKey, data, report, localized)");
     expect(source).toContain("workflowAudit: result.audit");
     expect(source).toContain("appendContextAudit(data.workflowAudit)");
-    expect(source).toContain("上下文边界");
+    expect(source).toContain("function appendContextAudit() {}");
     expect(source).not.toContain('command: "requestSolutionScore",\n        problemKey: keyOf(problem),\n        studentRequest: coachQuestion.value.trim(),\n        ojVerdict: {\n          status: "AC"\n        }');
+  });
+
+  test("connects a trusted one-time multi-platform submission host flow", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain('message.command === "requestOjLogin"');
+    expect(source).toContain('message.command === "requestOjSubmissionPreview"');
+    expect(source).toContain('message.command === "confirmOjSubmission"');
+    expect(source).toContain("vscode.workspace.isTrusted");
+    expect(source).toContain("SubmissionConfirmationStore");
+    expect(source).toContain("editor.document.save()");
+    expect(source).toContain("parseSubmissionTarget");
+    expect(source).toContain("checkOnlineJudgeTools");
+    expect(source).toContain("submitWithOnlineJudgeTools");
+    expect(source).toContain("pollCodeforcesVerdict");
+    expect(source).toContain('type: "ojSubmissionPreview"');
+    expect(source).toContain('type: "ojSubmissionResult"');
+    expect(source).not.toContain("result.stdout");
+    expect(source).not.toContain("result.stderr");
+  });
+
+  test("renders an explicit two-step multi-platform submission confirmation", async () => {
+    const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
+
+    expect(source).toContain('id="ojProblemUrl"');
+    expect(source).toContain('id="ojPlatform"');
+    expect(source).toContain('<option value="atcoder">AtCoder</option>');
+    expect(source).toContain('id="ojCodeforcesHandle"');
+    expect(source).toContain('id="ojLogin"');
+    expect(source).toContain('id="ojPreviewSubmit"');
+    expect(source).toContain('id="ojSubmissionPanel"');
+    expect(source).toContain('id="submissionDocket"');
+    expect(source).toContain("提交到 OJ");
+    expect(source).toContain("提交前确认");
+    expect(source).toContain("确认并提交一次");
+    expect(source).toContain("只提交一次，不会自动重试");
+    expect(source).toContain("renderOjSubmissionPreview(data)");
+    expect(source).toContain("renderOjSubmissionResult(data)");
+    expect(source).toContain('command: "requestOjLogin", platform: ojPlatform.value');
+    expect(source).toContain("platform: ojPlatform.value");
+    expect(source).toContain("confirmButton.remove()");
+    expect(source).toContain('coachOjVerdict.value = "UNKNOWN";');
+    expect(source).toContain('state.ojVerdict = "UNKNOWN";');
+    expect(source).toContain('data.type === "ojSubmissionPreview"');
+    expect(source).toContain('data.type === "ojSubmissionResult"');
   });
 
   test("keeps the coach UI output-first and touchable in the narrow sidebar", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
-    expect(source).toContain(".coachMetaGrid");
-    expect(source).toContain("grid-template-columns: repeat(auto-fit, minmax(112px, 1fr));");
-    expect(source).toContain("补全不读题面");
+    expect(source).toContain(".coachSummary");
+    expect(source).toContain(".compactDrawer");
+    expect(source).toContain(".coachPrimaryAction");
     expect(source.indexOf('<div id="aiResponse" class="aiResponse">')).toBeLessThan(
       source.indexOf('<div class="field coachAskBox">')
     );
     expect(source.indexOf('<div id="aiResponse" class="aiResponse">')).toBeLessThan(
       source.indexOf('<div class="coachActions">')
     );
-    expect(source).toContain(".coachActions button:first-child");
+    expect(source).toContain(".coachActions:not(.coachMoreActions) button:first-child");
     expect(source).toContain(".coachQuestionActions button");
     expect(source).toContain("@media (max-width: 360px)");
     expect(source).toContain(".skillActionRow");
     expect(source).toContain(".detailActions");
   });
 
-  test("shows context boundary audits for AI diagnosis and autocomplete preview", async () => {
+  test("keeps context boundary audits in data without rendering diagnostic prose", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
-    expect(source).toContain("function autocompletePreviewAudit()");
-    expect(source).toContain('included: ["student_code_prefix_suffix", "language", "file_path", "code_habits"]');
+    expect(source).not.toContain("function autocompletePreviewAudit()");
     expect(source).toContain('"problem_statement"');
-    expect(source).toContain('"teacher_pack"');
     expect(source).toContain('"standard_answer"');
     expect(source).toContain("contextAudit");
     expect(source).toContain("appendContextAudit(data.contextAudit)");
+    expect(source).toContain("data.skillAudit");
+    expect(source).toContain('data.validationStatus === "validator-rejected"');
+    expect(source).toContain('data.validationStatus === "model-empty"');
+    expect(source).toContain("data.rejectionReason");
+    expect(source).not.toContain("contextAudit.prefix");
+    expect(source).not.toContain("contextAudit.suffix");
     expect(source).toContain('included: ["problem_statement", "student_code", "recent_hints", "student_profile", "teacher_pack_reference"]');
     expect(source).toContain("lessonReportContextAudit(report)");
-    expect(source).toContain("已使用：");
-    expect(source).toContain("未使用：");
-    expect(source).toContain("不会读取题面、Teacher Pack 或标准答案");
+    expect(source).toContain("function appendContextAudit() {}");
+    expect(source).not.toContain("已使用：");
+    expect(source).not.toContain("未使用：");
+    expect(source).not.toContain("上下文边界");
   });
 
   test("exposes beta English UI and AI-output switches", async () => {
@@ -226,13 +324,7 @@ describe("problem bank webview script", () => {
     expect(source).toContain('id="studentSkillPanel"');
     expect(source).toContain('id="studentSkillVersions"');
     expect(source).toContain("这条不准");
-    expect(source).not.toContain("查看证据");
-    expect(source).toContain("skillEvidenceSummary");
-    expect(source).toContain('hardRules.className = "skillGroup hardRules"');
-    expect(source).toContain("hardRules.open = false");
-    expect(source).not.toContain('responseBlock(\n          "硬规则"');
-    expect(source).toContain('const card = document.createElement("details")');
-    expect(source).toContain('body.className = "skillCardBody"');
+    expect(source).toContain("查看证据");
     expect(source).toContain('command: "recordStudentSkillFeedback"');
     expect(source).toContain("handleStudentSkillFeedbackRequest");
     expect(source).toContain("renderStudentSkill()");
@@ -249,7 +341,7 @@ describe("problem bank webview script", () => {
     expect(source).not.toContain("prompt(");
     expect(source).not.toContain("confirm(");
     expect(source).not.toContain("alert(");
-    expect(source).not.toContain("renderEvidenceDetails");
+    expect(source).toContain("renderEvidenceDetails");
     expect(source).toContain("defaultSkillFeedbackNoteForWebview");
   });
 
@@ -300,8 +392,8 @@ describe("problem bank webview script", () => {
   test("uses Markdown file import instead of in-panel problem paste", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
-    expect(source).toContain('<details class="panel manualPastePanel" open>');
-    expect(source).toContain("<summary>Markdown 文件导入</summary>");
+    expect(source).toContain('<details class="panel manualPastePanel ledgerPanel">');
+    expect(source).toContain("<summary>导入 Markdown</summary>");
     expect(source).toContain('id="importManualMarkdownFile"');
     expect(source).toContain('command: "importManualMarkdownFile"');
     expect(source).toContain("showOpenDialog");
@@ -310,22 +402,27 @@ describe("problem bank webview script", () => {
     expect(source).toContain("buildManualProblemFromMarkdownFile");
     expect(source).toContain("sourceUrl: fileUri.toString()");
     expect(source).toContain("markdown: await readFile(fileUri.fsPath, \"utf8\")");
-    expect(source).toContain("已从 Markdown 文件导入");
+    expect(source).toContain("已导入《");
     expect(source).not.toContain('textarea id="manualStatement"');
     expect(source).not.toContain('command: "saveManual"');
     expect(source).not.toContain('id="manualPreview"');
     expect(source).not.toContain("function renderManualPreview()");
     expect(source).not.toContain("manualProblemTemplate");
     expect(source).not.toContain("Markdown 预览");
-    expect(source).toContain("<summary>题号导入 / 搜索</summary>");
-    expect(source).not.toContain('<details class="panel" open>\n        <summary>题号导入 / 搜索</summary>');
+    expect(source).toContain("<summary>在线题库</summary>");
+    expect(source).toContain('<summary>连接与登录</summary>');
+    expect(source).toContain('id="ojSearchPlatform"');
+    expect(source).toContain('id="ojProviderStatus"');
+    expect(source).toContain("state.ojProviders = data.providers ?? state.ojProviders");
+    expect(source).not.toContain('open>\n            <summary>连接与登录</summary>');
   });
 
   test("keeps AI actions on the coach page instead of duplicating them in problem detail", async () => {
     const source = await readFile("src/sidebar/ProblemBankViewProvider.ts", "utf8");
 
     expect(source).toContain('actions.className = "detailActions";');
-    expect(source).toContain('goCoachButton.textContent = "去 AI 教练提问";');
+    expect(source).toContain('goCoachButton.textContent = "进入作答现场";');
+    expect(source).toContain('goCoachButton.className = "posterPrimaryAction";');
     expect(source).toContain('id="coachHint"');
     expect(source).not.toContain('goCoachButton.addEventListener("click", () => requestAiCoach');
     expect(source).not.toContain('deleteButton.addEventListener("click", () => requestAiCoach');

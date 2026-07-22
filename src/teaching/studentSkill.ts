@@ -2,6 +2,7 @@ import type { TeachingDiagnosisReport } from "./teachingReport";
 import type { StudentProfile } from "./studentProfile";
 import type { TeachingStudentProfileSummary } from "./types";
 import { isStudentSkillDisabled, isStudentSkillTeachingActive } from "./studentSkillLifecycle";
+import { selectLearnerRules } from "../skills/habitSelector";
 
 export type StudentSkillSchemaVersion = "student-skill/v1";
 export type StudentSkillStatus = "candidate" | "active" | "mastered" | "disabled";
@@ -137,12 +138,10 @@ export interface StudentSkillPatchMeta {
   topic?: string;
 }
 
-export interface AutocompleteSkillContext {
+export interface AutocompleteStudentSkillContext {
   allowFullSolutionAutocomplete: false;
   autocompleteMayReadProblemStatement: false;
-  disabledSkills: string[];
-  activeSkillNames: string[];
-  rules: string[];
+  learnerRuleIds: string[];
 }
 
 const ACTIVE_EVIDENCE_COUNT = 3;
@@ -296,47 +295,37 @@ export function applyStudentSkillPatch(skill: StudentSkill, patch: StudentSkillP
 
 export function studentSkillSummaryForTeaching(skill: StudentSkill): TeachingStudentProfileSummary {
   const painPointCounts = Object.fromEntries(
-    Object.entries(skill.errorModel)
-      .sort(([leftLabel, left], [rightLabel, right]) =>
-        right.count - left.count || right.lastSeen.localeCompare(left.lastSeen) || leftLabel.localeCompare(rightLabel)
-      )
-      .slice(0, 12)
-      .map(([label, state]) => [compactTeachingText(label, 80), state.count])
+    Object.entries(skill.errorModel).map(([label, state]) => [label, state.count])
   );
   const activeSkills = Object.values(skill.skills)
     .filter((entry) => isStudentSkillTeachingActive(entry.status))
-    .sort((left, right) =>
-      right.lastSeen.localeCompare(left.lastSeen) || right.evidenceCount - left.evidenceCount || left.name.localeCompare(right.name)
-    )
-    .slice(0, 12)
-    .map((entry) => compactTeachingText(entry.name, 80))
+    .map((entry) => entry.name)
     .sort();
   const recentCorrections = [...skill.correctionLog]
-    .slice(-3)
+    .slice(-5)
     .map((entry) => ({
       type: entry.type,
-      target: entry.target ? compactTeachingText(entry.target, 80) : undefined,
-      note: compactTeachingText(entry.note, 120)
+      target: entry.target,
+      note: entry.note
     }));
 
   return { painPointCounts, activeSkills, recentCorrections };
 }
 
-function compactTeachingText(value: string, limit: number): string {
-  const compact = value.trim().replace(/\s+/g, " ");
-  return compact.length <= limit ? compact : `${compact.slice(0, limit - 1).trimEnd()}…`;
-}
-
-export function buildAutocompleteSkillContext(skill: StudentSkill, language: string): AutocompleteSkillContext {
+export function buildAutocompleteSkillContext(
+  skill: StudentSkill,
+  language: string,
+  localCode = ""
+): AutocompleteStudentSkillContext {
   return {
     allowFullSolutionAutocomplete: skill.hardRules.allowFullSolutionAutocomplete,
     autocompleteMayReadProblemStatement: skill.hardRules.autocompleteMayReadProblemStatement,
-    disabledSkills: [...skill.hardRules.disabledSkills].sort(),
-    activeSkillNames: Object.values(skill.skills)
-      .filter((entry) => isStudentSkillTeachingActive(entry.status))
-      .map((entry) => entry.name)
-      .sort(),
-    rules: unique([...skill.codeHabits.globalRules, ...(skill.codeHabits.languageRules[language] ?? [])])
+    learnerRuleIds: selectLearnerRules({
+      skill,
+      route: "autocomplete",
+      language,
+      localCode
+    }).rules.map((rule) => rule.id)
   };
 }
 

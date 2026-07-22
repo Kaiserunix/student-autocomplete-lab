@@ -17,15 +17,18 @@ const allowedTopLevelRuntime = [
   "attempt",
   "extension.js",
   "autocomplete",
+  "codex",
   "config",
   "mcp",
   "models",
+  "oj",
   "problemBank",
   "recommendation",
   "release",
   "sidebar",
-  "storage",
-  "ui"
+  "skills",
+  "submission",
+  "storage"
 ];
 
 const allowedTeachingFiles = [
@@ -51,6 +54,10 @@ const allowedTeachingFiles = [
   "teachingReport.js",
   "teachingTaxonomy.js",
   "types.js"
+];
+
+const allowedTeachingDirectories = [
+  "workflow"
 ];
 
 const blockedCompiledReleaseFiles = [
@@ -84,10 +91,12 @@ async function main() {
   await copyReleaseRuntime();
   await copyIfExists("resources");
   await copyIfExists("LICENSE");
+  await copyIfExists("THIRD_PARTY_NOTICES.md");
   await copyReleaseReadme();
   await writeReleasePackageJson();
   await patchReleaseRuntime();
 
+  assertRuntimeDependencyClosure();
   assertCleanReleaseTree();
   assertNoBlockedReleaseContent();
 
@@ -120,12 +129,13 @@ async function copyReleaseRuntime() {
   for (const file of allowedTeachingFiles) {
     await cp(path.join(releaseDist, "teaching", file), path.join(stagingRoot, "dist", "src", "teaching", file));
   }
-  await cp(
-    path.join(releaseDist, "teaching", "workflow"),
-    path.join(stagingRoot, "dist", "src", "teaching", "workflow"),
-    { recursive: true }
-  );
-  await cp(path.join(root, "dist", "webview"), path.join(stagingRoot, "dist", "webview"), { recursive: true });
+  for (const directory of allowedTeachingDirectories) {
+    await cp(
+      path.join(releaseDist, "teaching", directory),
+      path.join(stagingRoot, "dist", "src", "teaching", directory),
+      { recursive: true }
+    );
+  }
   for (const relativePath of blockedCompiledReleaseFiles) {
     await rm(path.join(stagingRoot, "dist", "src", relativePath), { force: true });
   }
@@ -137,7 +147,7 @@ async function writeReleasePackageJson() {
   packageJson.displayName = releaseDisplayName;
   packageJson.description = "Clean beta-release package for the Student Autocomplete Lab VS Code algorithm coach.";
   packageJson.private = false;
-  packageJson.files = ["dist/**", "resources/**", "README.md", "LICENSE"];
+  packageJson.files = ["dist/**", "resources/**", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"];
   delete packageJson.repository;
   delete packageJson.scripts;
   delete packageJson.devDependencies;
@@ -156,10 +166,9 @@ async function writeReleasePackageJson() {
     [releaseViewPrefix]: packageJson.contributes.views.studentAutocomplete.map((view) => ({
       ...view,
       id: renameContributionId(view.id),
-      name: view.name
+      name: "做题陪练 Release"
     }))
   };
-  renameContributionReferences(packageJson.contributes);
   packageJson.contributes.configuration = renameConfigurationProperties(
     packageJson.contributes.configuration,
     "AI 做题陪练 Release",
@@ -196,6 +205,37 @@ function stripReleaseInternalTestingUi(text) {
     )
     .replaceAll("Student Autocomplete Lab Beta Release 内测记录版", "Student Autocomplete Lab Beta Release")
     .replaceAll("正式版：内测记录未开启。", "正式版：本地记录未开启。");
+}
+
+function assertRuntimeDependencyClosure() {
+  const runtimeDir = path.join(stagingRoot, "dist", "src");
+  const missing = [];
+  const javascriptFiles = listFiles(runtimeDir).filter((file) => file.endsWith(".js"));
+
+  for (const file of javascriptFiles) {
+    const content = require("node:fs").readFileSync(file, "utf8");
+    const relativeRequires = content.matchAll(/require\(["'](\.[^"']+)["']\)/g);
+    for (const match of relativeRequires) {
+      const request = match[1];
+      const target = path.resolve(path.dirname(file), request);
+      const candidates = [
+        target,
+        `${target}.js`,
+        `${target}.json`,
+        path.join(target, "index.js"),
+        path.join(target, "index.json")
+      ];
+      if (!candidates.some((candidate) => existsSync(candidate))) {
+        missing.push(
+          `${path.relative(runtimeDir, file).replaceAll(path.sep, "/")} -> ${request}`
+        );
+      }
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new Error(`Beta release runtime has missing relative dependencies:\n${missing.join("\n")}`);
+  }
 }
 
 function assertCleanReleaseTree() {
@@ -257,24 +297,6 @@ function listFiles(dir) {
 
 function renameContributionId(value) {
   return String(value).replaceAll("studentAutocomplete", releaseViewPrefix);
-}
-
-function renameContributionReferences(contributes) {
-  contributes.viewsWelcome = (contributes.viewsWelcome ?? []).map((welcome) => ({
-    ...welcome,
-    view: renameContributionId(welcome.view),
-    contents: renameContributionId(welcome.contents)
-  }));
-  contributes.menus = Object.fromEntries(
-    Object.entries(contributes.menus ?? {}).map(([location, items]) => [
-      location,
-      items.map((item) => ({
-        ...item,
-        command: renameContributionId(item.command),
-        when: item.when ? renameContributionId(item.when) : item.when
-      }))
-    ])
-  );
 }
 
 function renameConfigurationProperties(configuration, title, expectedPrefix) {

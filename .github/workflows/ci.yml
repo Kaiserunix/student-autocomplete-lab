@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Compile extension
+        run: npm run compile
+
+      - name: Type-check OJ console
+        run: npx tsc -p tsconfig.oj-console.json --noEmit
+
+      - name: Type-check release build
+        run: npx tsc -p tsconfig.release.json --noEmit
+
+      - name: Build release package
+        run: npm run package:beta-release
+
+      - name: Check release hygiene
+        run: npm run check:hygiene
+
+      - name: Audit production dependencies
+        run: npm audit --omit=dev

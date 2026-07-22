@@ -28,6 +28,8 @@ describe("autocomplete request gate", () => {
 
     expect(gate.beginRequest(true)).toBe(true);
     gate.completeSuccess("file.py:1:4", "return a + b");
+    expect(gate.beginRequest(true)).toBe(false);
+    gate.finishRequest();
     now = 4000;
     expect(gate.cachedSuggestion("file.py:1:4")).toEqual({
       key: "file.py:1:4",

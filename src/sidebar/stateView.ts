@@ -1,9 +1,14 @@
 import type { AiConfigView } from "../config/modelEnv";
+import type { CodexAuthState } from "../codex/codexAuthService";
+import type { CodexModelInfo } from "../codex/codexModelService";
 import type { AttemptSession } from "../attempt/schema";
 import type { InternalTestSummary } from "../internalTesting/internalTestRecorder";
 import type { ProblemRecord } from "../problemBank/types";
+import type { SkillPlanAudit } from "../skills/types";
+import type { AutocompleteValidationStatus } from "../skills/validators/autocompleteOutputPolicy";
 import type { StudentSkill } from "../teaching/studentSkill";
 import type { CompletedProblemRecord } from "./problemArchive";
+import type { OjProviderStatusView } from "../oj/types";
 
 export type UiLanguage = "zh" | "en";
 
@@ -27,6 +32,8 @@ export interface AiHealthCheckStep {
   endpoint?: string;
   model?: string;
   format?: string;
+  renderer?: SkillPlanAudit["renderer"];
+  validationStatus?: AutocompleteValidationStatus;
   keyState?: "provided" | "saved" | "missing";
   count?: number;
   error?: string;
@@ -62,6 +69,14 @@ export interface AiRuntimeStatus {
   };
 }
 
+export interface CodexOAuthStateView {
+  auth: CodexAuthState;
+  models: CodexModelInfo[];
+  recommendedTeachingModel?: string;
+  recommendedAutocompleteModel?: string;
+  error?: string;
+}
+
 export interface StudentSkillVersionView {
   versionId: string;
   archivedAt: string;
@@ -82,11 +97,13 @@ export interface ProblemBankStateView {
   completedProblems: CompletedProblemStateView[];
   aiStatus: AiRuntimeStatus;
   aiConfig: AiConfigView;
+  codexOAuth: CodexOAuthStateView;
   uiLanguage: UiLanguage;
   studentSkill: StudentSkill;
   studentSkillVersions: StudentSkillVersionView[];
   attemptSessions: AttemptSession[];
   internalTesting: InternalTestSummary;
+  ojProviders: OjProviderStatusView[];
   selectedKey: string;
   status?: string;
   [key: string]: unknown;

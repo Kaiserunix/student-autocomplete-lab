@@ -109,7 +109,7 @@ The student opens VS Code, imports or writes a programming problem, creates a so
 ### 3.3 Non-Goals
 
 - No CAPTCHA bypass, login bypass, rate-limit evasion, or unofficial mass scraping.
-- No automatic official OJ submission in beta 0.2.
+- No unattended or automatic official OJ submission in beta 0.2. A future user-confirmed adapter design is tracked in [superpowers/specs/2026-07-12-oj-submission-design.md](superpowers/specs/2026-07-12-oj-submission-design.md).
 - No bundled full Luogu/LeetCode statement dump.
 - No cloud sync of Student Skill.
 - No hidden telemetry upload.

@@ -205,7 +205,7 @@ The larger beta evidence plan is tracked in [large-scale-growth-simulation.md](l
 
 - No bundled full public problem-bank dump.
 - No CAPTCHA bypass, login bypass, or rate-limit evasion.
-- No automatic OJ submission unless a legal and stable API is available.
+- No unattended OJ submission. Future user-confirmed submission requires a reviewed platform adapter, a stable login/submission path, and the safety gates in [superpowers/specs/2026-07-12-oj-submission-design.md](superpowers/specs/2026-07-12-oj-submission-design.md).
 - No claim that AI judging equals official OJ judging.
 - No autonomous file editing by the teacher model.
 - No cloud sync of student profiles in beta.

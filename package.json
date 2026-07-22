@@ -11,7 +11,8 @@
     "url": "https://github.com/kaiserunix/student-autocomplete-lab.git"
   },
   "engines": {
-    "vscode": "^1.125.0"
+    "node": ">=20",
+    "vscode": "^1.95.0"
   },
   "categories": [
     "Education",
@@ -19,8 +20,10 @@
   ],
   "activationEvents": [
     "onStartupFinished",
-    "onView:studentAutocomplete.problemLibrary",
-    "onView:studentAutocomplete.currentSession",
+    "onLanguage:python",
+    "onLanguage:c",
+    "onLanguage:cpp",
+    "onLanguage:rust",
     "onView:studentAutocomplete.problemBankWebview",
     "onCommand:studentAutocomplete.saveProblem",
     "onCommand:studentAutocomplete.giveHint",
@@ -54,21 +57,7 @@
       },
       {
         "command": "studentAutocomplete.triggerInlineCompletion",
-        "title": "AI 做题陪练：触发自动补全"
-      },
-      {
-        "command": "studentAutocomplete.openSettings",
-        "title": "AI 做题陪练：设置",
-        "icon": "$(gear)"
-      },
-      {
-        "command": "studentAutocomplete.refreshProblemLibrary",
-        "title": "AI 做题陪练：刷新题目",
-        "icon": "$(refresh)"
-      },
-      {
-        "command": "studentAutocomplete.selectProblem",
-        "title": "AI 做题陪练：打开学习会话"
+        "title": "AI 做题陪练：立即补全一次（备用）"
       }
     ],
     "configurationDefaults": {
@@ -92,6 +81,25 @@
           "default": "https://api.openai.com/v1",
           "description": "OpenAI 官方 API Base URL。"
         },
+        "studentAutocomplete.ai.openai.authMode": {
+          "type": "string",
+          "enum": [
+            "api-key",
+            "codex-oauth"
+          ],
+          "default": "api-key",
+          "description": "OpenAI 认证方式：API Key 或 Codex OAuth。"
+        },
+        "studentAutocomplete.ai.codex.executablePath": {
+          "type": "string",
+          "default": "codex",
+          "description": "Codex OAuth 路线使用的 Codex CLI 可执行文件路径。"
+        },
+        "studentAutocomplete.ai.openai.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI API Key。建议通过侧栏 AI 配置保存到 SecretStorage。"
+        },
         "studentAutocomplete.ai.openai.chatModel": {
           "type": "string",
           "default": "",
@@ -111,6 +119,11 @@
           "type": "string",
           "default": "",
           "description": "OpenAI-compatible 自动补全专用 Base URL。留空则跟随 Base URL；DeepSeek FIM 可填 https://api.deepseek.com/beta。"
+        },
+        "studentAutocomplete.ai.openaiCompatible.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI-compatible API Key。建议通过侧栏 AI 配置保存到 SecretStorage。"
         },
         "studentAutocomplete.ai.openaiCompatible.chatModel": {
           "type": "string",
@@ -137,6 +150,11 @@
           "default": "https://api.anthropic.com/v1",
           "description": "Anthropic Messages API Base URL。"
         },
+        "studentAutocomplete.ai.anthropic.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Anthropic API Key。建议通过侧栏 AI 配置保存到 SecretStorage。"
+        },
         "studentAutocomplete.ai.anthropic.chatModel": {
           "type": "string",
           "default": "",
@@ -155,6 +173,64 @@
           ],
           "default": "zh",
           "description": "侧栏界面语言。当前为 beta 级适配：中文完整，英文覆盖主界面与核心操作。"
+        },
+        "studentAutocomplete.oj.nodePath": {
+          "type": "string",
+          "default": "node",
+          "description": "启动本地牛客与 LeetCode MCP 所用的 Node.js 可执行文件。"
+        },
+        "studentAutocomplete.oj.luogu.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用托管的洛谷只读 MCP。"
+        },
+        "studentAutocomplete.oj.luogu.endpoint": {
+          "type": "string",
+          "default": "https://luogu-mcp-server.lantangtang54.workers.dev/mcp",
+          "description": "洛谷 MCP Streamable HTTP 地址。"
+        },
+        "studentAutocomplete.oj.codeforces.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用托管的 Codeforces 官方 API MCP。"
+        },
+        "studentAutocomplete.oj.codeforces.endpoint": {
+          "type": "string",
+          "default": "https://codeforces-oj-mcp.lantangtang54.workers.dev/mcp",
+          "description": "Codeforces MCP Streamable HTTP 地址。"
+        },
+        "studentAutocomplete.oj.atcoder.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用托管的 AtCoder 只读 MCP。"
+        },
+        "studentAutocomplete.oj.atcoder.endpoint": {
+          "type": "string",
+          "default": "https://api.ksrnyx.top/oj-mcp/atcoder/mcp",
+          "description": "AtCoder MCP Streamable HTTP 地址。"
+        },
+        "studentAutocomplete.oj.nowcoder.entrypoint": {
+          "type": "string",
+          "default": "",
+          "description": "本地牛客 MCP 编译入口 dist/index.js；留空时开发环境自动查找相邻仓库。"
+        },
+        "studentAutocomplete.oj.nowcoder.companionPort": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 10043,
+          "description": "牛客 Competitive Companion 本机导题端口。"
+        },
+        "studentAutocomplete.oj.leetcode.entrypoint": {
+          "type": "string",
+          "default": "",
+          "description": "本地私有 LeetCode MCP 编译入口 build/index.js；该适配器不会随扩展发布。"
+        },
+        "studentAutocomplete.oj.leetcode.site": {
+          "type": "string",
+          "enum": ["cn", "global"],
+          "default": "cn",
+          "description": "本地 LeetCode 只读适配器使用的站点。"
         }
       }
     },
@@ -170,49 +246,19 @@
     "views": {
       "studentAutocomplete": [
         {
-          "id": "studentAutocomplete.currentSession",
-          "name": "当前学习",
-          "type": "webview"
-        },
-        {
-          "id": "studentAutocomplete.problemLibrary",
-          "name": "题目",
-          "visibility": "collapsed"
-        },
-        {
           "id": "studentAutocomplete.problemBankWebview",
-          "name": "工具与诊断",
-          "type": "webview",
-          "visibility": "collapsed"
-        }
-      ]
-    },
-    "viewsWelcome": [
-      {
-        "view": "studentAutocomplete.problemLibrary",
-        "contents": "还没有题目。\\n[导入题目](command:studentAutocomplete.saveProblem)"
-      }
-    ],
-    "menus": {
-      "view/title": [
-        {
-          "command": "studentAutocomplete.refreshProblemLibrary",
-          "when": "view == studentAutocomplete.problemLibrary",
-          "group": "navigation"
-        },
-        {
-          "command": "studentAutocomplete.openSettings",
-          "when": "view == studentAutocomplete.currentSession",
-          "group": "navigation"
+          "name": "做题陪练",
+          "type": "webview"
         }
       ]
     }
   },
   "scripts": {
-    "compile": "npm run compile:host && npm run build:webview",
-    "compile:host": "tsc -p .",
-    "generate:oj-contracts": "npm run compile:host && node scripts/exportOjSchemas.js",
-    "build:webview": "vite build --config vite.current-session.config.ts",
+    "compile": "tsc -p . && node scripts/bundleRuntimeDependencies.js dist",
+    "compile:prototype:oj": "tsc -p tsconfig.oj-console.json",
+    "prototype:oj": "npm run compile:prototype:oj && node .runtime/oj-console-dist/prototypes/oj-console/backend/server.js --open",
+    "prototype:oj:backend": "npm run compile:prototype:oj && node .runtime/oj-console-dist/prototypes/oj-console/backend/server.js",
+    "prototype:oj:try": "powershell -NoProfile -ExecutionPolicy Bypass -File prototypes/oj-console/scripts/try-backend.ps1",
     "trial:binary-tree": "npm run compile && node dist/src/cli/codexPracticeTrial.js --fixture fixtures/practice/P4913.codex.json --fixture fixtures/practice/P1030.codex.json --fixture fixtures/practice/P1364.codex.json",
     "trial:codex-practice": "npm run compile && node dist/src/cli/codexPracticeTrial.js",
     "trial:gpt-practice": "npm run compile && node dist/src/cli/gptPracticeTrial.js",
@@ -223,34 +269,31 @@
     "trial:mimo-journey": "npm run compile && node dist/src/cli/mimoJourneyTrial.js",
     "trial:mimo": "npm run compile && node dist/src/cli/mimoAutocompleteTrial.js",
     "mcp:problem-search": "node dist/src/mcp/problemSearchServer.js",
+    "smoke:oj-read": "npm run compile && node scripts/smokeOjProviders.js",
     "package:beta": "npm run compile && npx --yes @vscode/vsce package --no-dependencies --out .runtime/student-autocomplete-lab-0.1.0-beta.1.vsix",
     "package:beta-release": "npm run compile:release && node scripts/packageBetaReleaseVsix.js",
     "package:internal": "npm run compile && node scripts/packageInternalVsix.js",
     "check:hygiene": "node scripts/checkProjectHygiene.js",
-    "compile:release": "tsc -p tsconfig.release.json && npm run build:webview",
+    "compile:release": "tsc -p tsconfig.release.json && node scripts/bundleRuntimeDependencies.js .runtime/beta-release-dist --no-sourcemap",
     "internal:test-report": "npm run compile && node dist/src/cli/internalTestReport.js",
     "test": "vitest run",
     "watch": "tsc -w -p ."
   },
   "devDependencies": {
-    "@testing-library/react": "16.3.2",
-    "@testing-library/user-event": "14.6.1",
     "@types/node": "^22.15.3",
-    "@types/react": "19.2.17",
-    "@types/react-dom": "19.2.3",
-    "@types/vscode": "1.125.0",
-    "@vitejs/plugin-react": "6.0.3",
-    "jsdom": "29.1.1",
+    "@types/vscode": "^1.95.0",
+    "esbuild": "0.28.1",
     "playwright": "^1.59.1",
     "typescript": "^5.8.3",
-    "vite": "8.1.4",
-    "vitest": "4.1.10"
+    "vitest": "^3.1.2"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "lucide-react": "1.24.0",
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
+    "parse5": "8.0.1",
     "zod": "^4.3.6"
+  },
+  "overrides": {
+    "@hono/node-server": "2.0.11",
+    "fast-uri": "3.1.4"
   }
 }

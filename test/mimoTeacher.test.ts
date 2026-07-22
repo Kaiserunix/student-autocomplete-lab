@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { requestMimoTeachingDiagnosis } from "../src/teaching/mimoTeacher";
+import type { SkillPlanAudit } from "../src/skills/types";
+import {
+  requestMimoTeachingDiagnosis,
+  requestMimoTeachingDiagnosisWithSkills
+} from "../src/teaching/mimoTeacher";
+import { createEmptyStudentSkill } from "../src/teaching/studentSkill";
 
 describe("MiMo teaching diagnosis", () => {
   test("calls MiMo completions and parses the teaching report", async () => {
@@ -147,5 +152,68 @@ describe("MiMo teaching diagnosis", () => {
     );
 
     expect(report.skillUpdate?.candidate).toBe("binary-tree-depth-numbered-children");
+  });
+
+  test("renders controlled learner habits in the coach tail before the action footer", async () => {
+    const calls: Array<{ init?: RequestInit }> = [];
+    const fakeFetch = async (_url: string | URL | Request, init?: RequestInit): Promise<Response> => {
+      calls.push({ init });
+      return new Response(JSON.stringify({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              pain_points: [{
+                label: "loop_boundary",
+                confidence: 0.9,
+                evidence: "The final range endpoint is wrong."
+              }],
+              hint: "先检查 range 的末端。",
+              skill_update: null
+            })
+          }
+        }]
+      }), { status: 200 });
+    };
+    const skill = createEmptyStudentSkill("student-a", "2026-07-14T00:00:00.000Z");
+    skill.codeHabits.languageRules.python = [
+      "Check loop boundary.",
+      "unmapped-student-secret-123"
+    ];
+    let audit: SkillPlanAudit | undefined;
+
+    await requestMimoTeachingDiagnosisWithSkills(
+      {
+        baseUrl: "https://api.example.test/v1",
+        apiKey: "test-key",
+        model: "teacher-model"
+      },
+      {
+        problem: { id: "P1000", title: "A+B", summary: "Add two integers." },
+        language: "python",
+        studentCode: "for i in range(n): pass",
+        ojVerdict: { status: "WA" },
+        localEvidence: [],
+        studentProfile: { painPointCounts: {}, activeSkills: [] }
+      },
+      {
+        studentSkill: skill,
+        action: "specific",
+        onAudit: (value) => {
+          audit = value;
+        }
+      },
+      fakeFetch as typeof fetch
+    );
+
+    const body = JSON.parse(String(calls[0].init?.body));
+    const system = String(body.messages[0].content);
+    const user = String(body.messages[1].content);
+    expect(system).not.toContain("[tail]");
+    expect(user).toContain("Check the first and last valid loop or range boundary");
+    expect(user.indexOf("[tail]")).toBeLessThan(user.indexOf("[footer]"));
+    expect(user.trimEnd().endsWith("</action-output-footer>")).toBe(true);
+    expect(user).not.toContain("unmapped-student-secret-123");
+    expect(audit?.includedRuleIds).toContain("learner.loop-boundary");
+    expect(JSON.stringify(audit)).not.toContain("student-secret");
   });
 });

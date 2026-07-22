@@ -1,7 +1,9 @@
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { limitCompletionLines } from "../src/autocomplete/filter";
+import { requestMimoAutocomplete } from "../src/autocomplete/mimoAutocomplete";
 import { buildAutocompletePrompt, buildMimoAutocompletePrompt } from "../src/autocomplete/prompt";
 import { isSupportedAutocompleteLanguage, shouldRequestInlineCompletion } from "../src/autocomplete/triggerPolicy";
+import type { ModelTextRequest } from "../src/models/modelTextTransport";
 
 describe("autocomplete safety", () => {
   test("limits model output to at most three non-empty lines", () => {
@@ -65,12 +67,7 @@ return d
       suffix: "\nprint(add(1, 2))",
       language: "python",
       filePath: "C:/tmp/main.py",
-      habits: ["Prefer direct Python."],
-      activeProblem: {
-        title: "Secret Full Problem",
-        statement: "The hidden statement must never enter autocomplete.",
-        referenceSolution: "return a + b"
-      }
+      habits: ["Prefer direct Python."]
     });
 
     expect(prompt).toContain("def add");
@@ -88,12 +85,7 @@ return d
       suffix: "\nprint(add(1, 2))",
       language: "python",
       filePath: "trial.py",
-      habits: ["Prefer direct Python."],
-      activeProblem: {
-        title: "Secret Full Problem",
-        statement: "The hidden statement must never enter autocomplete.",
-        referenceSolution: "return a + b"
-      }
+      habits: ["Prefer direct Python."]
     });
 
     expect(prompt).toContain("def add(a, b):");
@@ -108,13 +100,12 @@ return d
       prefix: "def solve():\n    ",
       suffix: "",
       language: "python",
-      filePath: "C:\\Users\\qwerf\\Desktop\\Source\\leetcodepy\\practice\\luogu\\P1001.py",
+      filePath: "D:\\work\\student-autocomplete-lab\\practice\\luogu\\P1001.py",
       habits: []
     });
 
     expect(prompt).toContain("File: practice/luogu/problem.py");
-    expect(prompt).not.toContain("C:\\Users\\qwerf");
-    expect(prompt).not.toContain("Desktop\\Source\\leetcodepy");
+    expect(prompt).not.toContain("D:\\work\\student-autocomplete-lab");
     expect(prompt).not.toContain("P1001");
   });
 
@@ -123,7 +114,7 @@ return d
       prefix: "def solve():\n    ",
       suffix: "",
       language: "python",
-      filePath: "C:\\Users\\qwerf\\Desktop\\Source\\leetcodepy\\practice\\manual\\校园昵称规范器.py",
+      filePath: "D:\\work\\student-autocomplete-lab\\practice\\manual\\校园昵称规范器.py",
       habits: []
     });
 
@@ -145,6 +136,17 @@ return d
     expect(shouldRequestInlineCompletion("def solve")).toBe(true);
   });
 
+  test("triggers C-family inline completion while typing an include directive", () => {
+    expect(shouldRequestInlineCompletion("#include <", { languageId: "c" })).toBe(true);
+    expect(shouldRequestInlineCompletion("#include <vector", { languageId: "cpp" })).toBe(true);
+    expect(shouldRequestInlineCompletion("#include <", { languageId: "python" })).toBe(false);
+  });
+
+  test("lets an explicit inline completion request reach the provider on a blank or comment line", () => {
+    expect(shouldRequestInlineCompletion("", { languageId: "c", explicit: true })).toBe(true);
+    expect(shouldRequestInlineCompletion("// continue here", { languageId: "c", explicit: true })).toBe(true);
+  });
+
   test("limits inline completion to supported code languages", () => {
     expect(isSupportedAutocompleteLanguage("python")).toBe(true);
     expect(isSupportedAutocompleteLanguage("cpp")).toBe(true);
@@ -152,5 +154,43 @@ return d
     expect(isSupportedAutocompleteLanguage("rust")).toBe(true);
     expect(isSupportedAutocompleteLanguage("markdown")).toBe(false);
     expect(isSupportedAutocompleteLanguage("plaintext")).toBe(false);
+  });
+
+  test("keeps teaching-only data out of the Codex OAuth autocomplete request", async () => {
+    const requests: ModelTextRequest[] = [];
+    const generate = vi.fn(async (request: ModelTextRequest) => {
+      requests.push(request);
+      return "return a + b";
+    });
+    const input = {
+      prefix: "def add(a, b):\n    ",
+      suffix: "\nprint(add(1, 2))",
+      language: "python",
+      filePath: "C:/workspace/student/main.py",
+      habits: ["Prefer direct Python."],
+      activeProblem: { statement: "The hidden statement" },
+      teacherPack: "Teacher Pack secret",
+      standardAnswer: "standard answer secret",
+      coachThread: "coach thread secret"
+    };
+
+    await requestMimoAutocomplete(
+      {
+        mode: "openai",
+        authMode: "codex-oauth",
+        model: "gpt-5.3-codex-spark",
+        format: "codex-app-server",
+        transport: { generate }
+      },
+      input
+    );
+
+    const request = requests[0]!;
+    expect(request.prompt).toContain("def add(a, b)");
+    expect(request.prompt).toContain("print(add(1, 2))");
+    expect(request.prompt).not.toContain("The hidden statement");
+    expect(request.prompt).not.toContain("Teacher Pack secret");
+    expect(request.prompt).not.toContain("standard answer secret");
+    expect(request.prompt).not.toContain("coach thread secret");
   });
 });

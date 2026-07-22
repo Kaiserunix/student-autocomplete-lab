@@ -1,4 +1,4 @@
-export type ProblemPlatform = "luogu" | "leetcode" | "manual";
+export type ProblemPlatform = "luogu" | "leetcode" | "nowcoder" | "codeforces" | "atcoder" | "manual";
 
 export type SourcePolicyMode = "public-fetch" | "optional-adapter" | "manual-import";
 

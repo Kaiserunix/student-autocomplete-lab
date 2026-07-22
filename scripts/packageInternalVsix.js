@@ -57,10 +57,9 @@ async function main() {
     [internalViewPrefix]: packageJson.contributes.views.studentAutocomplete.map((view) => ({
       ...view,
       id: renameContributionId(view.id),
-      name: `内测 · ${view.name}`
+      name: "做题陪练 内测记录"
     }))
   };
-  renameContributionReferences(packageJson.contributes);
   packageJson.contributes.configuration = renameConfigurationProperties(
     packageJson.contributes.configuration,
     "AI 做题陪练 内测",
@@ -94,24 +93,6 @@ function runVscePackage(cwd, outputPath) {
 
 function renameContributionId(value) {
   return String(value).replaceAll("studentAutocomplete", internalViewPrefix);
-}
-
-function renameContributionReferences(contributes) {
-  contributes.viewsWelcome = (contributes.viewsWelcome ?? []).map((welcome) => ({
-    ...welcome,
-    view: renameContributionId(welcome.view),
-    contents: renameContributionId(welcome.contents)
-  }));
-  contributes.menus = Object.fromEntries(
-    Object.entries(contributes.menus ?? {}).map(([location, items]) => [
-      location,
-      items.map((item) => ({
-        ...item,
-        command: renameContributionId(item.command),
-        when: item.when ? renameContributionId(item.when) : item.when
-      }))
-    ])
-  );
 }
 
 function renameConfigurationProperties(configuration, title, expectedPrefix) {
