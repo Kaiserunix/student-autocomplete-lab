@@ -7,7 +7,6 @@ import {
   parseOjProviderHealth,
   parseOjSearchResult
 } from "./contracts";
-import { connectOjMcpSession } from "./mcpSdkClient";
 import {
   ojCapabilityNames,
   type OjCapabilities,
@@ -28,6 +27,10 @@ import {
 
 const CAPABILITY_CACHE_MS = 5 * 60_000;
 const READ_TIMEOUT_MS = 15_000;
+const defaultSessionFactory: OjMcpSessionFactory = async (descriptor) => {
+  const { connectOjMcpSession } = await import("./mcpSdkClient");
+  return connectOjMcpSession(descriptor);
+};
 
 export class OjBrokerError extends Error {
   public constructor(
@@ -48,7 +51,7 @@ export class OjMcpBroker {
 
   public constructor(
     descriptors: OjProviderDescriptor[],
-    private readonly sessionFactory: OjMcpSessionFactory = connectOjMcpSession,
+    private readonly sessionFactory: OjMcpSessionFactory = defaultSessionFactory,
     private readonly now: () => number = Date.now
   ) {
     this.setDescriptors(descriptors);
@@ -73,18 +76,19 @@ export class OjMcpBroker {
       return status;
     }
 
-    const [capabilitiesResult, healthResult] = await Promise.allSettled([
-      this.loadCapabilities(platform, true),
-      this.loadHealth(platform)
-    ]);
-    const capabilities = capabilitiesResult.status === "fulfilled" ? capabilitiesResult.value : undefined;
-    const health = healthResult.status === "fulfilled" ? healthResult.value : undefined;
-    const failure =
-      capabilitiesResult.status === "rejected"
-        ? errorMessage(capabilitiesResult.reason)
-        : healthResult.status === "rejected"
-          ? errorMessage(healthResult.reason)
-          : undefined;
+    let capabilities: OjCapabilities | undefined;
+    let health: OjProviderHealth | undefined;
+    let failure: string | undefined;
+    try {
+      capabilities = await this.loadCapabilities(platform, true);
+    } catch (error) {
+      failure = errorMessage(error);
+    }
+    try {
+      health = await this.loadHealth(platform);
+    } catch (error) {
+      failure ??= errorMessage(error);
+    }
     const status: OjProviderStatusView = {
       platform,
       label: descriptor.label,

@@ -33,7 +33,6 @@ import type { ModelTextTransport } from "../models/modelTextTransport";
 import { toPublicSkillPlanAudit } from "../skills/auditView";
 import type { SkillPlanAudit } from "../skills/types";
 import { OjMcpBroker } from "../oj/broker";
-import { ojProblemDocumentToRecord } from "../oj/problemDocument";
 import { ojPlatformIds, type OjPlatformId, type OjProblemSummary } from "../oj/types";
 import {
   clearNowCoderSession,
@@ -341,6 +340,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       const nativeId = message.nativeId.trim();
       const summary = this.recentOjSearchResults.get(ojSearchKey(platform, nativeId));
       if (!summary) throw new Error("这条搜索结果已失效，请重新搜索后再导入。");
+      const { ojProblemDocumentToRecord } = await import("../oj/problemDocument");
       const problem = ojProblemDocumentToRecord(await this.ojBroker.fetchProblem(summary));
       await this.saveProblem(problem);
       const teacherPack = await this.tryPrepareTeacherPack(problem);

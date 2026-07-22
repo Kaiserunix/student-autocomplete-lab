@@ -59,6 +59,25 @@ describe("OJ MCP broker", () => {
     await broker.close();
   });
 
+  test("does not overlap capability and health calls on one HTTP session", async () => {
+    let activeCalls = 0;
+    const broker = new OjMcpBroker([descriptor("atcoder")], async () =>
+      session(async (name) => {
+        activeCalls += 1;
+        if (activeCalls > 1) throw new Error("overlapping session call");
+        await new Promise((resolve) => setTimeout(resolve, 1));
+        activeCalls -= 1;
+        if (name === "oj_capabilities") return ok(capabilityPayload("atcoder"));
+        if (name === "oj_health") return ok(healthPayload("atcoder"));
+        throw new Error(`Unexpected tool: ${name}`);
+      })
+    );
+
+    await expect(broker.refresh("atcoder")).resolves.toMatchObject({ overall: "healthy" });
+    expect(activeCalls).toBe(0);
+    await broker.close();
+  });
+
   test("normalizes the legacy Luogu read contract without exposing write entry points", async () => {
     const calls: string[] = [];
     const broker = new OjMcpBroker(
