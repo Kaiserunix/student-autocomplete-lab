@@ -32,6 +32,10 @@ describe("OJ MCP broker", () => {
     expect(connections).toBe(1);
     expect(calls.filter((name) => name === "oj_capabilities")).toHaveLength(1);
     expect(calls.filter((name) => name === "oj_search_problems")).toHaveLength(2);
+    expect(broker.providerStatuses()[0]).toMatchObject({
+      overall: "healthy",
+      searchStatus: "available"
+    });
     await broker.close();
   });
 

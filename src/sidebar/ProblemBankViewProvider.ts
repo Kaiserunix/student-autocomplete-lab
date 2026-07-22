@@ -331,7 +331,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           tags: item.tags.map((tag) => tag.name),
           canImport: item.ref.platform !== "codeforces"
         })),
-        nextCursor: result.nextCursor
+        nextCursor: result.nextCursor,
+        providers: this.ojBroker.providerStatuses()
       };
     }
 
@@ -4425,6 +4426,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         renderProblemSetResults(data);
       }
       if (data.type === "ojProblemSearchResults") {
+        state.ojProviders = data.providers ?? state.ojProviders;
+        renderOjProviders();
         renderOjProblemResults(data);
       }
       if (data.type === "ojProviderStatus") {

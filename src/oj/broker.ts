@@ -120,7 +120,9 @@ export class OjMcpBroker {
 
     if (descriptor.dialect === "luogu-v0.2") {
       const payload = await this.call(input.platform, "luogu_search_problems", { keyword: query, limit });
-      return normalizeLegacyLuoguSearch(payload, query);
+      const result = normalizeLegacyLuoguSearch(payload, query);
+      this.recordReadSuccess(input.platform, "searchProblems");
+      return result;
     }
 
     const requestId = randomUUID();
@@ -138,6 +140,7 @@ export class OjMcpBroker {
     if (result.requestId !== requestId) {
       throw new OjBrokerError("upstream.schema_changed", "题库返回了不匹配的 requestId。", input.platform);
     }
+    this.recordReadSuccess(input.platform, "searchProblems");
     return result;
   }
 
@@ -152,7 +155,9 @@ export class OjMcpBroker {
         pid: summary.ref.nativeId,
         maxStatementChars: 20_000
       });
-      return normalizeLegacyLuoguDocument(payload);
+      const document = normalizeLegacyLuoguDocument(payload);
+      this.recordReadSuccess(platform, "fetchProblem");
+      return document;
     }
 
     let args: Record<string, unknown>;
@@ -168,7 +173,9 @@ export class OjMcpBroker {
       );
     }
 
-    return parseOjProblemDocument(await this.call(platform, "oj_fetch_problem", args), platform);
+    const document = parseOjProblemDocument(await this.call(platform, "oj_fetch_problem", args), platform);
+    this.recordReadSuccess(platform, "fetchProblem");
+    return document;
   }
 
   public async reconfigure(descriptors: OjProviderDescriptor[]): Promise<void> {
@@ -289,6 +296,19 @@ export class OjMcpBroker {
     const descriptor = this.descriptors.get(platform);
     if (!descriptor) throw new OjBrokerError("provider.unknown", `未注册 ${platform} 题库服务。`, platform);
     return descriptor;
+  }
+
+  private recordReadSuccess(platform: OjPlatformId, operation: "searchProblems" | "fetchProblem"): void {
+    const descriptor = this.requireDescriptor(platform);
+    const current = this.statuses.get(platform) ?? initialStatus(descriptor);
+    this.statuses.set(platform, {
+      ...current,
+      overall: "healthy",
+      searchStatus: operation === "searchProblems" ? "available" : current.searchStatus,
+      fetchStatus: operation === "fetchProblem" ? "available" : current.fetchStatus,
+      message: `${descriptor.label}${operation === "searchProblems" ? "搜索" : "导题"}已通过实时验证。`,
+      checkedAt: new Date(this.now()).toISOString()
+    });
   }
 }
 

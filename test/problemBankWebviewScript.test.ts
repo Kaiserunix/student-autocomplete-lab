@@ -413,6 +413,7 @@ describe("problem bank webview script", () => {
     expect(source).toContain('<summary>连接与登录</summary>');
     expect(source).toContain('id="ojSearchPlatform"');
     expect(source).toContain('id="ojProviderStatus"');
+    expect(source).toContain("state.ojProviders = data.providers ?? state.ojProviders");
     expect(source).not.toContain('open>\n            <summary>连接与登录</summary>');
   });
 

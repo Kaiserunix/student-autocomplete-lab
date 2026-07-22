@@ -88,6 +88,7 @@ export interface OjProblemSearchResultsHostEvent {
     canImport: boolean;
   }>;
   nextCursor?: string;
+  providers: OjProviderStatusView[];
 }
 
 export interface OjProviderStatusHostEvent {

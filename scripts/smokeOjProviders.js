@@ -120,7 +120,16 @@ async function main() {
         }
       })
     );
-    console.log(JSON.stringify(results, null, 2));
+    const finalStatuses = new Map(
+      broker.providerStatuses().map((status) => [status.platform, status])
+    );
+    const finalResults = results.map((result) => {
+      const status = finalStatuses.get(result.platform);
+      return status
+        ? { ...result, health: status.overall, healthMessage: status.message }
+        : result;
+    });
+    console.log(JSON.stringify(finalResults, null, 2));
     if (results.some((result) => "error" in result)) process.exitCode = 1;
   } finally {
     await broker.close();
