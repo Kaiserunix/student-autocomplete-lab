@@ -1,8 +1,10 @@
 const path = require("node:path");
 const { existsSync } = require("node:fs");
+const { rm } = require("node:fs/promises");
 const esbuild = require("esbuild");
 
 const outputRoot = path.resolve(process.argv[2] || "dist");
+const sourceMaps = !process.argv.includes("--no-sourcemap");
 const entries = [
   path.join(outputRoot, "src", "oj", "mcpSdkClient.js"),
   path.join(outputRoot, "src", "oj", "problemDocument.js")
@@ -26,8 +28,9 @@ async function main() {
       platform: "node",
       format: "cjs",
       target: "node18",
-      sourcemap: true,
+      sourcemap: sourceMaps,
       logLevel: "warning"
     });
+    if (!sourceMaps) await rm(`${entry}.map`, { force: true });
   }
 }

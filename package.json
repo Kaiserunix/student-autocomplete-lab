@@ -274,7 +274,7 @@
     "package:beta-release": "npm run compile:release && node scripts/packageBetaReleaseVsix.js",
     "package:internal": "npm run compile && node scripts/packageInternalVsix.js",
     "check:hygiene": "node scripts/checkProjectHygiene.js",
-    "compile:release": "tsc -p tsconfig.release.json && node scripts/bundleRuntimeDependencies.js .runtime/beta-release-dist",
+    "compile:release": "tsc -p tsconfig.release.json && node scripts/bundleRuntimeDependencies.js .runtime/beta-release-dist --no-sourcemap",
     "internal:test-report": "npm run compile && node dist/src/cli/internalTestReport.js",
     "test": "vitest run",
     "watch": "tsc -w -p ."
