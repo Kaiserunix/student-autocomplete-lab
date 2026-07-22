@@ -96,6 +96,24 @@ describe("VS Code extension manifest", () => {
     expect(JSON.stringify(properties["studentAutocomplete.ui.language"])).toContain("en");
   });
 
+  test("exposes five-platform OJ connection settings without credential fields", async () => {
+    const manifest = JSON.parse(await readFile("package.json", "utf8")) as ExtensionManifest;
+    const properties = manifest.contributes?.configuration?.properties ?? {};
+
+    expect(properties).toHaveProperty("studentAutocomplete.oj.luogu.endpoint");
+    expect(properties).toHaveProperty("studentAutocomplete.oj.leetcode.entrypoint");
+    expect(properties).toHaveProperty("studentAutocomplete.oj.nowcoder.entrypoint");
+    expect(properties).toHaveProperty("studentAutocomplete.oj.codeforces.endpoint");
+    expect(properties).toHaveProperty("studentAutocomplete.oj.atcoder.endpoint");
+    expect(Object.keys(properties).filter((key) => key.startsWith("studentAutocomplete.oj"))).not.toEqual(
+      expect.arrayContaining([
+        expect.stringMatching(/cookie/i),
+        expect.stringMatching(/apiKey/i),
+        expect.stringMatching(/remoteKey/i)
+      ])
+    );
+  });
+
   test("command palette entries do not point at stale planned-feature placeholders", async () => {
     const source = await readFile("src/extension.ts", "utf8");
 
