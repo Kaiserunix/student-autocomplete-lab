@@ -1,305 +1,219 @@
 # Student Autocomplete Lab
 
-Student Autocomplete Lab is a Chinese-first VS Code algorithm coach for students practicing Luogu, LeetCode, and similar contest-style problems. Beta English support covers the main sidebar shell, explicit English AI-output mode, and English Markdown problem import.
+### 写算法题时，你可能只差一行，也可能需要一个反例。它会尽量分清。
 
-It is not an automatic problem solver or unattended OJ submitter. The beta goal is a restrained loop: safe short autocomplete for the student's own code, explicit AI coaching only after the student asks, and a local `学习画像` that records repeated pain points, useful skills, user corrections, and rollbackable versions. Experimental Codeforces and AtCoder paths can submit the active saved file only after a short-lived, explicit user confirmation.
+Student Autocomplete Lab 是一个中文优先的 VS Code 算法学习助手。
 
-This repository is prepared as an MIT-licensed open-source beta candidate. Public code, docs, tests, and summarized experiment evidence belong in git; API keys, raw runtime traces, full problem-statement caches, and personal learning ledgers stay ignored.
+少写了一行输入，它可以帮你补上；思路卡住了，它先给一个小提示；反复在同类问题上出错，它会把这些线索整理成一份只留在本地的学习画像。
 
-## Beta Shape
+它不会默认给出整题答案。代码依然由你完成，AI 只在合适的时候向前推一步。
 
-- `AI 教练`: the first screen, used for hints, deeper hints, giving up into a lesson report, AI-estimated submission checks, AC-after learning scores, optimization review, archiving, and next-problem recommendations.
-- `题目`: import Markdown problem files, search/import Luogu problems and training sets, and create starter files for Python, C, C++, Rust, or other configured templates.
-- `学习画像`: an inspectable Student Skill model showing active skills, candidate pain points, disabled judgments, user corrections, and recent rollback snapshots.
-- `安全补全`: inline completion reads only local student-code context and safe code habits; it must not read the imported problem statement, Teacher Pack, or standard answer.
-- `English beta`: switch the sidebar shell to English, choose `English` for AI output, and import English Markdown using headings such as `Problem Statement`, `Input`, `Output`, `Example`, `Constraints`, and `Notes`.
+> 🧪 **Beta 状态：** 核心流程已经可用，细节仍在持续完善。目前建议从源码启动体验。
 
-## Core Direction
+## 快速开始
 
-- Build an algorithm-learning coach, not a full vibe-coding agent.
-- Keep Xiaomi MiMo supported because the first real experiments used MiMo quota.
-- Recommended public routing: `dsv4f` for high-frequency autocomplete, `dsv4pro` for teaching analysis and optimization review.
-- Support OpenAI, OpenAI-compatible, and Anthropic-native provider modes.
-- Keep Chinese as the most complete UI language while making the English path usable for beta testers.
-- Keep completions small: usually 1 to 3 lines.
-- Avoid generating full problem solutions by default.
-- Learn user habits transparently and store them as editable local skills.
-
-## Folder Contents
-
-- `docs/requirements.md`: product requirements and guardrails.
-- `docs/codex-start-prompt.md`: prompt to give Codex for the first build attempt.
-- `docs/beta-v2-final-goals.md`: final beta target, including Student Skill distillation requirements.
-- `docs/superpowers/specs/2026-07-12-oj-submission-design.md`: approved hybrid architecture for user-confirmed real OJ submission and interactive login.
-- `docs/superpowers/specs/2026-07-14-oj-console-prototype-design.md`: implemented standalone localhost OJ console design and verification record.
-- `docs/superpowers/specs/2026-07-21-multi-platform-oj-submission-design.md`: implemented Codeforces/AtCoder capability registry, result semantics, safety boundary, and release gates.
-- `docs/large-scale-growth-simulation.md`: costed plan for the 200-problem / 1000-code growth simulation.
-- `docs/open-source-release.md`: release notes, open-source scope, model rationale, and package command.
-- `docs/release-lanes.md`: three VSIX lanes: beta, clean beta release, and private internal test.
-- `docs/internal-testing.md`: summarized live MiMo journey-test evidence.
-- `docs/friend-internal-test-build.md`: local-only friend-testing build with extra recording, not for GitHub or public release.
-- `secrets/models.env`: local API credentials and model routing. This is ignored by git.
-
-## Current Build Target
-
-The first implementation is now a VS Code extension prototype.
-
-It starts with:
-
-1. A VS Code sidebar for a local problem bank.
-2. Luogu starter problem metadata from the supplied problem list.
-3. Public Luogu problem import through `GET /problem/:pid` with `x-lentille-request: content-only`.
-4. Public Luogu problem-set import through `GET /training/:id` with `x-luogu-type: content-only`.
-5. Luogu keyword search for problems and problem sets.
-6. Manual Markdown-file import fallback for custom problem statements.
-7. A local JSONL store for imported/manual problems and imported problem sets.
-8. Safe autocomplete prompt/filter modules that do not include problem statements.
-
-LeetCode support is planned as an adapter. Until a stable GraphQL path is wired, LeetCode problems should use the manual Markdown-file import path.
-
-Current real OJ scope is deliberately narrow: Codeforces and AtCoder submission are experimental; Luogu, LeetCode, Kattis, and other judges are rejected by the production target parser. The approved design keeps explicit confirmation, per-platform isolation, and human-operated verification without browser-cookie scraping or CAPTCHA bypass.
-
-## Experimental Codeforces And AtCoder Submission
-
-当前实验性支持 Codeforces 和 AtCoder。该功能调用用户自己安装的 [`online-judge-tools/oj`](https://github.com/online-judge-tools/oj)；它不会打包进 VSIX，也不会由扩展静默安装。请先按上游说明安装，例如：
+你需要 VS Code `1.95.0` 或更新版本，以及 Node.js 和 npm。
 
 ```powershell
-python -m pip install --user online-judge-tools
+git clone https://github.com/Kaiserunix/student-autocomplete-lab.git
+cd student-autocomplete-lab
+npm ci
+npm test
+npm run compile
 ```
 
-使用方法：
+然后用 VS Code 打开项目，按 `F5`，选择 `Run Student Autocomplete Extension`。
 
-1. 在 `AI 教练` 页展开 `OJ 提交（CF / AT 实验）`，选择 Codeforces 或 AtCoder。
-2. 点击当前平台的登录按钮，在可见终端里正常完成登录和网站要求的人工验证。
-3. 选择本地题目、打开并保存要提交的源文件，再粘贴所选平台的具体题目链接。
-4. Codeforces 可选填写公开 handle，以便通过公共 API 查询这一次提交的判题结果；AtCoder 不需要此字段。
-5. 点击 `提交前确认`，核对规范化链接、文件路径、语言和代码大小，然后点击 `确认并提交一次`。
+项目目前主要在 Windows + PowerShell 上开发和验证。macOS、Linux 用户也欢迎试用并反馈兼容性问题。
 
-每次提交都必须明确确认。确认记录两分钟后失效，并与当前文件版本绑定；代码变化后必须重新预览。扩展不会自动重试提交，不会绕过图形验证，不会抓取浏览器 Cookie，也不会记录 `oj` 的原始输出或其中显示的源码预览。Codeforces 可选等待公共 API 判题；AtCoder 当前只显示“已提交”和官方提交链接，不会伪造 AC/WA。若网络结果不明，请先到对应平台检查，避免手动重复提交。
+### 第一次使用
 
-AtCoder 当前的 Turnstile 可能使上游 Selenium 登录失效；遇到这种情况，本项目只报告登录不可用，不会尝试绕过。Luogu、LeetCode 和其他未注册平台仍不支持真实提交。完整能力边界和兼容性记录见 [`docs/superpowers/specs/2026-07-21-multi-platform-oj-submission-design.md`](docs/superpowers/specs/2026-07-21-multi-platform-oj-submission-design.md)。
+1. 打开活动栏里的 `AI 做题陪练`。
+2. 在 `AI 配置` 里选好 Provider 和模型。
+3. 导入一道洛谷题，或选择一份 Markdown。
+4. 创建练习文件，开始写代码。
+5. 看到 Ghost Text 就按需接受；卡住了再去问教练。
+6. 做完后复盘一下，再看看学习画像记录得是否准确。
 
-本项目与 Codeforces、AtCoder、online-judge-tools 均无隶属或背书关系。第三方许可见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+如果补全没有响应，可以尝试命令：`AI 做题陪练：立即补全一次（备用）`。
 
-## Standalone OJ Console Prototype
+## 它能帮你做什么？
 
-无需打开 VS Code，可以直接启动本地深色工具控制台：
+| 你正在…… | 它会…… |
+| --- | --- |
+| 重复输入模板代码 | 补一小段 Ghost Text，通常只有 1–3 行 |
+| 遇到 WA 或思路停滞 | 从边界、状态或反例里挑一个方向提醒你 |
+| 需要更明确的提示 | 逐步增加细节，同时尽量保留思考空间 |
+| 完成一道题 | 陪你找错、评分、复盘，看看是否还有更好的写法 |
+| 反复卡在同类问题 | 把证据记进可查看、可纠正的 Student Skill |
+| 不知道下一题练什么 | 给出推荐题目，也解释推荐理由 |
+
+一句话总结：**短补全减少重复输入，AI 教练推动思考，学习画像沉淀长期线索。**
+
+## 核心功能
+
+### ✨ 短补全
+
+支持 Python、C、C++、Rust 等常见算法语言。停下输入约 350 ms，编辑器会尝试给出一小段灰色续写；想立刻再来一次，也可以手动触发。
+
+它会尽量顺着现有代码继续写，而不是接管整个解题过程。
+
+### 💬 AI 教练
+
+侧栏里的 `AI 教练` 可以：
+
+- 给一个小提示；
+- 再具体一点；
+- 接着追问；
+- 放弃后看讲解；
+- 做完后找错、评分和复盘；
+- 推荐下一道练习题。
+
+AI 找错和评分都只是辅助判断。最终结果仍以编译器、样例和官方 OJ 为准。
+
+### 📚 题库
+
+可以按题号导入洛谷题目、搜索题目和题单，也可以直接导入一份 Markdown。项目还能帮你创建 Python、C、C++、Rust 练习文件。
+
+洛谷导入依赖公开接口，可能随上游变化。遇到导入失败时，Markdown 仍是一条可靠的备用通道。
+
+### 🪴 会长大的学习画像
+
+Student Skill 会记录反复出现的痛点、可能有用的习惯和最近证据。它提供的是可回看的学习线索，而不是一份替你定义“是否学会”的成绩单。
+
+判断不准确时可以纠正，不想继续使用的结论可以禁用，也可以查看历史版本并回滚。
+
+### 🔌 你选模型，不绑一家
+
+| 方式 | 适合什么情况 |
+| --- | --- |
+| OpenAI API Key | 直接使用 OpenAI 模型 |
+| Codex OAuth（实验性） | 使用本地 Codex CLI 的 ChatGPT 登录会话 |
+| OpenAI-compatible | 接入 DeepSeek、MiMo 或其他兼容服务 |
+| Anthropic Messages | 使用 Anthropic 原生接口 |
+
+> **Codex OAuth 风险提示：** 这条接入方式可能存在账号风险，也可能受到 Codex 服务调整的影响。作者自测期间暂未遇到封号，但这只是个人测试结果，不代表零风险或官方保证。介意的话，建议改用 API Key。
+
+教学和补全可以使用不同模型：高频补全更看重速度，复杂复盘则可以交给更擅长推理的模型。
+
+## 配置 AI
+
+在侧栏 `AI 配置` 或 VS Code Settings 中填写：
+
+- Provider 模式；
+- Base URL；
+- 教学模型；
+- 自动补全模型；
+- 补全请求格式；
+- API Key，或 Codex OAuth。
+
+从侧栏保存的 API Key 会进入 VS Code SecretStorage。`secrets/models.env` 只用于本地开发备用，并已被 Git 忽略。请不要把密钥提交到仓库。
+
+<details>
+<summary><strong>实验性 Codeforces / AtCoder 提交</strong></summary>
+
+当前版本可以调用你自己安装的 [`online-judge-tools/oj`](https://github.com/online-judge-tools/oj)，向 Codeforces 或 AtCoder 提交已经保存的活动代码文件。
+
+每次提交前，你都要亲自检查题目链接、文件、语言和代码大小，再生成一次性确认。确认两分钟后失效，代码一改也会失效。
+
+提交始终需要用户显式确认。扩展不会自动重试，也不会读取浏览器凭据或保存带源码的原始 CLI 输出。
+
+只想看看流程，可以启动不会真的提交代码的本地演示：
 
 ```powershell
 npm run prototype:oj
 ```
 
-该命令只监听 `127.0.0.1`，生成当前进程专用的随机令牌，并打开浏览器。选择源码后，默认 `DEMO` 模式可以切换 Codeforces/AtCoder，体验预览、一次性确认、排队、判题和 AC/WA/CE/UNKNOWN 状态；演示模式不会访问任何 OJ。
+它只监听 `127.0.0.1`，默认演示模式不会访问真实 OJ。
 
-若只想启动后端，或先用 PowerShell 客户端试流程：
+</details>
 
-```powershell
-npm run prototype:oj:backend
-npm run prototype:oj:try -- -SourcePath prototypes/oj-console/examples/demo-source.cpp -Yes
+## 数据保存在本地
+
+默认都在本机：题库、做题记录、学习画像、Teacher Pack 和模型用量记录。
+
+这些东西不会进 Git：
+
+- API Key 和 OAuth 会话；
+- `.runtime/` 里的运行记录；
+- `.student-autocomplete/` 里的个人学习数据；
+- `practice/` 里的练习文件；
+- 本地生成的 VSIX。
+
+## 为什么不直接给完整答案？
+
+因为“看懂一份答案”和“自己能写出来”中间，通常还隔着几次尝试。
+
+所以项目把补全和教学分成了两条路：
+
+| 短补全能看到 | 短补全看不到 |
+| --- | --- |
+| 光标附近的学生代码 | 完整题面 |
+| 当前语言与文件信息 | 标准答案 |
+| 允许使用的代码习惯 | Teacher Pack |
+|  | 教练对话、讲解报告和学习结论 |
+
+题面和隐藏参考材料只会进入你主动发起的教学流程，不会被自动补全用来生成整题答案。
+
+## 开发者指南
+
+```text
+src/
+├─ autocomplete/    短补全：上下文、触发、请求、过滤
+├─ skills/          语言策略、个人习惯与模型渲染
+├─ sidebar/         VS Code 侧栏与交互
+├─ problemBank/     洛谷和 Markdown 题库
+├─ teaching/        提示、讲解、评分与 Student Skill
+├─ recommendation/  下一题推荐
+├─ models/          模型客户端
+├─ codex/           Codex OAuth 与 app-server
+├─ submission/      实验性 OJ 提交
+└─ storage/         本地 JSON / JSONL 数据
 ```
 
-真实模式默认锁定，只有安装并登录 `online-judge-tools/oj` 后才可使用。它仍然要求完整解锁短语、不可复用的提交确认，并且不会自动重试。登录由可见 PowerShell 终端接管；浏览器 Cookie、账号密码、图形验证绕过和验证码自动化不属于本原型。
+常用命令：
 
-## Development
+| 命令 | 用途 |
+| --- | --- |
+| `npm test` | 运行全部测试 |
+| `npm run compile` | 编译扩展 |
+| `npm run prototype:oj` | 启动本地 OJ Console |
+| `npm run package:beta` | 生成完整本地测试包 |
+| `npm run package:beta-release` | 生成清理后的公开候选包 |
+| `npm run check:hygiene` | 检查发行包是否包含本地数据或敏感内容 |
 
-Install dependencies:
+想了解更深的设计、实验和评测，可以从 [`docs/`](docs/) 开始。Live trial 可能消耗付费模型额度，运行前请确认模型配置和预算。
 
-```powershell
-npm install
-```
+## 仍在完善
 
-Run tests:
+核心功能已经可用，但还不是稳定发行版：
 
-```powershell
-npm test
-```
+- 英文界面只覆盖主要路径；
+- LeetCode 目前更推荐 Markdown 导入；
+- Codeforces、AtCoder 提交还是实验功能；
+- C、C++、Rust 的补全仍在持续打磨；
+- 推荐和学习画像需要更多真实练习来校准；
+- macOS、Linux 还需要更多兼容性反馈。
 
-Compile the extension:
+接下来会把当前题目、代码、教练对话和复盘连成更自然的一条线，再逐步接入更多题库和 OJ。
 
-```powershell
-npm run compile
-```
+详细进度记录在 [`docs/current-gaps-and-next-steps.md`](docs/current-gaps-and-next-steps.md)。
 
-Package the full local beta test build:
+## 参与项目
 
-```powershell
-npm run package:beta
-```
+欢迎提交 Issue，尤其是这些反馈：
 
-Package the clean beta release candidate:
+- 补全过长或偏离当前代码；
+- 提示过于直接，已经接近完整答案；
+- 某个边界条件没有得到提醒；
+- 题目无法导入；
+- 学习画像记录不准确；
+- 配置完成后没有正常响应。
 
-```powershell
-npm run package:beta-release
-```
+提交问题前，请删除 API Key、OAuth 信息、个人代码和未公开题面。
 
-Package the separate friend-testing build with local records enabled:
+## License
 
-```powershell
-npm run package:internal
-```
+[MIT](LICENSE) © 2026 kaiserunix
 
-The release lanes use different extension ids and view prefixes. `beta release` is the clean public candidate; `beta 内测版` is for local friend testing only, writes extra records to VS Code global storage, and must not be published or pushed as a release artifact.
-
-Run the local hygiene gate before publishing the clean beta release or sharing a private test package:
-
-```powershell
-npm run check:hygiene
-```
-
-This checks that secrets, runtime traces, local practice files, and personal learning records stay ignored by git. If the clean beta-release staging tree exists, it also scans for blocked engineering, internal-test, source-map, secret, and local-path content.
-
-Run a live MiMo autocomplete trial:
-
-```powershell
-npm run trial:mimo
-```
-
-Compare a specific MiMo model:
-
-```powershell
-npm run trial:mimo -- --model mimo-v2.5
-npm run trial:mimo -- --model mimo-v2-omni
-```
-
-The trial reads `secrets/models.env`, calls the MiMo OpenAI-compatible `/v1/completions` endpoint, and prints only the provider, model, and filtered completion. It does not print API keys.
-
-Run the self-evolution teaching loop without spending model calls:
-
-```powershell
-npm run trial:self-evolution -- --provider fixture
-npm run trial:self-evolution-eval -- --provider fixture
-```
-
-Run the same evaluation against live MiMo 2.5:
-
-```powershell
-npm run trial:self-evolution-eval -- --provider mimo
-```
-
-The eval prints pain-point, primary-pain-point, recommendation, skill-candidate, and perfect-step accuracy. It also writes prompt-patch candidates only for real pain-point drift.
-
-Run the Luogu 100-116 journey trial with one carried student profile:
-
-```powershell
-npm run trial:mimo-journey -- --runs 3 --profile-mode carry
-```
-
-This calls the configured teaching model, imports Luogu training sets `100` through `116`, simulates staged wrong submissions, runs AC-after optimization review, and checks whether repeated pain points become ready skills.
-
-Add transfer validation after skills become ready:
-
-```powershell
-npm run trial:mimo-journey -- --runs 3 --profile-mode carry --transfer-check
-```
-
-Transfer validation picks unseen same-skill cases from the expanded long set after a skill is marked ready. It records per-step token `usage`, transfer pass rate, and estimated hint reduction without pretending this is a real human-learning proof.
-
-Live chat-model calls also append provider-reported token usage to `.runtime/chat-completions-usage.jsonl`. The log records model name, provider format, sanitized base URL, and prompt/completion/total tokens; it does not record API keys.
-
-Run a GPT practice-generation dry run:
-
-```powershell
-npm run trial:gpt-practice
-```
-
-The GPT practice trial is for generating audited practice material: a reference solution, plausible wrong submissions, pain-point labels, and a conservative skill-update candidate. It defaults to `gpt-4.1-nano`, estimates cost before any request, and does not spend money by default.
-
-To allow a real paid request, set `OPENAI_API_KEY` and pass an explicit spend flag:
-
-```powershell
-$env:OPENAI_API_KEY="..."
-npm run trial:gpt-practice -- --spend --max-usd 0.02
-```
-
-Useful overrides:
-
-```powershell
-npm run trial:gpt-practice -- --model gpt-5-nano --max-usd 0.02
-npm run trial:gpt-practice -- --problem-id P1427 --pain-points output_order,loop_boundary
-```
-
-Run a no-key Codex-subagent practice sample:
-
-```powershell
-npm run trial:codex-practice
-```
-
-This reads `fixtures/practice/P1427.codex.json`, validates it with the same practice report parser, and prints a pain-point summary. It is useful when no OpenAI API key is available and we want to test the learning loop with Codex-generated samples.
-
-Run the first binary-tree practice pack:
-
-```powershell
-npm run trial:binary-tree
-```
-
-This verifies `P4913`, `P1030`, and `P1364` against small local teaching oracles. It runs the reference solution and wrong submissions, then emits verified pain-point events such as `depth_definition`, `subtree_boundary`, and `weighted_cost`.
-
-Write verified events to a local JSONL ledger:
-
-```powershell
-npm run trial:binary-tree -- --write-events .student-autocomplete/learning_events.jsonl
-```
-
-Run a MiMo-powered teaching diagnosis trial:
-
-```powershell
-npm run trial:mimo-teacher
-```
-
-The teaching trial turns one verified wrong submission into a student attempt, sends the evidence to the teacher diagnosis layer, updates `.runtime/student_profile.json`, and returns a hint, pain-point diagnosis, skill candidate, and recommendation. It respects the configured teaching model and falls back to a deterministic local stub when live MiMo is not requested.
-
-Useful overrides:
-
-```powershell
-npm run trial:mimo-teacher -- --provider stub
-npm run trial:mimo-teacher -- --provider live --wrong-index 1
-npm run trial:mimo-teacher -- --fixture fixtures/practice/P4913.codex.json --wrong-index 2
-```
-
-To try the extension in VS Code, open this folder, press `F5`, and choose `Run Student Autocomplete Extension`. The extension host opens `.student-autocomplete-smoke/main.py`. Type at a supported code location and pause for about 350 ms; inline completion is requested automatically. `AI 做题陪练：立即补全一次（备用）` remains available for diagnosis or an immediate retry. The activity bar also shows `Student Autocomplete`, with a `Problem Bank` sidebar.
-
-Current inner-test boundary:
-
-- Inline autocomplete is usable for local code-continuation smoke tests.
-- Problem statements saved in the sidebar are not included in autocomplete prompts.
-- The Chinese sidebar separates problem import/search, AI interaction, archived attempts, lesson reports, solution scoring, and optimization review.
-- Imported full problems can generate a hidden Teacher Pack with standard approach, expected algorithm, complexity, invariants, pitfalls, counterexamples, and brute-force suitability. The pack is cached and used as diagnosis reference, not shown as the default student answer.
-- Teaching diagnosis and self-evolution are usable enough for personal alpha testing; see `docs/internal-testing.md` for live MiMo evidence.
-- The final beta target is now defined as a local, inspectable, rollbackable `Student Skill` loop; see `docs/beta-v2-final-goals.md`.
-- The first beta v2 code slice persists AI-coach diagnosis into `studentSkill.json` and archives version snapshots beside the legacy `studentProfile.json`.
-
-## Source Policy
-
-Luogu problem import is best-effort from the public problem JSON endpoint. Luogu problem and problem-set search use the public list endpoints. Luogu problem-set import is best-effort from the public training JSON endpoint.
-
-Problem-set import stores the set title, description, and problem metadata. It does not automatically fetch the full statement for every problem in the set; individual full statements can be imported through the problem endpoint when needed.
-
-Search matters for the learning loop: future recommendation code can query nearby problems by keyword, concept, or pain-point label instead of relying only on the fixed seed list.
-
-## MiMo Trial Notes
-
-The first live trial showed that `mimo-v2.5-pro` responds well to prefix-only autocomplete prompts. XML/FIM-style prompts with both prefix and suffix returned an empty completion in testing, even though the request succeeded. The current MiMo path therefore uses a prefix-completion prompt and relies on the post-filter to stop after the first local continuation.
-
-Model notes from local trials:
-
-- `mimo-v2.5-pro`: currently the more reliable live teaching/comparison model in local tests.
-- `mimo-v2.5`: useful as a cheaper high-frequency experiment path when the upstream endpoint is healthy.
-- `mimo-v2-omni`: can complete the simplest sample, but returned a cursor placeholder on a slightly more OJ-like loop sample. Keep it for multimodal/problem-understanding experiments, not default inline completion.
-- TTS models are voice models and should not be used for code autocomplete.
-
-The extension should not do login bypass, CAPTCHA bypass, or rate-limit evasion. It should cache local records and prefer user-initiated imports.
-
-Longer MiMo journey-test summaries are in `docs/internal-testing.md`. They are published as sanitized aggregate evidence only; raw JSON traces, API credentials, local runtime files, and personal learning records remain excluded.
-
-## Open Source Alpha
-
-License: MIT.
-
-Open-source degree in plain language: other people can use, fork, modify, redistribute, publish, sublicense, or use the project commercially, as long as they keep the copyright and MIT license notice. There is no warranty, and model keys/problem data are the user's responsibility.
-
-Package a local VSIX:
-
-```powershell
-npm run compile
-npx --yes @vscode/vsce package --out .runtime\student-autocomplete-lab-0.1.0-beta.1.vsix
-```
+第三方组件与许可见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。

@@ -172,6 +172,64 @@
           ],
           "default": "zh",
           "description": "侧栏界面语言。当前为 beta 级适配：中文完整，英文覆盖主界面与核心操作。"
+        },
+        "studentAutocomplete.oj.nodePath": {
+          "type": "string",
+          "default": "node",
+          "description": "启动本地牛客与 LeetCode MCP 所用的 Node.js 可执行文件。"
+        },
+        "studentAutocomplete.oj.luogu.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用托管的洛谷只读 MCP。"
+        },
+        "studentAutocomplete.oj.luogu.endpoint": {
+          "type": "string",
+          "default": "https://luogu-mcp-server.lantangtang54.workers.dev/mcp",
+          "description": "洛谷 MCP Streamable HTTP 地址。"
+        },
+        "studentAutocomplete.oj.codeforces.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用托管的 Codeforces 官方 API MCP。"
+        },
+        "studentAutocomplete.oj.codeforces.endpoint": {
+          "type": "string",
+          "default": "https://codeforces-oj-mcp.lantangtang54.workers.dev/mcp",
+          "description": "Codeforces MCP Streamable HTTP 地址。"
+        },
+        "studentAutocomplete.oj.atcoder.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "启用托管的 AtCoder 只读 MCP。"
+        },
+        "studentAutocomplete.oj.atcoder.endpoint": {
+          "type": "string",
+          "default": "https://api.ksrnyx.top/oj-mcp/atcoder/mcp",
+          "description": "AtCoder MCP Streamable HTTP 地址。"
+        },
+        "studentAutocomplete.oj.nowcoder.entrypoint": {
+          "type": "string",
+          "default": "",
+          "description": "本地牛客 MCP 编译入口 dist/index.js；留空时开发环境自动查找相邻仓库。"
+        },
+        "studentAutocomplete.oj.nowcoder.companionPort": {
+          "type": "integer",
+          "minimum": 1024,
+          "maximum": 65535,
+          "default": 10043,
+          "description": "牛客 Competitive Companion 本机导题端口。"
+        },
+        "studentAutocomplete.oj.leetcode.entrypoint": {
+          "type": "string",
+          "default": "",
+          "description": "本地私有 LeetCode MCP 编译入口 build/index.js；该适配器不会随扩展发布。"
+        },
+        "studentAutocomplete.oj.leetcode.site": {
+          "type": "string",
+          "enum": ["cn", "global"],
+          "default": "cn",
+          "description": "本地 LeetCode 只读适配器使用的站点。"
         }
       }
     },
@@ -195,7 +253,7 @@
     }
   },
   "scripts": {
-    "compile": "tsc -p .",
+    "compile": "tsc -p . && node scripts/bundleRuntimeDependencies.js dist",
     "compile:prototype:oj": "tsc -p tsconfig.oj-console.json",
     "prototype:oj": "npm run compile:prototype:oj && node .runtime/oj-console-dist/prototypes/oj-console/backend/server.js --open",
     "prototype:oj:backend": "npm run compile:prototype:oj && node .runtime/oj-console-dist/prototypes/oj-console/backend/server.js",
@@ -210,11 +268,12 @@
     "trial:mimo-journey": "npm run compile && node dist/src/cli/mimoJourneyTrial.js",
     "trial:mimo": "npm run compile && node dist/src/cli/mimoAutocompleteTrial.js",
     "mcp:problem-search": "node dist/src/mcp/problemSearchServer.js",
+    "smoke:oj-read": "npm run compile && node scripts/smokeOjProviders.js",
     "package:beta": "npm run compile && npx --yes @vscode/vsce package --no-dependencies --out .runtime/student-autocomplete-lab-0.1.0-beta.1.vsix",
     "package:beta-release": "npm run compile:release && node scripts/packageBetaReleaseVsix.js",
     "package:internal": "npm run compile && node scripts/packageInternalVsix.js",
     "check:hygiene": "node scripts/checkProjectHygiene.js",
-    "compile:release": "tsc -p tsconfig.release.json",
+    "compile:release": "tsc -p tsconfig.release.json && node scripts/bundleRuntimeDependencies.js .runtime/beta-release-dist",
     "internal:test-report": "npm run compile && node dist/src/cli/internalTestReport.js",
     "test": "vitest run",
     "watch": "tsc -w -p ."
@@ -222,12 +281,14 @@
   "devDependencies": {
     "@types/node": "^22.15.3",
     "@types/vscode": "^1.95.0",
+    "esbuild": "0.28.1",
     "playwright": "^1.59.1",
     "typescript": "^5.8.3",
     "vitest": "^3.1.2"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "parse5": "8.0.1",
     "zod": "^4.3.6"
   }
 }

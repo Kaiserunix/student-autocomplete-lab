@@ -8,6 +8,7 @@ import type { SkillPlanAudit } from "../skills/types";
 import type { AutocompleteValidationStatus } from "../skills/validators/autocompleteOutputPolicy";
 import type { StudentSkill } from "../teaching/studentSkill";
 import type { CompletedProblemRecord } from "./problemArchive";
+import type { OjProviderStatusView } from "../oj/types";
 
 export type UiLanguage = "zh" | "en";
 
@@ -102,6 +103,7 @@ export interface ProblemBankStateView {
   studentSkillVersions: StudentSkillVersionView[];
   attemptSessions: AttemptSession[];
   internalTesting: InternalTestSummary;
+  ojProviders: OjProviderStatusView[];
   selectedKey: string;
   status?: string;
   [key: string]: unknown;

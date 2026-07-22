@@ -17,6 +17,27 @@ const policies: Record<ProblemPlatform, SourcePolicy> = {
     notes:
       "LeetCode GraphQL support is adapter-gated because availability can vary by session, region, and login state."
   },
+  nowcoder: {
+    platform: "nowcoder",
+    primary: "optional-adapter",
+    fallback: "manual-import",
+    defaultEnabled: false,
+    notes: "Use the local NowCoder MCP adapter so login state and write-capable operations remain on the user's machine."
+  },
+  codeforces: {
+    platform: "codeforces",
+    primary: "public-fetch",
+    fallback: "manual-import",
+    defaultEnabled: true,
+    notes: "Use the official API MCP for metadata search and Competitive Companion or Markdown for full statements."
+  },
+  atcoder: {
+    platform: "atcoder",
+    primary: "public-fetch",
+    fallback: "manual-import",
+    defaultEnabled: true,
+    notes: "Use the read-only AtCoder MCP adapter for exact task lookup and public statement import."
+  },
   manual: {
     platform: "manual",
     primary: "manual-import",

@@ -5,8 +5,9 @@ import { createInternalTestRecorder } from "./internalTesting/internalTestRecord
 import { ProblemBankViewProvider } from "./sidebar/ProblemBankViewProvider";
 import { createStudentAutocompleteStoragePaths } from "./storage/StoragePaths";
 import { loadStudentSkill } from "./teaching/studentSkillStore";
+import { createVsCodeOjBroker } from "./oj/vscodeProviderConfiguration";
 
-export function activate(context: vscode.ExtensionContext): void {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const output = vscode.window.createOutputChannel("AI 做题陪练");
   const codexServices = createCodexServices(
     resolveCodexServicePaths({
@@ -28,7 +29,8 @@ export function activate(context: vscode.ExtensionContext): void {
   const storagePaths = createStudentAutocompleteStoragePaths(
     context.globalStorageUri.fsPath
   );
-  const provider = new ProblemBankViewProvider(context, codexServices);
+  const ojBroker = await createVsCodeOjBroker(context);
+  const provider = new ProblemBankViewProvider(context, codexServices, ojBroker);
   const autocompleteStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 90);
   autocompleteStatus.name = "AI 做题陪练补全";
   autocompleteStatus.command = "studentAutocomplete.triggerInlineCompletion";
@@ -45,6 +47,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     output,
     codexServices,
+    ojBroker,
     autocompleteStatus,
     vscode.languages.registerInlineCompletionItemProvider(
       [{ scheme: "file" }],

@@ -1,8 +1,9 @@
 import type { AiProviderMode } from "../config/modelEnv";
 import type { InternalTestSummary } from "../internalTesting/internalTestRecorder";
 import type { ProviderModelInfo } from "../models/providerModelsClient";
-import type { ProblemSearchResult, ProblemSetSearchResult } from "../problemBank/types";
+import type { ProblemSetSearchResult } from "../problemBank/types";
 import type { OjSubmissionPreview, OjSubmissionResult } from "../submission/types";
+import type { OjPlatformId, OjProviderStatusView } from "../oj/types";
 import type { AiHealthCheckResult, ProblemBankStateView } from "./stateView";
 
 export const hostEventTypeNames = [
@@ -13,10 +14,11 @@ export const hostEventTypeNames = [
   "internalTestSummary",
   "ojSubmissionPreview",
   "ojSubmissionResult",
+  "ojProblemSearchResults",
+  "ojProviderStatus",
   "optimizationReport",
   "problemBankState",
   "problemRecommendation",
-  "problemSearchResults",
   "problemSetSearchResults",
   "status",
   "submissionJudge",
@@ -29,13 +31,6 @@ export interface StatusHostEvent {
   type: "status";
   text: string;
   tone?: string;
-}
-
-export interface ProblemSearchResultsHostEvent {
-  type: "problemSearchResults";
-  keyword: string;
-  total: number;
-  items: ProblemSearchResult[];
 }
 
 export interface ProblemSetSearchResultsHostEvent {
@@ -79,6 +74,28 @@ export interface OjSubmissionResultHostEvent {
   status: string;
 }
 
+export interface OjProblemSearchResultsHostEvent {
+  type: "ojProblemSearchResults";
+  platform: OjPlatformId;
+  query: string;
+  items: Array<{
+    platform: OjPlatformId;
+    nativeId: string;
+    title: string;
+    sourceUrl: string;
+    difficulty?: string;
+    tags: string[];
+    canImport: boolean;
+  }>;
+  nextCursor?: string;
+}
+
+export interface OjProviderStatusHostEvent {
+  type: "ojProviderStatus";
+  providers: OjProviderStatusView[];
+  status: string;
+}
+
 export type LooseTypedHostEvent =
   | { type: "autocompletePreview"; [key: string]: unknown }
   | { type: "coachFollowUp"; [key: string]: unknown }
@@ -90,11 +107,12 @@ export type LooseTypedHostEvent =
 export type HostEvent =
   | StatusHostEvent
   | ProblemBankStateView
-  | ProblemSearchResultsHostEvent
   | ProblemSetSearchResultsHostEvent
   | AiModelResultsHostEvent
   | AiHealthCheckResultHostEvent
   | InternalTestSummaryHostEvent
   | OjSubmissionPreviewHostEvent
   | OjSubmissionResultHostEvent
+  | OjProblemSearchResultsHostEvent
+  | OjProviderStatusHostEvent
   | LooseTypedHostEvent;

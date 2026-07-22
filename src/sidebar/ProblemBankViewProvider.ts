@@ -32,9 +32,20 @@ import { routeAutocompleteModel, routeTeachingModel } from "../models/modelRoute
 import type { ModelTextTransport } from "../models/modelTextTransport";
 import { toPublicSkillPlanAudit } from "../skills/auditView";
 import type { SkillPlanAudit } from "../skills/types";
+import { OjMcpBroker } from "../oj/broker";
+import { ojProblemDocumentToRecord } from "../oj/problemDocument";
+import { ojPlatformIds, type OjPlatformId, type OjProblemSummary } from "../oj/types";
+import {
+  clearNowCoderSession,
+  clearRemoteOjKey,
+  isRemoteOjPlatform,
+  promptAndStoreNowCoderSession,
+  promptAndStoreRemoteOjKey,
+  reloadVsCodeOjBroker
+} from "../oj/vscodeProviderConfiguration";
 import { fetchLuoguProblem } from "../problemBank/luoguClient";
 import { fetchLuoguProblemSet } from "../problemBank/luoguProblemSetClient";
-import { searchLuoguProblems, searchLuoguProblemSets } from "../problemBank/luoguSearchClient";
+import { searchLuoguProblemSets } from "../problemBank/luoguSearchClient";
 import type { ProblemRecord, ProblemSetRecord } from "../problemBank/types";
 import { appendJsonlRecord, readJsonlRecords, writeJsonlRecords } from "../storage/jsonlStore";
 import { createStudentAutocompleteStoragePaths, type StudentAutocompleteStoragePaths } from "../storage/StoragePaths";
@@ -142,10 +153,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   private codexModelsError?: string;
   private codexModelsRefresh?: Promise<void>;
   private webview?: vscode.Webview;
+  private readonly recentOjSearchResults = new Map<string, OjProblemSummary>();
 
   public constructor(
     private readonly context: vscode.ExtensionContext,
-    private readonly codexServices: CodexServices
+    private readonly codexServices: CodexServices,
+    private readonly ojBroker: OjMcpBroker
   ) {
     this.storagePaths = createStudentAutocompleteStoragePaths(context.globalStorageUri.fsPath);
     this.internalRecorder = createInternalTestRecorder({
@@ -246,6 +259,118 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       }
     }
 
+    if (message.command === "refreshOjProviders") {
+      const providers = await this.ojBroker.refreshAll();
+      const healthy = providers.filter((provider) => provider.overall === "healthy").length;
+      return {
+        type: "ojProviderStatus",
+        providers,
+        status: `题库连接检查完成：${healthy}/${providers.length} 个健康。`
+      };
+    }
+
+    if (message.command === "configureNowCoderSession") {
+      const stored = await promptAndStoreNowCoderSession(this.context);
+      if (!stored) return { type: "status", text: "已取消更新牛客登录态。" };
+      await reloadVsCodeOjBroker(this.context, this.ojBroker);
+      return {
+        type: "ojProviderStatus",
+        providers: await this.ojBroker.refreshAll(),
+        status: "牛客登录态已写入 SecretStorage，并已重启本地 MCP 连接。"
+      };
+    }
+
+    if (message.command === "clearNowCoderSession") {
+      await clearNowCoderSession(this.context);
+      await reloadVsCodeOjBroker(this.context, this.ojBroker);
+      return {
+        type: "ojProviderStatus",
+        providers: this.ojBroker.providerStatuses(),
+        status: "已清除牛客登录态。公开搜题和导题仍可使用。"
+      };
+    }
+
+    if (message.command === "configureOjRemoteKey") {
+      const platform = normalizeRemoteOjPlatform(message.platform);
+      const stored = await promptAndStoreRemoteOjKey(this.context, platform);
+      if (!stored) return { type: "status", text: "已取消更新托管 MCP 访问密钥。" };
+      await reloadVsCodeOjBroker(this.context, this.ojBroker);
+      return {
+        type: "ojProviderStatus",
+        providers: await this.ojBroker.refreshAll(),
+        status: `${platform} 的访问密钥已写入 SecretStorage。`
+      };
+    }
+
+    if (message.command === "clearOjRemoteKey") {
+      const platform = normalizeRemoteOjPlatform(message.platform);
+      await clearRemoteOjKey(this.context, platform);
+      await reloadVsCodeOjBroker(this.context, this.ojBroker);
+      return {
+        type: "ojProviderStatus",
+        providers: this.ojBroker.providerStatuses(),
+        status: `已清除 ${platform} 的托管 MCP 访问密钥。`
+      };
+    }
+
+    if (message.command === "searchOjProblems") {
+      const platform = normalizeOjPlatform(message.platform);
+      const result = await this.ojBroker.searchProblems({ platform, query: message.query, limit: 20 });
+      for (const item of result.items) {
+        this.recentOjSearchResults.set(ojSearchKey(item.ref.platform, item.ref.nativeId), item);
+      }
+      return {
+        type: "ojProblemSearchResults",
+        platform,
+        query: message.query.trim(),
+        items: result.items.map((item) => ({
+          platform: item.ref.platform,
+          nativeId: item.ref.nativeId,
+          title: item.title,
+          sourceUrl: item.ref.url,
+          difficulty: item.difficulty?.label ?? (item.difficulty?.value === undefined ? undefined : String(item.difficulty.value)),
+          tags: item.tags.map((tag) => tag.name),
+          canImport: item.ref.platform !== "codeforces"
+        })),
+        nextCursor: result.nextCursor
+      };
+    }
+
+    if (message.command === "importOjProblem") {
+      const platform = normalizeOjPlatform(message.platform);
+      const nativeId = message.nativeId.trim();
+      const summary = this.recentOjSearchResults.get(ojSearchKey(platform, nativeId));
+      if (!summary) throw new Error("这条搜索结果已失效，请重新搜索后再导入。");
+      const problem = ojProblemDocumentToRecord(await this.ojBroker.fetchProblem(summary));
+      await this.saveProblem(problem);
+      const teacherPack = await this.tryPrepareTeacherPack(problem);
+      const practiceFile = message.createFile
+        ? await this.createPracticeFile(problem, normalizePracticeLanguage(message.language))
+        : undefined;
+      const fileSuffix = practiceFile ? ` 已创建练习文件：${practiceFile.relativePath}` : "";
+      const packSuffix = teacherPack ? " 已生成隐藏 Teacher Pack。" : " Teacher Pack 将在首次 AI 分析时尝试生成。";
+      return this.problemBankState(makeProblemKey(problem), `已从 ${platform} 导入 ${problem.id}。${fileSuffix}${packSuffix}`, {
+        createdFile: practiceFile,
+        teacherPackReady: Boolean(teacherPack)
+      });
+    }
+
+    if (message.command === "openOjProblem") {
+      const platform = normalizeOjPlatform(message.platform);
+      const summary = this.recentOjSearchResults.get(ojSearchKey(platform, message.nativeId));
+      if (!summary) throw new Error("这条搜索结果已失效，请重新搜索后再打开。");
+      await vscode.env.openExternal(vscode.Uri.parse(summary.ref.url));
+      return { type: "status", text: `已在浏览器打开 ${summary.ref.nativeId}。` };
+    }
+
+    if (message.command === "openOjSettings") {
+      await vscode.commands.executeCommand(
+        "workbench.action.openSettings",
+        "@ext:kaiserunix.student-autocomplete-lab studentAutocomplete.oj"
+      );
+      return { type: "status", text: "已打开题库连接设置。" };
+    }
+
     if (message.command === "importLuogu") {
       const problem = await fetchLuoguProblem(message.pid.trim());
       await this.saveProblem(problem);
@@ -270,16 +395,6 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       const selectedKey = result.imported[0] ? makeProblemKey(result.imported[0]) : undefined;
       const failedSuffix = result.failed.length > 0 ? `；${result.failed.length} 题下载失败` : "";
       return this.problemBankState(selectedKey, `已导入「${preset.title}」${result.imported.length} 题${failedSuffix}。`);
-    }
-
-    if (message.command === "searchLuoguProblems") {
-      const results = await searchLuoguProblems(message.keyword);
-      return {
-        type: "problemSearchResults",
-        keyword: message.keyword,
-        total: results.total,
-        items: results.items.slice(0, 20)
-      };
     }
 
     if (message.command === "searchLuoguProblemSets") {
@@ -501,6 +616,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       studentSkillVersions: studentSkillState.versions,
       attemptSessions,
       internalTesting: await this.internalRecorder.summary(),
+      ojProviders: this.ojBroker.providerStatuses(),
       selectedKey:
         selectedKey ??
         (problems[0] ? makeProblemKey(problems[0]) : completedProblems[0] ? makeProblemKey(completedProblems[0]) : ""),
@@ -3140,6 +3256,64 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       overflow: auto;
     }
 
+    .ojProviderStatus {
+      display: grid;
+      gap: 5px;
+      grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+    }
+
+    .ojProviderItem {
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--line);
+      border-radius: 6px;
+      cursor: pointer;
+      display: grid;
+      gap: 2px;
+      min-width: 0;
+      padding: 6px 7px;
+    }
+
+    .ojProviderItem.healthy {
+      border-left-color: var(--good);
+    }
+
+    .ojProviderItem.degraded,
+    .ojProviderItem.auth_required {
+      border-left-color: var(--warn);
+    }
+
+    .ojProviderItem.unavailable {
+      border-left-color: var(--danger);
+    }
+
+    .ojProviderItem.selected {
+      background: var(--vscode-list-activeSelectionBackground);
+      color: var(--vscode-list-activeSelectionForeground);
+      outline: 1px solid var(--vscode-focusBorder);
+    }
+
+    .ojProviderItem .problemTitle,
+    .ojProviderItem .mini {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .embeddedDetails {
+      border-top: 1px solid var(--line);
+    }
+
+    .embeddedDetails > summary {
+      background: transparent;
+      border-bottom: 0;
+      padding-left: 0;
+      padding-right: 0;
+    }
+
+    .compactPanelBody {
+      padding: 4px 0 0;
+    }
+
     .resultItem {
       align-items: start;
       border-bottom: 1px solid var(--line);
@@ -3655,24 +3829,38 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       </section>
 
       <details class="panel ledgerPanel">
-        <summary>题号导入 / 搜索</summary>
+        <summary>在线题库</summary>
         <div class="panelBody">
           <div class="field">
-            <label for="luoguPid">洛谷题号</label>
-            <div class="row">
-              <input id="luoguPid" placeholder="例如 P5730 / 5730 / B2002，不是题单 ID">
-              <button id="importPid" type="button">下载并建文件</button>
-            </div>
+            <label for="ojSearchPlatform">平台</label>
+            <select id="ojSearchPlatform">
+              <option value="luogu">洛谷</option>
+              <option value="leetcode">LeetCode</option>
+              <option value="nowcoder">牛客</option>
+              <option value="codeforces">Codeforces</option>
+              <option value="atcoder">AtCoder</option>
+            </select>
           </div>
           <div class="field">
-            <label for="luoguSearchKeyword">搜索洛谷</label>
-            <input id="luoguSearchKeyword" placeholder="压缩技术 / 二叉树 / 动态规划">
+            <label for="ojSearchQuery">题号、题名或标签</label>
+            <input id="ojSearchQuery" placeholder="二叉树 / P1305 / 1200A / abc086/abc086_a">
           </div>
           <div class="actions">
-            <button id="searchProblems" class="secondary" type="button">搜题目</button>
-            <button id="searchProblemSets" class="secondary" type="button">搜题单</button>
+            <button id="searchOjProblems" type="button">搜索</button>
+            <button id="refreshOjProviders" class="secondary" type="button">检查连接</button>
           </div>
-          <div id="searchResults" class="searchResults"></div>
+          <div id="ojProviderStatus" class="ojProviderStatus"></div>
+          <div id="ojSearchResults" class="searchResults"></div>
+          <details class="embeddedDetails">
+            <summary>连接与登录</summary>
+            <div class="panelBody compactPanelBody">
+              <div class="actions">
+                <button id="configureOjCredential" class="secondary" type="button">更新当前平台凭据</button>
+                <button id="clearOjCredential" class="secondary" type="button">清除当前平台凭据</button>
+                <button id="openOjSettings" class="secondary" type="button">打开连接设置</button>
+              </div>
+            </div>
+          </details>
         </div>
       </details>
 
@@ -3685,8 +3873,15 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       </details>
 
       <details class="panel ledgerPanel">
-        <summary>导入题单</summary>
+        <summary>洛谷题号与题单</summary>
         <div class="panelBody">
+          <div class="field">
+            <label for="luoguPid">洛谷题号</label>
+            <div class="row">
+              <input id="luoguPid" placeholder="例如 P5730 / 5730 / B2002，不是题单 ID">
+              <button id="importPid" type="button">下载并建文件</button>
+            </div>
+          </div>
           <div class="field">
             <label for="luoguProblemSetId">洛谷题单 ID</label>
             <div class="row">
@@ -3694,6 +3889,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
               <button id="importProblemSet" type="button">导入题单</button>
             </div>
           </div>
+          <div class="field">
+            <label for="luoguProblemSetKeyword">搜索洛谷题单</label>
+            <input id="luoguProblemSetKeyword" placeholder="二叉树 / 动态规划">
+          </div>
+          <button id="searchProblemSets" class="secondary" type="button">搜索题单</button>
+          <div id="problemSetSearchResults" class="searchResults"></div>
         </div>
       </details>
     </section>
@@ -3939,6 +4140,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       aiConfig: undefined,
       codexOAuth: undefined,
       internalTesting: undefined,
+      ojProviders: [],
       studentSkill: undefined,
       studentSkillVersions: [],
       activePage: "ai",
@@ -3962,7 +4164,11 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const completedCount = document.getElementById("completedCount");
     const completedList = document.getElementById("completedList");
     const problemDetail = document.getElementById("problemDetail");
-    const searchResults = document.getElementById("searchResults");
+    const ojSearchPlatform = document.getElementById("ojSearchPlatform");
+    const ojSearchQuery = document.getElementById("ojSearchQuery");
+    const ojProviderStatus = document.getElementById("ojProviderStatus");
+    const ojSearchResults = document.getElementById("ojSearchResults");
+    const problemSetSearchResults = document.getElementById("problemSetSearchResults");
     const studentSkillPanel = document.getElementById("studentSkillPanel");
     const studentSkillRevision = document.getElementById("studentSkillRevision");
     const studentSkillVersions = document.getElementById("studentSkillVersions");
@@ -4111,18 +4317,29 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       setStatus("正在选择并导入 Markdown 文件...");
     });
 
-    document.getElementById("searchProblems").addEventListener("click", () => {
-      const keyword = getKeyword();
-      if (!keyword) {
-        setStatus("先输入搜索关键词。", "error");
-        return;
+    document.getElementById("searchOjProblems").addEventListener("click", () => requestOjSearch());
+    document.getElementById("refreshOjProviders").addEventListener("click", () => {
+      setStatus("正在并行检查题库连接...");
+      vscode.postMessage({ command: "refreshOjProviders" });
+    });
+    ojSearchQuery.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        requestOjSearch();
       }
-      setStatus("正在搜索洛谷题目...");
-      vscode.postMessage({ command: "searchLuoguProblems", keyword });
+    });
+    ojSearchPlatform.addEventListener("change", () => {
+      updateOjSearchPlaceholder();
+      renderOjProviders();
+    });
+    document.getElementById("configureOjCredential").addEventListener("click", () => configureOjCredential());
+    document.getElementById("clearOjCredential").addEventListener("click", () => clearOjCredential());
+    document.getElementById("openOjSettings").addEventListener("click", () => {
+      vscode.postMessage({ command: "openOjSettings" });
     });
 
     document.getElementById("searchProblemSets").addEventListener("click", () => {
-      const keyword = getKeyword();
+      const keyword = document.getElementById("luoguProblemSetKeyword").value.trim();
       if (!keyword) {
         setStatus("先输入搜索关键词。", "error");
         return;
@@ -4182,6 +4399,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         state.activeEditor = data.activeEditor || state.activeEditor;
         state.uiLanguage = data.uiLanguage === "en" ? "en" : "zh";
         state.internalTesting = data.internalTesting;
+        state.ojProviders = data.ojProviders ?? state.ojProviders;
         state.studentSkill = data.studentSkill;
         state.studentSkillVersions = data.studentSkillVersions ?? [];
         renderAll();
@@ -4203,11 +4421,16 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           renderArchivedProblem(data.archivedProblem);
         }
       }
-      if (data.type === "problemSearchResults") {
-        renderProblemResults(data);
-      }
       if (data.type === "problemSetSearchResults") {
         renderProblemSetResults(data);
+      }
+      if (data.type === "ojProblemSearchResults") {
+        renderOjProblemResults(data);
+      }
+      if (data.type === "ojProviderStatus") {
+        state.ojProviders = data.providers ?? [];
+        renderOjProviders();
+        setStatus(data.status || "题库连接状态已更新。");
       }
       if (data.type === "aiModelResults") {
         setStatus(data.status || "模型列表已拉取。");
@@ -4286,6 +4509,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     setOjPlatform("codeforces");
     vscode.postMessage({ command: "loadProblems" });
     vscode.postMessage({ command: "readCodexAuth" });
+    vscode.postMessage({ command: "refreshOjProviders" });
 
     const uiCopy = {
       zh: {
@@ -4356,8 +4580,58 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       }
     };
 
-    function getKeyword() {
-      return document.getElementById("luoguSearchKeyword").value.trim();
+    function selectedOjPlatform() {
+      const value = ojSearchPlatform.value;
+      return ["luogu", "leetcode", "nowcoder", "codeforces", "atcoder"].includes(value) ? value : "luogu";
+    }
+
+    function requestOjSearch() {
+      const query = ojSearchQuery.value.trim();
+      const platform = selectedOjPlatform();
+      if (!query) {
+        setStatus("先输入题号、题名或标签。", "error");
+        return;
+      }
+      setStatus("正在搜索 " + platformLabel(platform) + "...");
+      ojSearchResults.innerHTML = "";
+      vscode.postMessage({ command: "searchOjProblems", platform, query });
+    }
+
+    function configureOjCredential() {
+      const platform = selectedOjPlatform();
+      if (platform === "nowcoder") {
+        vscode.postMessage({ command: "configureNowCoderSession" });
+        return;
+      }
+      if (["luogu", "codeforces", "atcoder"].includes(platform)) {
+        vscode.postMessage({ command: "configureOjRemoteKey", platform });
+        return;
+      }
+      setStatus("LeetCode 适配器固定为匿名只读，无需登录凭据。请在连接设置中配置本机入口。");
+    }
+
+    function clearOjCredential() {
+      const platform = selectedOjPlatform();
+      if (platform === "nowcoder") {
+        vscode.postMessage({ command: "clearNowCoderSession" });
+        return;
+      }
+      if (["luogu", "codeforces", "atcoder"].includes(platform)) {
+        vscode.postMessage({ command: "clearOjRemoteKey", platform });
+        return;
+      }
+      setStatus("LeetCode 匿名只读适配器没有可清除的登录凭据。" );
+    }
+
+    function updateOjSearchPlaceholder() {
+      const placeholders = {
+        luogu: "二叉树 / P1305",
+        leetcode: "two sum / binary tree",
+        nowcoder: "二分图 / NC218144",
+        codeforces: "1200A / dp / rating:1600",
+        atcoder: "abc086/abc086_a 或完整题目 URL"
+      };
+      ojSearchQuery.placeholder = placeholders[selectedOjPlatform()] || "题号、题名或标签";
     }
 
     function switchPage(page) {
@@ -4401,6 +4675,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       renderDetail();
       renderStudentSkill();
       renderInternalTesting();
+      renderOjProviders();
     }
 
     function applyUiLanguage() {
@@ -6596,20 +6871,74 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       problemDetail.appendChild(block);
     }
 
-    function renderProblemResults(data) {
-      setStatus("找到 " + data.total + " 道题目，显示前 " + data.items.length + " 条。");
-      renderSearchItems(data.items, (item) => ({
-        id: item.id,
+    function renderOjProviders() {
+      ojProviderStatus.innerHTML = "";
+      const selected = selectedOjPlatform();
+      const providers = state.ojProviders || [];
+      providers.forEach((provider) => {
+        const item = document.createElement("div");
+        item.className = "ojProviderItem " + (provider.overall || "unknown") + (provider.platform === selected ? " selected" : "");
+        item.appendChild(textSpan(provider.label || platformLabel(provider.platform), "problemTitle"));
+        item.appendChild(textSpan(providerStatusLabel(provider), "mini"));
+        item.title = provider.message || "";
+        item.addEventListener("click", () => {
+          ojSearchPlatform.value = provider.platform;
+          updateOjSearchPlaceholder();
+          renderOjProviders();
+          ojSearchQuery.focus();
+        });
+        ojProviderStatus.appendChild(item);
+      });
+      const current = providers.find((provider) => provider.platform === selected);
+      document.getElementById("searchOjProblems").disabled = Boolean(current && !current.configured);
+    }
+
+    function providerStatusLabel(provider) {
+      if (!provider.configured) {
+        return "未配置";
+      }
+      if (provider.overall === "healthy") {
+        return provider.fetchStatus === "available" ? "可搜索 · 可导入" : "可搜索 · 仅元数据";
+      }
+      if (provider.overall === "auth_required") {
+        return "需要登录";
+      }
+      if (provider.overall === "unavailable") {
+        return "连接失败";
+      }
+      if (provider.overall === "degraded") {
+        return "部分可用";
+      }
+      return "待检查";
+    }
+
+    function renderOjProblemResults(data) {
+      setStatus(platformLabel(data.platform) + " 返回 " + data.items.length + " 道题。" );
+      renderSearchItems(ojSearchResults, data.items, (item) => ({
+        id: item.nativeId,
         title: item.title,
-        detail: item.tags?.slice(0, 4).join(" · ") || "洛谷题目",
-        button: "下载并建文件",
-        onClick: () => importLuogu(item.id, true)
+        detail: [item.difficulty ? "难度 " + item.difficulty : "", ...(item.tags || []).slice(0, 4)].filter(Boolean).join(" · ") || platformLabel(item.platform),
+        button: item.canImport ? "导入并建文件" : "打开原题",
+        onClick: () => {
+          if (item.canImport) {
+            setStatus("正在从 " + platformLabel(item.platform) + " 导入 " + item.nativeId + "...");
+            vscode.postMessage({
+              command: "importOjProblem",
+              platform: item.platform,
+              nativeId: item.nativeId,
+              createFile: true,
+              language: state.practiceLanguage
+            });
+          } else {
+            vscode.postMessage({ command: "openOjProblem", platform: item.platform, nativeId: item.nativeId });
+          }
+        }
       }));
     }
 
     function renderProblemSetResults(data) {
       setStatus("找到 " + data.total + " 个题单，显示前 " + data.items.length + " 条。");
-      renderSearchItems(data.items, (item) => ({
+      renderSearchItems(problemSetSearchResults, data.items, (item) => ({
         id: item.id,
         title: item.title,
         detail: item.problemCount + " 题",
@@ -6621,8 +6950,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       }));
     }
 
-    function renderSearchItems(items, toViewModel) {
-      searchResults.innerHTML = "";
+    function renderSearchItems(root, items, toViewModel) {
+      root.innerHTML = "";
       items.forEach((item) => {
         const viewModel = toViewModel(item);
         const row = document.createElement("div");
@@ -6638,7 +6967,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
         row.appendChild(button);
         row.appendChild(body);
-        searchResults.appendChild(row);
+        root.appendChild(row);
       });
     }
 
@@ -7190,6 +7519,15 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       if (platform === "leetcode") {
         return "LeetCode";
       }
+      if (platform === "nowcoder") {
+        return "牛客";
+      }
+      if (platform === "codeforces") {
+        return "Codeforces";
+      }
+      if (platform === "atcoder") {
+        return "AtCoder";
+      }
       return "手动";
     }
   </script>
@@ -7260,6 +7598,24 @@ function compactMultiline(values: Array<string | undefined>): string {
 
 function makeProblemKey(problem: Pick<ProblemRecord, "platform" | "id">): string {
   return `${problem.platform}:${problem.id}`;
+}
+
+function ojSearchKey(platform: OjPlatformId, nativeId: string): string {
+  return `${platform}:${nativeId.trim().toLocaleLowerCase()}`;
+}
+
+function normalizeOjPlatform(value: string): OjPlatformId {
+  if (!(ojPlatformIds as readonly string[]).includes(value)) {
+    throw new Error(`未知题库平台：${value}`);
+  }
+  return value as OjPlatformId;
+}
+
+function normalizeRemoteOjPlatform(value: OjPlatformId): "luogu" | "codeforces" | "atcoder" {
+  if (!isRemoteOjPlatform(value)) {
+    throw new Error(`${value} 使用本地 MCP，不接受托管访问密钥。`);
+  }
+  return value;
 }
 
 function mergeSavedProblemRecord(
