@@ -37,6 +37,9 @@ jobs:
       - name: Type-check release build
         run: npx tsc -p tsconfig.release.json --noEmit
 
+      - name: Build release package
+        run: npm run package:beta-release
+
       - name: Check release hygiene
         run: npm run check:hygiene
 
