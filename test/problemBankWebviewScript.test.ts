@@ -409,8 +409,11 @@ describe("problem bank webview script", () => {
     expect(source).not.toContain("function renderManualPreview()");
     expect(source).not.toContain("manualProblemTemplate");
     expect(source).not.toContain("Markdown 预览");
-    expect(source).toContain("<summary>题号导入 / 搜索</summary>");
-    expect(source).not.toContain('<details class="panel" open>\n        <summary>题号导入 / 搜索</summary>');
+    expect(source).toContain("<summary>在线题库</summary>");
+    expect(source).toContain('<summary>连接与登录</summary>');
+    expect(source).toContain('id="ojSearchPlatform"');
+    expect(source).toContain('id="ojProviderStatus"');
+    expect(source).not.toContain('open>\n            <summary>连接与登录</summary>');
   });
 
   test("keeps AI actions on the coach page instead of duplicating them in problem detail", async () => {

@@ -111,9 +111,10 @@ describe("VS Code extension manifest", () => {
     const releasePackager = await readFile("scripts/packageBetaReleaseVsix.js", "utf8");
 
     expect(readme).toContain("online-judge-tools");
-    expect(readme).toContain("每次提交都必须明确确认");
-    expect(readme).toContain("当前实验性支持 Codeforces 和 AtCoder");
-    expect(readme).toContain("不会打包进 VSIX");
+    expect(readme).toContain("每次提交前，你都要亲自检查");
+    expect(readme).toContain("提交始终需要用户显式确认");
+    expect(readme).toContain("实验性 Codeforces / AtCoder 提交");
+    expect(readme).toContain("自己安装");
     expect(notices).toContain("https://github.com/online-judge-tools/oj");
     expect(notices).toContain("The MIT License (MIT)");
     expect(notices).toContain("Copyright (c) 2017-2020 Kimiyuki Onaka");

@@ -21,6 +21,7 @@ const allowedTopLevelRuntime = [
   "config",
   "mcp",
   "models",
+  "oj",
   "problemBank",
   "recommendation",
   "release",
