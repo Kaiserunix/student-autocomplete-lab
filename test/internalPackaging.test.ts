@@ -6,6 +6,7 @@ describe("ordinary beta packaging ignore rules", () => {
     const ignore = await readFile(".vscodeignore", "utf8");
 
     expect(ignore).toContain("extension/**");
+    expect(ignore).toContain(".github/**");
     expect(ignore).toContain("scripts/**");
     expect(ignore).toContain("*.map");
     expect(ignore).toContain("**/*.map");

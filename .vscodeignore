@@ -1,4 +1,5 @@
 .vscode/**
+.github/**
 .superpowers/**
 .runtime/**
 .playwright-cli/**
