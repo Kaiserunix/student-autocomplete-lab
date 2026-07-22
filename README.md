@@ -12,7 +12,7 @@ Student Autocomplete Lab 是一个中文优先的 VS Code 算法学习助手。
 
 ## 快速开始
 
-你需要 VS Code `1.95.0` 或更新版本，以及 Node.js 和 npm。
+你需要 VS Code `1.95.0` 或更新版本，以及 Node.js 20+ 和 npm。
 
 ```powershell
 git clone https://github.com/Kaiserunix/student-autocomplete-lab.git

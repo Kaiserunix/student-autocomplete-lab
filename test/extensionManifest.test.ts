@@ -134,11 +134,15 @@ describe("VS Code extension manifest", () => {
     expect(readme).toContain("实验性 Codeforces / AtCoder 提交");
     expect(readme).toContain("自己安装");
     expect(notices).toContain("https://github.com/online-judge-tools/oj");
+    expect(notices).toContain("`@modelcontextprotocol/sdk`");
+    expect(notices).toContain("`parse5`");
+    expect(notices).toContain("`entities`");
     expect(notices).toContain("The MIT License (MIT)");
     expect(notices).toContain("Copyright (c) 2017-2020 Kimiyuki Onaka");
     expect(notices).toContain("not affiliated with or endorsed by Codeforces, AtCoder");
     expect(releaseReadme).toContain("online-judge-tools");
     expect(releasePackager).toContain('"submission"');
+    expect(releasePackager).toContain('"oj"');
     expect(releasePackager).toContain('copyIfExists("THIRD_PARTY_NOTICES.md")');
     expect(releasePackager).toContain('"THIRD_PARTY_NOTICES.md"');
   });

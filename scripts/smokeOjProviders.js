@@ -50,8 +50,8 @@ const probes = {
   luogu: "P1000",
   leetcode: "两数之和",
   nowcoder: "字符串",
-  codeforces: "4A",
-  atcoder: "abc086_a"
+  codeforces: "4/A",
+  atcoder: "abc086/abc086_a"
 };
 
 main().catch((error) => {
@@ -83,6 +83,7 @@ async function main() {
             return {
               platform: status.platform,
               health: status.overall,
+              healthMessage: status.message,
               searchItems: 0,
               import: "not-tested"
             };
@@ -91,6 +92,7 @@ async function main() {
             return {
               platform: status.platform,
               health: status.overall,
+              healthMessage: status.message,
               searchItems: search.items.length,
               firstId: first.ref.nativeId,
               import: "companion-required"
@@ -101,6 +103,7 @@ async function main() {
           return {
             platform: status.platform,
             health: status.overall,
+            healthMessage: status.message,
             searchItems: search.items.length,
             firstId: first.ref.nativeId,
             import: "pass",
@@ -111,6 +114,7 @@ async function main() {
           return {
             platform: status.platform,
             health: status.overall,
+            healthMessage: status.message,
             error: error instanceof Error ? error.message : String(error)
           };
         }

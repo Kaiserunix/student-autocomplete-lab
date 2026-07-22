@@ -11,6 +11,7 @@
     "url": "https://github.com/kaiserunix/student-autocomplete-lab.git"
   },
   "engines": {
+    "node": ">=20",
     "vscode": "^1.95.0"
   },
   "categories": [
@@ -290,5 +291,9 @@
     "@modelcontextprotocol/sdk": "^1.29.0",
     "parse5": "8.0.1",
     "zod": "^4.3.6"
+  },
+  "overrides": {
+    "@hono/node-server": "2.0.11",
+    "fast-uri": "3.1.4"
   }
 }
