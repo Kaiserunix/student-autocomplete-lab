@@ -100,13 +100,12 @@ return d
       prefix: "def solve():\n    ",
       suffix: "",
       language: "python",
-      filePath: "C:\\Users\\qwerf\\Desktop\\Source\\leetcodepy\\practice\\luogu\\P1001.py",
+      filePath: "D:\\work\\student-autocomplete-lab\\practice\\luogu\\P1001.py",
       habits: []
     });
 
     expect(prompt).toContain("File: practice/luogu/problem.py");
-    expect(prompt).not.toContain("C:\\Users\\qwerf");
-    expect(prompt).not.toContain("Desktop\\Source\\leetcodepy");
+    expect(prompt).not.toContain("D:\\work\\student-autocomplete-lab");
     expect(prompt).not.toContain("P1001");
   });
 
@@ -115,7 +114,7 @@ return d
       prefix: "def solve():\n    ",
       suffix: "",
       language: "python",
-      filePath: "C:\\Users\\qwerf\\Desktop\\Source\\leetcodepy\\practice\\manual\\校园昵称规范器.py",
+      filePath: "D:\\work\\student-autocomplete-lab\\practice\\manual\\校园昵称规范器.py",
       habits: []
     });
 

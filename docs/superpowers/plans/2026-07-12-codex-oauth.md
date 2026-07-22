@@ -14,13 +14,13 @@
 
 - Specification: `docs/superpowers/specs/2026-07-12-codex-oauth-design.md`
 - Feature branch: `codex/codex-oauth`
-- Worktree: `C:\Users\qwerf\.config\superpowers\worktrees\student-autocomplete-lab\codex-oauth`
+- Worktree: `<worktree-root>\student-autocomplete-lab\codex-oauth`
 - Base commit: `098365f`
 - Design commit: `ea08146`
 - Baseline: `npm test` passed 246 tests; `npm run compile` passed.
 
 Run every command from the feature worktree. Never copy uncommitted files from
-`C:\Users\qwerf\Desktop\student-autocomplete-lab`.
+`<repo-root>`.
 
 ## File Map
 

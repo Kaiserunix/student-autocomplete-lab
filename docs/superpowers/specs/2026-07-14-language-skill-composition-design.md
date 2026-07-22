@@ -6,7 +6,7 @@ Status: direction approved; awaiting written-spec review
 
 Branch: `codex/beta-0.2-one-shot-refactor`
 
-Worktree: `C:\Users\qwerf\Desktop\student-autocomplete-lab`
+Worktree: `<repo-root>`
 
 ## Recovery After Context Compaction
 

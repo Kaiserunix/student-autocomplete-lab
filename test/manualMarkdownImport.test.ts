@@ -4,8 +4,8 @@ import { buildManualProblemFromMarkdownFile } from "../src/sidebar/manualMarkdow
 describe("manual markdown import builder", () => {
   test("builds a manual problem record from the supported authoring format", () => {
     const problem = buildManualProblemFromMarkdownFile({
-      filePath: "C:\\Users\\qwerf\\Desktop\\校园昵称规范器.md",
-      sourceUrl: "file:///C:/Users/qwerf/Desktop/%E6%A0%A1%E5%9B%AD.md",
+      filePath: "D:\\work\\校园昵称规范器.md",
+      sourceUrl: "file:///D:/work/%E6%A0%A1%E5%9B%AD.md",
       now: 1778429000000,
       markdown: [
         "# 校园昵称规范器",

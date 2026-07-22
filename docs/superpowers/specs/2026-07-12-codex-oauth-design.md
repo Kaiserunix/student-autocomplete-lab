@@ -6,14 +6,14 @@ Status: approved for implementation
 
 Branch: `codex/codex-oauth`
 
-Worktree: `C:\Users\qwerf\.config\superpowers\worktrees\student-autocomplete-lab\codex-oauth`
+Worktree: `<worktree-root>\student-autocomplete-lab\codex-oauth`
 
 Base commit: `098365f` (`feat: harden beta ai coach release candidate`)
 
 ## Recovery After Context Compaction
 
 Continue only in the worktree above. Do not switch branches in or copy unrelated
-changes from `C:\Users\qwerf\Desktop\student-autocomplete-lab`; that worktree had
+changes from `<repo-root>`; that worktree had
 pre-existing uncommitted changes when this feature branch was created.
 
 Before resuming implementation:

@@ -53,7 +53,7 @@
 
 Run:
 
-    Set-Location C:\Users\qwerf\Desktop\student-autocomplete-lab
+    Set-Location <repo-root>
     git branch --show-current
     git status --short
     git diff --check

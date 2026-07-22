@@ -73,9 +73,9 @@ AI 找错和评分都只是辅助判断。最终结果仍以编译器、样例�
 
 ### 📚 题库
 
-可以按题号导入洛谷题目、搜索题目和题单，也可以直接导入一份 Markdown。项目还能帮你创建 Python、C、C++、Rust 练习文件。
+在线题库可以切换洛谷、LeetCode、牛客、Codeforces 和 AtCoder，也可以直接导入一份 Markdown。项目还能帮你创建 Python、C、C++、Rust 练习文件。
 
-洛谷导入依赖公开接口，可能随上游变化。遇到导入失败时，Markdown 仍是一条可靠的备用通道。
+洛谷和 AtCoder 可以直接读取公开题面；LeetCode、牛客需要本地适配器；Codeforces 当前读取公开元数据，完整题面可以通过 Competitive Companion 或 Markdown 导入。连接不可用时，Markdown 仍是一条可靠的备用通道。
 
 ### 🪴 会长大的学习画像
 
@@ -167,6 +167,7 @@ src/
 ├─ recommendation/  下一题推荐
 ├─ models/          模型客户端
 ├─ codex/           Codex OAuth 与 app-server
+├─ oj/              五平台题库连接、契约与状态
 ├─ submission/      实验性 OJ 提交
 └─ storage/         本地 JSON / JSONL 数据
 ```
@@ -177,6 +178,7 @@ src/
 | --- | --- |
 | `npm test` | 运行全部测试 |
 | `npm run compile` | 编译扩展 |
+| `npm run smoke:oj-read` | 实测五平台搜索与只读导题 |
 | `npm run prototype:oj` | 启动本地 OJ Console |
 | `npm run package:beta` | 生成完整本地测试包 |
 | `npm run package:beta-release` | 生成清理后的公开候选包 |
@@ -189,7 +191,8 @@ src/
 核心功能已经可用，但还不是稳定发行版：
 
 - 英文界面只覆盖主要路径；
-- LeetCode 目前更推荐 Markdown 导入；
+- LeetCode、牛客的在线导题需要另装本地适配器；
+- Codeforces 完整题面仍需要 Competitive Companion 或 Markdown；
 - Codeforces、AtCoder 提交还是实验功能；
 - C、C++、Rust 的补全仍在持续打磨；
 - 推荐和学习画像需要更多真实练习来校准；
