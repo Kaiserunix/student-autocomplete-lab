@@ -29,7 +29,27 @@ describe("OJ console frontend source", () => {
     expect(html).toContain('<option value="atcoder">AtCoder</option>');
     expect(html).toContain('id="handleField"');
     expect(javascript).toContain('platform: elements.targetPlatform.value');
-    expect(javascript).toContain('elements.handleField.classList.toggle("is-hidden", profile.platform !== "codeforces")');
+    expect(javascript).toContain('setVisible(elements.handleField, profile.platform === "codeforces")');
     expect(javascript).toContain('body: JSON.stringify({ platform: elements.targetPlatform.value })');
+  });
+
+  test("keeps command palette, themes, shortcuts and validation wired", async () => {
+    const root = path.resolve("prototypes/oj-console/frontend");
+    const [html, javascript] = await Promise.all([
+      readFile(path.join(root, "index.html"), "utf8"),
+      readFile(path.join(root, "app.js"), "utf8")
+    ]);
+
+    expect(html).toContain('id="palette"');
+    expect(html).toContain('role="dialog"');
+    expect(html).toContain('class="theme-dock"');
+    expect(html).toContain('data-theme="violet"');
+    expect(javascript).toContain('event.key.toLowerCase() === "k"');
+    expect(javascript).toContain("function openPalette()");
+    expect(javascript).toContain("function setTheme(theme");
+    expect(javascript).toContain("function validateProblemUrl()");
+    expect(javascript).toContain("function celebrateAccepted()");
+    expect(javascript).toContain("function startExpiry(");
+    expect(javascript).toContain("aria-pressed");
   });
 });

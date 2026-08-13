@@ -8,22 +8,19 @@ The following exact versions are included in the compiled OJ MCP client and prob
 
 | Package | Version | License | Copyright |
 | --- | --- | --- | --- |
-| `@modelcontextprotocol/sdk` | 1.29.0 | MIT | 2024 Anthropic, PBC |
-| `ajv` | 8.20.0 | MIT | 2015-2021 Evgeny Poberezkin |
-| `ajv-formats` | 3.0.1 | MIT | 2020 Evgeny Poberezkin |
+| `@modelcontextprotocol/client` | 2.0.0 | MIT | Anthropic, PBC |
+| `@modelcontextprotocol/core` | 2.0.0 | MIT | Anthropic, PBC |
 | `cross-spawn` | 7.0.6 | MIT | 2018 Made With MOXY Lda |
+| `eventsource` | 3.0.7 | MIT | Espen Hovlandsdal |
 | `eventsource-parser` | 3.0.8 | MIT | 2026 Espen Hovlandsdal |
-| `fast-deep-equal` | 3.1.3 | MIT | 2017 Evgeny Poberezkin |
-| `fast-uri` | 3.1.4 | BSD-3-Clause | 2011-2021 Gary Court; 2021-present The Fastify team |
 | `isexe` | 2.0.0 | ISC | Isaac Z. Schlueter and Contributors |
-| `json-schema-traverse` | 1.0.0 | MIT | 2017 Evgeny Poberezkin |
+| `jose` | 6.2.3 | MIT | Filip Skokan |
 | `path-key` | 3.1.1 | MIT | Sindre Sorhus |
 | `pkce-challenge` | 5.0.1 | MIT | 2019 |
 | `shebang-command` | 2.0.0 | MIT | Kevin Mårtensson |
 | `shebang-regex` | 3.0.0 | MIT | Sindre Sorhus |
 | `which` | 2.0.2 | ISC | Isaac Z. Schlueter and Contributors |
 | `zod` | 4.3.6 | MIT | 2025 Colin McDonnell |
-| `zod-to-json-schema` | 3.25.2 | ISC | 2020 Stefan Terdell |
 | `entities` | 8.0.0 | BSD-2-Clause | Felix Böhm |
 | `parse5` | 8.0.1 | MIT | 2013-2019 Ivan Nikulin |
 
@@ -40,16 +37,6 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 Permission to use, copy, modify, and/or distribute this software for any purpose with or without fee is hereby granted, provided that the applicable copyright notice above and this permission notice appear in all copies.
 
 THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
-
-### BSD-3-Clause License (`fast-uri`)
-
-Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the applicable copyright notice above, this list of conditions and the following disclaimer.
-2. Redistributions in binary form must reproduce the applicable copyright notice above, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
-3. The names of any contributors may not be used to endorse or promote products derived from this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDERS OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 ### BSD-2-Clause License (`entities`)
 

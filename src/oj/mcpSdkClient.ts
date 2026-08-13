@@ -1,6 +1,11 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import {
+  Client,
+  StreamableHTTPClientTransport
+} from "@modelcontextprotocol/client";
+import {
+  getDefaultEnvironment,
+  StdioClientTransport
+} from "@modelcontextprotocol/client/stdio";
 import type { OjMcpSession, OjMcpToolResult, OjProviderDescriptor } from "./types";
 
 const DEFAULT_TIMEOUT_MS = 15_000;
@@ -13,7 +18,10 @@ export async function connectOjMcpSession(descriptor: OjProviderDescriptor): Pro
 
   const client = new Client(
     { name: "student-autocomplete-oj-broker", version: "0.1.0" },
-    { capabilities: {} }
+    {
+      capabilities: {},
+      versionNegotiation: { mode: "auto" }
+    }
   );
   const transport =
     descriptor.transport.kind === "remote_http"
@@ -50,6 +58,7 @@ export async function connectOjMcpSession(descriptor: OjProviderDescriptor): Pro
   return {
     serverName: server?.name,
     serverVersion: server?.version,
+    protocolVersion: client.getNegotiatedProtocolVersion(),
     async listTools(timeoutMs = DEFAULT_TIMEOUT_MS): Promise<string[]> {
       const response = await client.listTools(undefined, { timeout: timeoutMs });
       return response.tools.map((tool) => tool.name);
@@ -59,7 +68,7 @@ export async function connectOjMcpSession(descriptor: OjProviderDescriptor): Pro
       args: Record<string, unknown>,
       timeoutMs = DEFAULT_TIMEOUT_MS
     ): Promise<OjMcpToolResult> {
-      const response = await client.callTool({ name, arguments: args }, undefined, { timeout: timeoutMs });
+      const response = await client.callTool({ name, arguments: args }, { timeout: timeoutMs });
       const responseRecord: Record<string, unknown> = isRecord(response) ? response : {};
       return {
         isError: typeof responseRecord.isError === "boolean" ? responseRecord.isError : undefined,

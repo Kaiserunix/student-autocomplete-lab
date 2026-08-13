@@ -11,6 +11,7 @@ practice/**
 fixtures/**
 extension/**
 prototypes/**
+!prototypes/oj-console/frontend/**
 scripts/**
 docs/superpowers/**
 MANUAL-ACCEPTANCE.md

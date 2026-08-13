@@ -22,6 +22,7 @@ const allowedTopLevelRuntime = [
   "mcp",
   "models",
   "oj",
+  "ojConsole",
   "problemBank",
   "recommendation",
   "release",
@@ -90,6 +91,7 @@ async function main() {
 
   await copyReleaseRuntime();
   await copyIfExists("resources");
+  await copyIfExists("prototypes/oj-console/frontend");
   await copyIfExists("LICENSE");
   await copyIfExists("THIRD_PARTY_NOTICES.md");
   await copyReleaseReadme();
@@ -147,7 +149,14 @@ async function writeReleasePackageJson() {
   packageJson.displayName = releaseDisplayName;
   packageJson.description = "Clean beta-release package for the Student Autocomplete Lab VS Code algorithm coach.";
   packageJson.private = false;
-  packageJson.files = ["dist/**", "resources/**", "README.md", "LICENSE", "THIRD_PARTY_NOTICES.md"];
+  packageJson.files = [
+    "dist/**",
+    "resources/**",
+    "prototypes/oj-console/frontend/**",
+    "README.md",
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md"
+  ];
   delete packageJson.repository;
   delete packageJson.scripts;
   delete packageJson.devDependencies;
@@ -321,7 +330,9 @@ function renameConfigurationProperties(configuration, title, expectedPrefix) {
 async function copyIfExists(relativePath) {
   const source = path.join(root, relativePath);
   if (existsSync(source)) {
-    await cp(source, path.join(stagingRoot, relativePath), { recursive: true });
+    const destination = path.join(stagingRoot, relativePath);
+    await mkdir(path.dirname(destination), { recursive: true });
+    await cp(source, destination, { recursive: true });
   }
 }
 

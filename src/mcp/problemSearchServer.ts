@@ -1,6 +1,6 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
+import { McpServer } from "@modelcontextprotocol/server";
+import { serveStdio } from "@modelcontextprotocol/server/stdio";
+import type { CallToolResult } from "@modelcontextprotocol/server";
 import { z } from "zod";
 import {
   fetchLuoguProblemForMcp,
@@ -108,8 +108,7 @@ export function createProblemSearchMcpServer(): McpServer {
 }
 
 export async function runProblemSearchMcpServer(): Promise<void> {
-  const server = createProblemSearchMcpServer();
-  await server.connect(new StdioServerTransport());
+  serveStdio(() => createProblemSearchMcpServer());
 }
 
 function toToolResult(result: unknown): CallToolResult {
