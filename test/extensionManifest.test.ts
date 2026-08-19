@@ -3,6 +3,9 @@ import { describe, expect, test } from "vitest";
 
 interface ExtensionManifest {
   main?: string;
+  engines?: {
+    vscode?: string;
+  };
   activationEvents?: string[];
   contributes?: {
     viewsContainers?: {
@@ -18,6 +21,12 @@ interface ExtensionManifest {
 }
 
 describe("VS Code extension manifest", () => {
+  test("targets the supported VS Code 1.125 baseline", async () => {
+    const manifest = JSON.parse(await readFile("package.json", "utf8")) as ExtensionManifest;
+
+    expect(manifest.engines?.vscode).toBe("^1.125.0");
+  });
+
   test("points main at the compiled extension entry emitted by the current tsconfig", async () => {
     const manifest = JSON.parse(await readFile("package.json", "utf8")) as ExtensionManifest;
 
