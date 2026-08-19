@@ -90,7 +90,7 @@ export function buildOjProviderDescriptors(
       "luogu",
       "洛谷",
       "luogu-v0.2",
-      "https://luogu-mcp-server.lantangtang54.workers.dev/mcp"
+      "https://luogu-mcp.ksrnyx.top/mcp"
     ),
     {
       platform: "leetcode",
@@ -128,7 +128,7 @@ export function buildOjProviderDescriptors(
       "codeforces",
       "Codeforces",
       "canonical-v1",
-      "https://codeforces-oj-mcp.lantangtang54.workers.dev/mcp"
+      "https://codeforces-mcp.ksrnyx.top/mcp"
     ),
     remote("atcoder", "AtCoder", "canonical-v1", "https://api.ksrnyx.top/oj-mcp/atcoder/mcp")
   ];

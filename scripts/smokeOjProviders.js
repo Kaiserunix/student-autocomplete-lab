@@ -9,7 +9,7 @@ const providers = [
     "luogu",
     "洛谷",
     "luogu-v0.2",
-    "https://luogu-mcp-server.lantangtang54.workers.dev/mcp",
+    "https://luogu-mcp.ksrnyx.top/mcp",
     process.env.LUOGU_OJ_MCP_KEY
   ),
   local(
@@ -34,7 +34,7 @@ const providers = [
     "codeforces",
     "Codeforces",
     "canonical-v1",
-    "https://codeforces-oj-mcp.lantangtang54.workers.dev/mcp",
+    "https://codeforces-mcp.ksrnyx.top/mcp",
     process.env.CODEFORCES_OJ_MCP_KEY
   ),
   remote(

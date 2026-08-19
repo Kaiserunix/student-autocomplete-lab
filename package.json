@@ -58,6 +58,10 @@
       {
         "command": "studentAutocomplete.triggerInlineCompletion",
         "title": "AI 做题陪练：立即补全一次（备用）"
+      },
+      {
+        "command": "studentAutocomplete.openOjConsole",
+        "title": "AI 做题陪练：打开 OJ 提交控制台"
       }
     ],
     "configurationDefaults": {
@@ -186,7 +190,7 @@
         },
         "studentAutocomplete.oj.luogu.endpoint": {
           "type": "string",
-          "default": "https://luogu-mcp-server.lantangtang54.workers.dev/mcp",
+          "default": "https://luogu-mcp.ksrnyx.top/mcp",
           "description": "洛谷 MCP Streamable HTTP 地址。"
         },
         "studentAutocomplete.oj.codeforces.enabled": {
@@ -196,7 +200,7 @@
         },
         "studentAutocomplete.oj.codeforces.endpoint": {
           "type": "string",
-          "default": "https://codeforces-oj-mcp.lantangtang54.workers.dev/mcp",
+          "default": "https://codeforces-mcp.ksrnyx.top/mcp",
           "description": "Codeforces MCP Streamable HTTP 地址。"
         },
         "studentAutocomplete.oj.atcoder.enabled": {
@@ -285,10 +289,12 @@
     "esbuild": "0.28.1",
     "playwright": "^1.59.1",
     "typescript": "^5.8.3",
-    "vitest": "^3.1.2"
+    "vitest": "4.1.10"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/core": "2.0.0",
+    "@modelcontextprotocol/server": "2.0.0",
     "parse5": "8.0.1",
     "zod": "^4.3.6"
   },

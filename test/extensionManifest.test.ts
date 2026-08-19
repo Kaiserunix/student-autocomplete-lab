@@ -134,7 +134,9 @@ describe("VS Code extension manifest", () => {
     expect(readme).toContain("实验性 Codeforces / AtCoder 提交");
     expect(readme).toContain("自己安装");
     expect(notices).toContain("https://github.com/online-judge-tools/oj");
-    expect(notices).toContain("`@modelcontextprotocol/sdk`");
+    expect(notices).toContain("`@modelcontextprotocol/client`");
+    expect(notices).toContain("`@modelcontextprotocol/core`");
+    expect(notices).not.toContain("`@modelcontextprotocol/sdk`");
     expect(notices).toContain("`parse5`");
     expect(notices).toContain("`entities`");
     expect(notices).toContain("The MIT License (MIT)");

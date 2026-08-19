@@ -186,6 +186,7 @@ export interface OjMcpToolResult {
 export interface OjMcpSession {
   readonly serverName?: string;
   readonly serverVersion?: string;
+  readonly protocolVersion?: string;
   listTools(timeoutMs?: number): Promise<string[]>;
   callTool(name: string, args: Record<string, unknown>, timeoutMs?: number): Promise<OjMcpToolResult>;
   close(): Promise<void>;

@@ -3,6 +3,7 @@ import { createMimoInlineCompletionProvider } from "./autocomplete/inlineProvide
 import { createCodexServices, resolveCodexServicePaths } from "./codex/codexServices";
 import { createInternalTestRecorder } from "./internalTesting/internalTestRecorder";
 import { ProblemBankViewProvider } from "./sidebar/ProblemBankViewProvider";
+import { OjConsolePanel } from "./ojConsole/OjConsolePanel";
 import { createStudentAutocompleteStoragePaths } from "./storage/StoragePaths";
 import { loadStudentSkill } from "./teaching/studentSkillStore";
 import { createVsCodeOjBroker } from "./oj/vscodeProviderConfiguration";
@@ -109,6 +110,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         `[autocomplete:manual-trigger] ${editor.document.languageId} line ${editor.selection.active.line + 1}`
       );
       await vscode.commands.executeCommand("editor.action.inlineSuggest.trigger");
+    }),
+    vscode.commands.registerCommand("studentAutocomplete.openOjConsole", () => {
+      OjConsolePanel.show(context);
     })
   );
 }
