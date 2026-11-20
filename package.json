@@ -129,6 +129,11 @@
           "default": "",
           "description": "OpenAI-compatible API Key。建议通过侧栏 AI 配置保存到 SecretStorage。"
         },
+        "studentAutocomplete.ai.openaiCompatible.autocompleteApiKey": {
+          "type": "string",
+          "default": "",
+          "description": "OpenAI-compatible 自动补全专用 API Key。留空则复用分析接口 API Key；建议通过侧栏 AI 配置保存到 SecretStorage。"
+        },
         "studentAutocomplete.ai.openaiCompatible.chatModel": {
           "type": "string",
           "default": "",
@@ -259,6 +264,7 @@
   },
   "scripts": {
     "compile": "tsc -p . && node scripts/bundleRuntimeDependencies.js dist",
+    "typecheck": "tsc -p . --noEmit && tsc -p tsconfig.oj-console.json --noEmit && tsc -p tsconfig.release.json --noEmit",
     "compile:prototype:oj": "tsc -p tsconfig.oj-console.json",
     "prototype:oj": "npm run compile:prototype:oj && node .runtime/oj-console-dist/prototypes/oj-console/backend/server.js --open",
     "prototype:oj:backend": "npm run compile:prototype:oj && node .runtime/oj-console-dist/prototypes/oj-console/backend/server.js",

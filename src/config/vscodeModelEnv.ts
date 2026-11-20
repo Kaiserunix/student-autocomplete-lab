@@ -19,6 +19,7 @@ const settingSection = "studentAutocomplete.ai";
 const secretKeys = {
   openai: "studentAutocomplete.ai.openai.apiKey",
   openaiCompatible: "studentAutocomplete.ai.openaiCompatible.apiKey",
+  openaiCompatibleAutocomplete: "studentAutocomplete.ai.openaiCompatible.autocompleteApiKey",
   anthropic: "studentAutocomplete.ai.anthropic.apiKey"
 };
 
@@ -58,6 +59,11 @@ export async function saveAiConfigToVsCode(
     await updateProviderSettings(configuration, target, "openaiCompatible", update);
     await configuration.update("openaiCompatible.autocompleteFormat", update.autocompleteFormat, target);
     await storeSecretIfProvided(context.secrets, secretKeys.openaiCompatible, update.apiKey);
+    await storeSecretIfProvided(
+      context.secrets,
+      secretKeys.openaiCompatibleAutocomplete,
+      update.autocompleteApiKey
+    );
   }
 }
 
@@ -84,6 +90,10 @@ function readProviderSettings(configuration: vscode.WorkspaceConfiguration, pref
     baseUrl: configuredString(configuration, `${prefix}.baseUrl`),
     autocompleteBaseUrl: configuredString(configuration, `${prefix}.autocompleteBaseUrl`),
     apiKey: configuredString(configuration, `${prefix}.apiKey`),
+    autocompleteApiKey:
+      prefix === "openaiCompatible"
+        ? configuredString(configuration, `${prefix}.autocompleteApiKey`)
+        : undefined,
     chatModel: configuredString(configuration, `${prefix}.chatModel`),
     autocompleteModel: configuredString(configuration, `${prefix}.autocompleteModel`),
     autocompleteFormat: configuredEnum<AutocompleteFormat>(configuration, `${prefix}.autocompleteFormat`, [
@@ -99,6 +109,7 @@ async function readAiSecrets(secrets: vscode.SecretStorage): Promise<AiSecretSna
   return {
     openaiApiKey: await secrets.get(secretKeys.openai),
     openaiCompatibleApiKey: await secrets.get(secretKeys.openaiCompatible),
+    openaiCompatibleAutocompleteApiKey: await secrets.get(secretKeys.openaiCompatibleAutocomplete),
     anthropicApiKey: await secrets.get(secretKeys.anthropic)
   };
 }

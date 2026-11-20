@@ -165,4 +165,64 @@ describe("autocomplete context extraction", () => {
     expect(input.prefix).not.toContain("参考答案");
     expect(input.prefix).not.toContain("print(a + b)");
   });
+
+  test("preserves C++ contest macros, STL containers, and fast I/O while stripping prose comments", () => {
+    const text = [
+      "// 题目：P1001 A+B Problem",
+      "// 标准答案：cout << a + b << endl;",
+      "#include <bits/stdc++.h>",
+      "#define ll long long",
+      "using namespace std;",
+      "",
+      "void solve() {",
+      "    ios::sync_with_stdio(false);",
+      "    cin.tie(nullptr);",
+      "    vector<ll> values(n);",
+      "    total +=",
+      "}",
+      "// AI 讲解：注意 long long 溢出"
+    ].join("\n");
+    const offset = text.indexOf("total +=") + "total +=".length;
+
+    const input = buildAutocompleteInputFromText({
+      text,
+      offset,
+      language: "cpp",
+      filePath: "practice/luogu/P1001.cpp"
+    });
+
+    expect(input.prefix).toContain("#include <bits/stdc++.h>");
+    expect(input.prefix).toContain("#define ll long long");
+    expect(input.prefix).toContain("vector<ll> values(n);");
+    expect(input.prefix).toContain("total +=");
+    expect(input.prefix).not.toContain("标准答案");
+    expect(input.suffix).not.toContain("AI 讲解");
+  });
+
+  test("preserves Rust attributes, structs, and mutable bindings while stripping prose comments", () => {
+    const text = [
+      "// Problem: Sum of Array",
+      "// Reference Solution: iter().sum::<i64>()",
+      "#[allow(unused_imports)]",
+      "use std::io::{self, Read};",
+      "",
+      "pub fn solve(values: &[i64]) -> i64 {",
+      "    let mut total: i64 = 0;",
+      "    total +=",
+      "}"
+    ].join("\n");
+    const offset = text.indexOf("total +=") + "total +=".length;
+
+    const input = buildAutocompleteInputFromText({
+      text,
+      offset,
+      language: "rust",
+      filePath: "practice/luogu/P1001.rs"
+    });
+
+    expect(input.prefix).toContain("#[allow(unused_imports)]");
+    expect(input.prefix).toContain("pub fn solve");
+    expect(input.prefix).toContain("let mut total: i64 = 0;");
+    expect(input.prefix).not.toContain("Reference Solution");
+  });
 });

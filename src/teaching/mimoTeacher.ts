@@ -85,6 +85,9 @@ export async function requestMimoTeachingDiagnosisWithSkills(
   return parseAndNormalizeTeachingReport(text, context);
 }
 
+export const requestTeachingDiagnosis = requestMimoTeachingDiagnosis;
+export const requestTeachingDiagnosisWithSkills = requestMimoTeachingDiagnosisWithSkills;
+
 function parseAndNormalizeTeachingReport(
   text: string,
   context: TeachingDiagnosisContext

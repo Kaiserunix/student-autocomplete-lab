@@ -81,6 +81,8 @@ export async function requestMimoLessonReport(
   }
 }
 
+export const requestLessonReport = requestMimoLessonReport;
+
 export function parseLessonReport(text: string): LessonReport {
   const raw = JSON.parse(extractJson(text)) as RawLessonReport;
   const painPoints = requireArray(raw.pain_points, "pain_points").map(parsePainPoint);

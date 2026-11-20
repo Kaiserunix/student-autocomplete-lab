@@ -87,7 +87,7 @@ function isStrongCodeLine(line: string, language: string): boolean {
   if (language === "python") {
     return (
       /^(import|from|def|class|if\s+__name__|for|while|if|elif|else:|try:|except|with|return|print\(|input\(|[A-Za-z_][\w.]*\()/.test(code) ||
-      /^[A-Za-z_]\w*\s*=/.test(code) ||
+      /^[A-Za-z_]\w*\s*[+\-*/%&|^]?=/.test(code) ||
       /^[A-Za-z_]\w*(\s*,\s*[A-Za-z_]\w*)+\s*=/.test(code) ||
       /^\([A-Za-z_,\s]+\)\s*=/.test(code) ||
       /^\[[A-Za-z_,\s]+\]\s*=/.test(code)
@@ -95,14 +95,21 @@ function isStrongCodeLine(line: string, language: string): boolean {
   }
 
   if (language === "cpp" || language === "c" || language === "c++") {
-    return /^(#include|using\s+namespace|int\s+main|auto|int|long|char|bool|double|float|for\s*\(|while\s*\(|if\s*\(|return|std::|cin|cout)/.test(code);
+    return (
+      /^(#include|#define|#pragma|#ifdef|#ifndef|#endif|using\s+|typedef\s+|template\s*<|struct\s+|class\s+|constexpr\s+|const\s+|static\s+|inline\s+)/.test(code) ||
+      /^(int\s+main|signed\s+main|void\s+\w+|auto\b|int\b|long\b|short\b|unsigned\b|size_t\b|ll\b|ull\b|pii\b|char\b|bool\b|double\b|float\b|string\b|vector\s*<|array\s*<|deque\s*<|queue\s*<|priority_queue\s*<|stack\s*<|set\s*<|multiset\s*<|unordered_set\s*<|map\s*<|multimap\s*<|unordered_map\s*<|pair\s*<|bitset\s*<)/.test(code) ||
+      /^(for\s*\(|while\s*\(|do\b|if\s*\(|else\b|switch\s*\(|return\b|std::|ios::sync_with_stdio|cin\b|cout\b|cerr\b|scanf\s*\(|printf\s*\(|puts\s*\(|putchar\s*\(|memset\s*\(|sort\s*\(|[A-Za-z_]\w*\s*(\+\+|--|[+\-*/%&|^]?=|\())/.test(code)
+    );
   }
 
   if (language === "rust") {
-    return /^(use\s+|fn\s+|let\s+|if\s+|for\s+|while\s+|match\s+|println!|return\b)/.test(code);
+    return (
+      /^(#!?\[|use\s+|pub\s+|fn\s+|struct\s+|enum\s+|impl\b|trait\s+|type\s+|const\s+|static\s+|mod\s+|macro_rules!)/.test(code) ||
+      /^(let\s+|if\s+|else\b|for\s+|while\s+|loop\b|match\s+|println!|eprintln!|print!|write!|writeln!|vec!|return\b|[A-Za-z_]\w*\s*([+\-*/%&|^]?=|\(|\.))/.test(code)
+    );
   }
 
-  return /^[A-Za-z_]\w*[\s({:=]/.test(code);
+  return /^[A-Za-z_]\w*[\s({:=+\-*/]/.test(code);
 }
 
 function stripProblemProseBlocks(lines: string[], language: string): string[] {
@@ -130,7 +137,13 @@ function stripProblemProseBlocks(lines: string[], language: string): string[] {
 }
 
 function isCommentLine(trimmed: string, language: string): boolean {
-  if ((language === "cpp" || language === "c" || language === "c++") && /^#include\b/.test(trimmed)) {
+  if (
+    (language === "cpp" || language === "c" || language === "c++") &&
+    /^#(include|define|pragma|ifdef|ifndef|endif|if|elif|else)\b/.test(trimmed)
+  ) {
+    return false;
+  }
+  if (language === "rust" && /^#!?\[/.test(trimmed)) {
     return false;
   }
 

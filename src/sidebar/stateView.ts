@@ -3,12 +3,17 @@ import type { CodexAuthState } from "../codex/codexAuthService";
 import type { CodexModelInfo } from "../codex/codexModelService";
 import type { AttemptSession } from "../attempt/schema";
 import type { InternalTestSummary } from "../internalTesting/internalTestRecorder";
+import type {
+  AiHealthCheckResult,
+  AiHealthCheckStep,
+  AiHealthCheckStepStatus
+} from "../models/modelHealthCheck";
 import type { ProblemRecord } from "../problemBank/types";
-import type { SkillPlanAudit } from "../skills/types";
-import type { AutocompleteValidationStatus } from "../skills/validators/autocompleteOutputPolicy";
 import type { StudentSkill } from "../teaching/studentSkill";
 import type { CompletedProblemRecord } from "./problemArchive";
 import type { OjProviderStatusView } from "../oj/types";
+
+export type { AiHealthCheckResult, AiHealthCheckStep, AiHealthCheckStepStatus };
 
 export type UiLanguage = "zh" | "en";
 
@@ -23,30 +28,6 @@ export interface StarterPreset {
   subtitle: string;
   problemIds: string[];
   painPoints: string[];
-}
-
-export type AiHealthCheckStepStatus = "pass" | "fail";
-
-export interface AiHealthCheckStep {
-  status: AiHealthCheckStepStatus;
-  endpoint?: string;
-  model?: string;
-  format?: string;
-  renderer?: SkillPlanAudit["renderer"];
-  validationStatus?: AutocompleteValidationStatus;
-  keyState?: "provided" | "saved" | "missing";
-  count?: number;
-  error?: string;
-  errorHint?: string;
-  latencyMs?: number;
-}
-
-export interface AiHealthCheckResult {
-  checkedAt: string;
-  providerMode?: string;
-  models: AiHealthCheckStep;
-  chatSmoke: AiHealthCheckStep;
-  autocompleteSmoke: AiHealthCheckStep;
 }
 
 export interface AiRuntimeStatus {
