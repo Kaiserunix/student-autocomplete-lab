@@ -1,89 +1,79 @@
-# 语言技能组合：剩余人工验收
+# Manual Acceptance Checklist
 
-自动化已经完成编译、419 项测试、1000 例 fixture 评测、隐私扫描、发布包内容审计，并安装：
+Use this checklist to validate live VS Code Extension Host behavior that automated Vitest suites cannot cover (real provider calls, Ghost Text rendering, interactive sidebar flows, and the integrated OJ Submission Console).
 
-- `kaiserunix.student-autocomplete-lab-beta-release@0.1.0-beta.1`
+## Prerequisites
 
-当前还同时装有旧的 `kaiserunix.student-autocomplete-lab@0.1.0-beta.1`。它和 beta-release 注册相同命令/视图，若同时启用会让验收对象不明确。以下只剩真实 VS Code 界面和当前账号调用的验收。Computer Use 因检测到用户正在操作 VS Code 而停止，避免抢占你的键盘/鼠标。无需重新安装。
+1. Run automated checks first:
+   ```powershell
+   npm test
+   npm run compile
+   npm run package:beta-release
+   npm run check:hygiene
+   ```
+2. Install the clean beta-release VSIX (or launch via `F5` -> `Run Student Autocomplete Extension`). If both `kaiserunix.student-autocomplete-lab` and `kaiserunix.student-autocomplete-lab-beta-release` are installed, disable one for the workspace and run `Developer: Reload Window` so commands and views have a single owner.
+3. Never paste API keys, OAuth tokens, raw auth URLs, or private model transcripts into repo files or issue reports.
 
-## 1. 重载并检查真实调用
+## 1. Provider Configuration And Health Check
 
-1. 按 `Ctrl+Shift+X` 打开扩展页，搜索 `@installed student-autocomplete`。
-2. 对 `kaiserunix.student-autocomplete-lab` 选择“禁用（工作区）”；保持 `kaiserunix.student-autocomplete-lab-beta-release` 启用。不要删除旧版，验收后可恢复。
-3. 按 `Ctrl+Shift+P`，运行 `Developer: Reload Window`。
-4. 打开左侧“AI 做题陪练”，展开“AI 接口配置”。
-5. 若测试当前已授权的 Codex OAuth，确认：
-   - 兼容模式：`OpenAI 官方`
-   - OpenAI 认证：`Codex OAuth`
-   - 状态为已登录
-   - “提示/评分模型”和“补全模型”均来自当前账号列表
-6. 点击“刷新模型”，再点击“保存 AI 配置”。不要退出登录，也不要把 token、key 或模型输出抄进本文件。
-7. 点击“健康检查”。
+1. Open `AI 做题陪练` in the Activity Bar and stay on `作答现场`.
+2. Expand `账户与模型`.
+3. For **Codex OAuth** (if testing an authorized local Codex CLI session):
+   - Set `兼容模式` to `OpenAI 官方` and `OpenAI 认证` to `Codex OAuth`.
+   - Confirm status shows signed-in; click `刷新模型` and pick separate `提示/评分模型` and `补全模型` from the account list.
+   - Click `保存 AI 配置`, then click `健康检查`.
+4. For **OpenAI-compatible / DeepSeek FIM** (optional):
+   - Set `兼容模式` to `OpenAI 兼容`, analysis Base URL (e.g., `/v1`), autocomplete Base URL (`https://api.deepseek.com/beta` for DeepSeek FIM), and your own key.
+   - Click `保存 AI 配置`, `拉取模型`, and `健康检查`.
 
-通过标准：
+Pass criteria:
 
-- “模型列表”“AI 提示”“自动补全”三项均通过；
-- 自动补全卡片显示实际 `Renderer` 和 `Validation`；正常结果应为 `success`；
-- 若模型返回空，应明确显示 `model-empty`；若安全策略拒绝，应明确显示 `validator-rejected`，不能笼统写成网络错误；
-- 只显示密钥为“已保存/已提供”，绝不显示明文。
+- Health check reports independent status for model list, chat/hint smoke test, and autocomplete smoke test.
+- Autocomplete card displays `Renderer` and validation state (`success`, `model-empty`, or `validator-rejected` — never a generic network error when empty or rejected).
+- API keys show only saved/masked status, never plaintext.
 
-若还要测自接 OpenAI 兼容服务：使用你自己的 URL/key，保存后重复“拉取模型”和“健康检查”。DeepSeek 聊天 Base URL 用 `/v1`，FIM 补全 Base URL 用 `https://api.deepseek.com/beta`。不需要为了验收新建或粘贴任何 key 到本文档。
+## 2. Automatic Ghost Text Across Supported Languages
 
-## 2. 验证四种语言的 Ghost Text
+Create four throwaway files in an ignored scratch folder (for example under `practice/`): `.py`, `.c`, `.cpp`, and `.rs`, each containing a small partial loop or `if` body.
 
-已准备四个可丢弃文件：
+For each file:
 
-- `.runtime/ui-audit/smoke/smoke.py`
-- `.runtime/ui-audit/smoke/smoke.c`
-- `.runtime/ui-audit/smoke/smoke.cpp`
-- `.runtime/ui-audit/smoke/smoke.rs`
+1. Type an incomplete statement inside an indented block (for example `total +=`).
+2. Pause typing for ~350 ms without pressing any shortcut and wait for gray Ghost Text to appear automatically.
+3. If Ghost Text does not trigger automatically, run `AI 做题陪练：立即补全一次（备用）` to separate auto-trigger issues from model/transport issues, then use `更多操作` -> `测试补全接口` to inspect `model-empty`, `validator-rejected`, or transport errors.
+4. Accept with `Tab` or dismiss with `Esc`.
 
-逐个执行：
+Pass criteria:
 
-1. 打开文件，在内层 `if` 的空白缩进行输入一段未完成代码，例如 `total +=`。
-2. 停止输入约 350 毫秒，不运行任何命令；等待自动出现灰色 Ghost Text。
-3. 这是关键验收，侧栏“测试补全接口”预览或命令面板的立即补全都不能替代自动触发证明。
-4. 若未自动出现，可运行 `AI 做题陪练：立即补全一次（备用）` 区分“自动触发失效”和“模型/传输失效”，再到侧栏点击“测试补全接口”查看 `model-empty`、`validator-rejected` 或传输失败分类。
-5. 文件是可丢弃的，可以按 `Tab` 接受后检查语法，也可以按 `Esc` 拒绝。
+- Suggestion is code-only and at most 3 contiguous lines — no explanation prose, Markdown fences, problem statement text, full solution, or prompt echo.
+- Language idioms hold: Python indentation, C/C++ braces/semicolons/types, Rust ownership/borrowing and `Option`/`Result` without reckless `unwrap`.
+- Sidebar skill audit displays route, language, renderer, stable rule IDs, rule budget, and enforcement — never raw prefix/suffix code, file paths, problem statements, Teacher Packs, or credentials.
 
-通过标准：
+## 3. Single-Session Coaching And Learning Profile
 
-- 输出只有代码，最多连续 3 行；无解释、Markdown、题面、完整答案或提示词回显；
-- Python 保持缩进；
-- C/C++ 保持花括号、分号、类型和边界风格；
-- Rust 保持借用/所有权以及 `Option`/`Result` 结构，不随意 `unwrap`；
-- 侧栏审计可显示 route、language、renderer、稳定规则 ID、规则预算和 enforcement，但不得显示代码前后缀、文件路径、题面、Teacher Pack、标准答案、key 或 token。
+Import a Markdown or online problem in `题目张贴板`, create/open its starter file, and enter `作答现场`:
 
-## 3. 验证同一学习会话
+1. Click `给一个提示`.
+2. Expand `更多操作` and click `提示更具体`; confirm it narrows the same issue without dumping a full solution.
+3. Enter a follow-up question in `追问` and click `发送` (or `Ctrl+Enter`); confirm the reply answers the latest question directly.
+4. Trigger one automatic 1–3 line Ghost Text completion in the editor; confirm neither Ghost Text nor follow-up promotes a `Student Skill`.
+5. Use `更多操作` -> `完成复盘` or `我卡住了` to run an evidence-bearing teaching review, then inspect `学习档案` (`revision`, evidence cards, `有帮助` / `这条不准` / `禁用`, version rollback).
+6. Run `AI 做题陪练：推荐下一题` (or the archived-problem recommendation button) and verify visible reasons.
 
-在当前已导入题目和对应代码文件上：
+Pass criteria:
 
-1. 点击“简单提示”。
-2. 点击“再具体点”，确认只收窄当前问题，不直接给完整答案。
-3. 在“追问 / 闲聊”输入一句针对当前问题的话，点击“继续聊”；确认先回答最新问题，语言策略和 learner rules 仍一致。
-4. 再通过停顿输入自动获得一次 1–3 行 Ghost Text；补全和追问本身不应提升 StudentSkill。
-5. 点击“我已完成”或“我放弃了”进入有教学证据的复盘；只有这类教学工作流可以更新 StudentSkill revision/evidence。
-6. 点击“推荐下一题”，确认界面给出明确推荐理由。
+- Coach audit reports `coach` route and stable rule IDs; autocomplete audit reports `autocomplete` route.
+- Disabled or wrong-marked skills are excluded from applied rules.
+- Autocomplete requests never receive the problem statement, standard answer, Teacher Pack, or coach history.
+- Recommendations show explicit rationale and tie difficulty changes to evidence.
 
-通过标准：
+## 4. Integrated OJ Submission Console (Demo Mode)
 
-- 教练审计显示 `coach` 路由和稳定规则 ID，补全审计显示 `autocomplete` 路由；
-- 被用户禁用或被判为错误诊断的技能不会出现在已应用规则中；
-- 自动补全永远不取得题面、标准答案、Teacher Pack 或教练对话历史；
-- 推荐结果有可见原因，难度变化有相应学习证据。
+1. Run `AI 做题陪练：打开 OJ 提交控制台` from the Command Palette (`Ctrl+Shift+P`).
+2. Confirm top bar status reaches `LOCAL / ONLINE` and default mode is `DEMO`.
+3. Choose or drop `prototypes/oj-console/examples/demo-source.cpp`; confirm source ticket and 12-char SHA-256 digest appear without displaying source code.
+4. Click `生成安全预览` (or `Ctrl+Enter`), review the immutable preview card, then click `确认并执行一次` (or `Ctrl+Enter`).
+5. Confirm stage progression finishes at `ACCEPTED` with verdict badge `AC`.
+6. Verify `Ctrl+K` command palette opens/filters/runs and the 4-theme dock (`acid` / `violet` / `amber` / `cyan`) updates the UI cleanly.
 
-## 4. 验证 OJ 提交控制台面板
-
-1. 按 `Ctrl+Shift+P`，运行 `AI 做题陪练：打开 OJ 提交控制台`。
-2. 确认面板打开后顶栏状态为 `LOCAL / ONLINE`，默认 DEMO 模式。
-3. 拖入或选择任一源码文件（可用 `.runtime/ui-audit/smoke/smoke.cpp`），应出现源码票据与 SHA-256 摘要。
-4. 点击“生成安全预览”（或按 `Ctrl+Enter`），核对预览卡事实后点击“确认并执行一次”（或再按 `Ctrl+Enter`）。
-5. 观察状态轨道逐阶段推进并显示分段耗时，终态应为 ACCEPTED，结果徽章为 AC。
-
-通过标准：
-
-- DEMO 流程全程无错误 toast，本地活动日志有完整的 SOURCE/PREVIEW/CONFIRM/FINAL 记录；
-- `Ctrl+K` 命令面板可打开、可过滤、可执行；顶栏主题坞切换四种色调后界面整体跟随；
-- 本轮不验收 REAL 模式真实提交；真实提交仍按专用账号门禁另行验收。
-
-完成后，请只反馈哪一步失败以及界面显示的分类/错误文字；不要发送 key、token 或完整模型输出。
+Note: Real-mode remote submission to Codeforces or AtCoder is verified separately under the dedicated-account manual release gate in [docs/superpowers/specs/2026-07-21-multi-platform-oj-submission-design.md](docs/superpowers/specs/2026-07-21-multi-platform-oj-submission-design.md).
