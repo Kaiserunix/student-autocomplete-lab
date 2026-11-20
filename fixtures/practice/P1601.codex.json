@@ -1,0 +1,35 @@
+{
+  "problem_id": "P1601",
+  "reference_solution": "a = input().strip()\nb = input().strip()\n\ni = len(a) - 1\nj = len(b) - 1\ncarry = 0\nout = []\n\nwhile i >= 0 or j >= 0 or carry > 0:\n    da = int(a[i]) if i >= 0 else 0\n    db = int(b[j]) if j >= 0 else 0\n    total = da + db + carry\n    out.append(str(total % 10))\n    carry = total // 10\n    i -= 1\n    j -= 1\n\nprint(''.join(reversed(out)))\n",
+  "wrong_submissions": [
+    {
+      "code": "a = input().strip()\nb = input().strip()\n\nout = []\ncarry = 0\nfor i in range(max(len(a), len(b))):\n    da = int(a[i]) if i < len(a) else 0\n    db = int(b[i]) if i < len(b) else 0\n    s = da + db + carry\n    out.append(str(s % 10))\n    carry = s // 10\nif carry:\n    out.append(str(carry))\nprint(''.join(reversed(out)))\n",
+      "expected_error": "Adds digits from index 0 (most significant digit) without reversing the input strings first, propagating carries toward the wrong place value.",
+      "pain_points": [
+        "high_precision_carry_order"
+      ]
+    },
+    {
+      "code": "a = input().strip()[::-1]\nb = input().strip()[::-1]\n\nout = []\ncarry = 0\nfor i in range(max(len(a), len(b))):\n    da = int(a[i]) if i < len(a) else 0\n    db = int(b[i]) if i < len(b) else 0\n    s = da + db + carry\n    out.append(str(s % 10))\n    carry = s // 10\n\nprint(''.join(reversed(out)))\n",
+      "expected_error": "Drops the final carry after processing all digits, producing a truncated sum on inputs like 999 + 1.",
+      "pain_points": [
+        "high_precision_carry_order"
+      ]
+    },
+    {
+      "code": "a = input().strip()[::-1]\nb = input().strip()[::-1]\n\nout = []\ncarry = 0\nfor i in range(min(len(a), len(b))):\n    s = int(a[i]) + int(b[i]) + carry\n    out.append(str(s % 10))\n    carry = s // 10\nif carry:\n    out.append(str(carry))\n\nprint(''.join(reversed(out)))\n",
+      "expected_error": "Loops only up to min(len(a), len(b)), dropping remaining upper digits of the longer number.",
+      "pain_points": [
+        "high_precision_carry_order",
+        "loop_boundary"
+      ]
+    }
+  ],
+  "skill_update_candidate": {
+    "name": "high-precision-carry-order",
+    "rules": [
+      "Process high-precision addition from the least significant digit to the most significant digit.",
+      "Continue the digit loop while any input index remains or carry > 0, then reverse the collected digits once at the end."
+    ]
+  }
+}

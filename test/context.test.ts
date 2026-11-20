@@ -165,4 +165,45 @@ describe("autocomplete context extraction", () => {
     expect(input.prefix).not.toContain("参考答案");
     expect(input.prefix).not.toContain("print(a + b)");
   });
+
+  test("drops C++ block-comment spoilers and returns empty context when cursor is outside student markers", () => {
+    const cppText = [
+      "/*",
+      "题目：P5711",
+      "int main() { return 42; }",
+      "*/",
+      "// ===== 学生代码开始 =====",
+      "int y = 2024;",
+      "    ",
+      "// ===== 学生代码结束 =====",
+      "// AI 讲解：secret"
+    ].join("\n");
+
+    const inside = buildAutocompleteInputFromText({
+      text: cppText,
+      offset: cppText.indexOf("    \n// =====") + 4,
+      language: "cpp",
+      filePath: "practice/luogu/P5711.cpp"
+    });
+    expect(inside.prefix).toContain("int y = 2024;");
+    expect(inside.prefix).not.toContain("return 42");
+    expect(inside.suffix).not.toContain("AI 讲解");
+
+    const beforeMarker = buildAutocompleteInputFromText({
+      text: cppText,
+      offset: cppText.indexOf("题目：P5711"),
+      language: "cpp",
+      filePath: "practice/luogu/P5711.cpp"
+    });
+    expect(beforeMarker.prefix).toBe("");
+    expect(beforeMarker.suffix).toBe("");
+
+    const afterMarker = buildAutocompleteInputFromText({
+      text: cppText,
+      offset: cppText.length,
+      language: "cpp",
+      filePath: "practice/luogu/P5711.cpp"
+    });
+    expect(afterMarker.prefix).toBe("");
+  });
 });

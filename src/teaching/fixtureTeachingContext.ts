@@ -16,6 +16,34 @@ const PROBLEM_SUMMARIES: Record<string, { title: string; summary: string }> = {
   P1364: {
     title: "医院设置",
     summary: "Given weighted tree nodes and child edges, choose a hospital node minimizing weighted edge distance."
+  },
+  P1427: {
+    title: "小鱼的数字游戏",
+    summary: "Read integers until sentinel 0 and print the valid numbers in reverse order."
+  },
+  P5711: {
+    title: "闰年判断",
+    summary: "Determine whether a given year is a leap year under 4, 100, and 400 divisibility rules."
+  },
+  P2249: {
+    title: "查找",
+    summary: "Use binary search on a non-decreasing array to return the 1-based index of the first occurrence of each query."
+  },
+  P1601: {
+    title: "A+B Problem（高精）",
+    summary: "Add two non-negative big integers given as decimal strings without overflow or truncation."
+  },
+  P2240: {
+    title: "部分背包问题",
+    summary: "Select fractional gold piles up to capacity T to maximize total value formatted to two decimal places."
+  },
+  P1551: {
+    title: "亲戚",
+    summary: "Maintain transitive relative relations and answer connectivity queries with Yes/No."
+  },
+  P5318: {
+    title: "查找文献",
+    summary: "Traverse a directed graph from vertex 1 using smallest-index neighbor order for DFS and BFS."
   }
 };
 
