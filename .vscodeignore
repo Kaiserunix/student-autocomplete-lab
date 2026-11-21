@@ -1,0 +1,15 @@
+.vscode/**
+.git/**
+src/**
+test/**
+scripts/**
+node_modules/**
+*.ts
+*.map
+tsconfig.json
+vitest.config.ts
+esbuild.config.mjs
+.gitignore
+.runtime/**
+.algo-coach/**
+practice/**
