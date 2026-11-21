@@ -1,0 +1,34 @@
+{
+  "problem_id": "P5318",
+  "reference_solution": "import sys\nfrom collections import deque\n\nsys.setrecursionlimit(200000)\ndata = list(map(int, sys.stdin.buffer.read().split()))\nn, m = data[0], data[1]\ng = [[] for _ in range(n + 1)]\npos = 2\nfor _ in range(m):\n    u, v = data[pos], data[pos + 1]\n    pos += 2\n    g[u].append(v)\n\nfor u in range(1, n + 1):\n    g[u].sort()\n\ndfs_vis = [False] * (n + 1)\ndfs_order = []\n\ndef dfs(u):\n    dfs_vis[u] = True\n    dfs_order.append(str(u))\n    for v in g[u]:\n        if not dfs_vis[v]:\n            dfs(v)\n\ndfs(1)\n\nbfs_vis = [False] * (n + 1)\nbfs_vis[1] = True\nbfs_order = []\nq = deque([1])\nwhile q:\n    u = q.popleft()\n    bfs_order.append(str(u))\n    for v in g[u]:\n        if not bfs_vis[v]:\n            bfs_vis[v] = True\n            q.append(v)\n\nprint(' '.join(dfs_order))\nprint(' '.join(bfs_order))\n",
+  "wrong_submissions": [
+    {
+      "code": "import sys\nfrom collections import deque\n\ndata = list(map(int, sys.stdin.buffer.read().split()))\nn, m = data[0], data[1]\ng = [[] for _ in range(n + 1)]\npos = 2\nfor _ in range(m):\n    u, v = data[pos], data[pos + 1]\n    pos += 2\n    g[u].append(v)\n    g[v].append(u)\n\nfor u in range(1, n + 1):\n    g[u].sort()\n\ndfs_vis = [False] * (n + 1)\ndfs_order = []\n\ndef dfs(u):\n    dfs_vis[u] = True\n    dfs_order.append(str(u))\n    for v in g[u]:\n        if not dfs_vis[v]:\n            dfs(v)\n\ndfs(1)\nbfs_vis = [False] * (n + 1)\nbfs_vis[1] = True\nbfs_order = []\nq = deque([1])\nwhile q:\n    u = q.popleft()\n    bfs_order.append(str(u))\n    for v in g[u]:\n        if not bfs_vis[v]:\n            bfs_vis[v] = True\n            q.append(v)\nprint(' '.join(dfs_order))\nprint(' '.join(bfs_order))\n",
+      "expected_error": "Adds undirected reverse edges g[v].append(u) on a directed graph, traversing edges backward against the edge direction.",
+      "pain_points": [
+        "graph_adjacency_model"
+      ]
+    },
+    {
+      "code": "import sys\nfrom collections import deque\n\ndata = list(map(int, sys.stdin.buffer.read().split()))\nn, m = data[0], data[1]\ng = [[] for _ in range(n + 1)]\npos = 2\nfor _ in range(m):\n    u, v = data[pos], data[pos + 1]\n    pos += 2\n    g[u].append(v)\n\ndfs_vis = [False] * (n + 1)\ndfs_order = []\n\ndef dfs(u):\n    dfs_vis[u] = True\n    dfs_order.append(str(u))\n    for v in g[u]:\n        if not dfs_vis[v]:\n            dfs(v)\n\ndfs(1)\nbfs_vis = [False] * (n + 1)\nbfs_vis[1] = True\nbfs_order = []\nq = deque([1])\nwhile q:\n    u = q.popleft()\n    bfs_order.append(str(u))\n    for v in g[u]:\n        if not bfs_vis[v]:\n            bfs_vis[v] = True\n            q.append(v)\nprint(' '.join(dfs_order))\nprint(' '.join(bfs_order))\n",
+      "expected_error": "Omits sorting neighbor lists before DFS/BFS, violating the smallest-vertex-first traversal rule.",
+      "pain_points": [
+        "graph_adjacency_model"
+      ]
+    },
+    {
+      "code": "import sys\nfrom collections import deque\n\ndata = list(map(int, sys.stdin.buffer.read().split()))\nn, m = data[0], data[1]\ng = [[] for _ in range(n + 1)]\npos = 2\nfor _ in range(m):\n    u, v = data[pos], data[pos + 1]\n    pos += 2\n    g[u].append(v)\n\nfor u in range(1, n + 1):\n    g[u].sort()\n\ndfs_vis = [False] * (n + 1)\ndfs_order = []\n\ndef dfs(u):\n    dfs_vis[u] = True\n    dfs_order.append(str(u))\n    for v in g[u]:\n        if not dfs_vis[v]:\n            dfs(v)\n\ndfs(1)\nbfs_order = []\nq = deque([1])\nseen = set()\nwhile q:\n    u = q.popleft()\n    bfs_order.append(str(u))\n    seen.add(u)\n    for v in g[u]:\n        if v not in seen:\n            q.append(v)\nprint(' '.join(dfs_order))\nprint(' '.join(bfs_order))\n",
+      "expected_error": "Marks visited on pop instead of when pushing onto the BFS queue, enqueuing and printing shared neighbors multiple times.",
+      "pain_points": [
+        "search_state_pruning"
+      ]
+    }
+  ],
+  "skill_update_candidate": {
+    "name": "graph-adjacency-model",
+    "rules": [
+      "Keep directed vs undirected edge insertion aligned with the problem's graph model and sort adjacency lists if traversal order is specified.",
+      "Mark graph nodes visited when pushing onto the BFS queue to avoid duplicate visits and cycles."
+    ]
+  }
+}

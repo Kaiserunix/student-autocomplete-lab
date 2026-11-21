@@ -70,4 +70,19 @@ describe("autocomplete output policy", () => {
       suggestion: "return value"
     });
   });
+
+  test("rejects closing boundary tags, spoiler labels, and conversational preambles", () => {
+    expect(validateAutocompleteOutput("</prefix>\nreturn 0;", 3, "cpp")).toMatchObject({
+      status: "validator-rejected",
+      rejectionReason: "context-marker"
+    });
+    expect(validateAutocompleteOutput("// 标程：\nreturn 0;", 3, "cpp")).toMatchObject({
+      status: "validator-rejected",
+      rejectionReason: "context-marker"
+    });
+    expect(validateAutocompleteOutput("Sure, here is the solution:\nreturn 0;", 3, "cpp")).toMatchObject({
+      status: "validator-rejected",
+      rejectionReason: "explanation"
+    });
+  });
 });

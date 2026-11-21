@@ -1,0 +1,34 @@
+{
+  "problem_id": "P1551",
+  "reference_solution": "import sys\n\ndata = list(map(int, sys.stdin.buffer.read().split()))\nn, m, p = data[0], data[1], data[2]\nparent = list(range(n + 1))\n\ndef find(x):\n    while parent[x] != x:\n        parent[x] = parent[parent[x]]\n        x = parent[x]\n    return x\n\npos = 3\nfor _ in range(m):\n    a, b = data[pos], data[pos + 1]\n    pos += 2\n    ra, rb = find(a), find(b)\n    if ra != rb:\n        parent[ra] = rb\n\nout = []\nfor _ in range(p):\n    a, b = data[pos], data[pos + 1]\n    pos += 2\n    out.append('Yes' if find(a) == find(b) else 'No')\n\nprint('\\n'.join(out))\n",
+  "wrong_submissions": [
+    {
+      "code": "import sys\n\ndata = list(map(int, sys.stdin.buffer.read().split()))\nn, m, p = data[0], data[1], data[2]\npairs = set()\npos = 3\nfor _ in range(m):\n    a, b = data[pos], data[pos + 1]\n    pos += 2\n    pairs.add((a, b))\n    pairs.add((b, a))\n\nout = []\nfor _ in range(p):\n    a, b = data[pos], data[pos + 1]\n    pos += 2\n    out.append('Yes' if a == b or (a, b) in pairs else 'No')\n\nprint('\\n'.join(out))\n",
+      "expected_error": "Checks only direct pairwise edges instead of transitive equivalence-class connectivity via Disjoint Set Union.",
+      "pain_points": [
+        "disjoint_set_union_semantics"
+      ]
+    },
+    {
+      "code": "import sys\n\ndata = list(map(int, sys.stdin.buffer.read().split()))\nn, m, p = data[0], data[1], data[2]\nparent = list(range(n + 1))\n\ndef find(x):\n    while parent[x] != x:\n        x = parent[x]\n    return x\n\npos = 3\nfor _ in range(m):\n    a, b = data[pos], data[pos + 1]\n    pos += 2\n    parent[a] = b\n\nout = []\nfor _ in range(p):\n    a, b = data[pos], data[pos + 1]\n    pos += 2\n    out.append('Yes' if find(a) == find(b) else 'No')\n\nprint('\\n'.join(out))\n",
+      "expected_error": "Links raw nodes parent[a] = b directly instead of merging their roots parent[find(a)] = find(b), splitting connected components.",
+      "pain_points": [
+        "disjoint_set_union_semantics"
+      ]
+    },
+    {
+      "code": "import sys\n\ndata = list(map(int, sys.stdin.buffer.read().split()))\nn, m, p = data[0], data[1], data[2]\nparent = list(range(n + 1))\n\ndef find(x):\n    while parent[x] != x:\n        x = parent[x]\n    return x\n\npos = 3\nfor _ in range(m):\n    a, b = data[pos], data[pos + 1]\n    pos += 2\n    ra, rb = find(a), find(b)\n    if ra != rb:\n        parent[ra] = rb\n\nout = []\nfor _ in range(p):\n    a, b = data[pos], data[pos + 1]\n    pos += 2\n    out.append('Yes' if parent[a] == parent[b] else 'No')\n\nprint('\\n'.join(out))\n",
+      "expected_error": "Compares direct parent[a] == parent[b] instead of root find(a) == find(b) during queries, missing multi-hop components.",
+      "pain_points": [
+        "disjoint_set_union_semantics"
+      ]
+    }
+  ],
+  "skill_update_candidate": {
+    "name": "disjoint-set-union-model",
+    "rules": [
+      "Always call find() on both endpoints before merging roots or testing equivalence-class connectivity.",
+      "Model transitive relationships with root-based union-find rather than a set of direct edges."
+    ]
+  }
+}

@@ -17,9 +17,10 @@ export interface AutocompleteValidationResult {
   rejectionReason?: AutocompleteRejectionReason;
 }
 
-const EXPLANATION = /^(?:(?:here(?:'s| is)|explanation|the code)\b|下面|解释|代码如下)/i;
+const EXPLANATION =
+  /^(?:(?:here(?:'s| is)|explanation|the code|sure|certainly|of course|below is)\b|下面|解释|代码如下|以下是|完整代码)/i;
 const CONTEXT_MARKER =
-  /<(?:prefix|suffix|skill-policy|system)>|(?:problem statement|reference answer|teacher pack|标准答案|参考答案|题面)|(?:^|\n)\s*(?:#|\/\/)?\s*problem\s*:/i;
+  /<\/?(?:prefix|suffix|skill-policy|system|learner-tail|action-output-footer|untrusted_student_code|untrusted_student_request)>|(?:problem statement|reference answer|reference code|standard solution|accepted code|ac code|teacher pack|标准答案|参考答案|参考代码|完整\s*ac\s*代码|题解|标程|题面)|(?:^|\n)\s*(?:#|\/\/)?\s*problem\s*:|(?:you are a student-safe|do not solve full problems|ignore problem titles|return only a short local continuation)|\b(?:sk-[A-Za-z0-9_-]{12,}|gh[pousr]_[A-Za-z0-9_]{12,})\b|[A-Za-z]:(?:\\\\|\\|\/)Users(?:\\\\|\\|\/)|(?:^|[\s"'`(])\/(?:Users|home)\/[A-Za-z0-9._-]+\//i;
 
 export function validateAutocompleteOutput(
   raw: string,
