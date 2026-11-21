@@ -88,6 +88,8 @@ export async function requestMimoOptimizationReport(
   }
 }
 
+export const requestOptimizationReport = requestMimoOptimizationReport;
+
 export function parseOptimizationReport(text: string): OptimizationReport {
   const raw = JSON.parse(extractJson(text)) as RawOptimizationReport;
   const verdict = parseVerdict(raw.verdict);

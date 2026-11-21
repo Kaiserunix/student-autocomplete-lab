@@ -1,18 +1,25 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import * as path from "node:path";
 import * as vscode from "vscode";
-import { appendAttemptEventToSession, ensureAttemptSession, loadAttemptSessions } from "../attempt/store";
+import {
+  appendAttemptEventToSession,
+  ensureAttemptSession,
+  loadAttemptSession,
+  loadAttemptSessions
+} from "../attempt/store";
 import type { AttemptStorePaths, CoachThreadTurn } from "../attempt/schema";
 import { problemRefFromRecord } from "../attempt/session";
 import { buildAutocompleteInputFromText, extractStudentCodeFromText } from "../autocomplete/context";
-import { requestMimoAutocompleteDetailed } from "../autocomplete/mimoAutocomplete";
 import type { CodexServices } from "../codex/codexServices";
 import { sanitizeCodexPublicError } from "../codex/codexAuthService";
-import type { CodexModelService, CodexModelsView } from "../codex/codexModelService";
+import type { CodexModelsView } from "../codex/codexModelService";
 import {
+  normalizeAutocompleteFormat,
+  normalizeProviderMode,
+  resolveSavedApiKeyForMode,
+  resolveSavedBaseUrlForMode,
   type AiConfigView,
   type AiProviderConfigUpdate,
-  type AiProviderMode,
   type ModelEnv
 } from "../config/modelEnv";
 import {
@@ -25,9 +32,19 @@ import {
   type InternalTestEventInput,
   type InternalTestRecorder
 } from "../internalTesting/internalTestRecorder";
-import { requestChatCompletionText, type ChatCompletionProviderConfig } from "../models/chatCompletionsClient";
-import type { CompletionProviderConfig } from "../models/completionsClient";
+import type { ChatCompletionProviderConfig } from "../models/chatCompletionsClient";
+import {
+  applyAiConfigUpdateForHealthCheck,
+  collectKnownSecrets,
+  runAutocompleteSmokeHealthCheck,
+  runChatSmokeHealthCheck,
+  runModelListHealthCheck
+} from "../models/modelHealthCheck";
 import { listProviderModels } from "../models/providerModelsClient";
+import {
+  createAutocompleteModelAdapter,
+  createTeachingModelAdapter
+} from "../models/providerAdapter";
 import { routeAutocompleteModel, routeTeachingModel } from "../models/modelRouter";
 import type { ModelTextTransport } from "../models/modelTextTransport";
 import { toPublicSkillPlanAudit } from "../skills/auditView";
@@ -54,19 +71,13 @@ import { checkOnlineJudgeTools, submitWithOnlineJudgeTools } from "../submission
 import { getSubmissionPlatformCapability, parseSubmissionTarget } from "../submission/submissionTarget";
 import type { EditorSubmissionIdentity, OjSubmissionResult, SubmissionPlatform } from "../submission/types";
 import { buildAttemptEvent, summarizeAttemptEvents, type AttemptEvent } from "../teaching/attemptEvent";
-import { requestMimoCoachFollowUpWithSkills } from "../teaching/coachFollowUp";
-import { requestMimoLessonReport } from "../teaching/lessonReport";
 import { buildLuoguMcpRecommendationCandidates } from "../teaching/luoguMcpRecommendationCandidates";
-import { requestMimoTeachingDiagnosisWithSkills } from "../teaching/mimoTeacher";
-import { requestMimoOptimizationReport, type OptimizationReport } from "../teaching/optimizationReport";
 import {
   mergeRecommendationCandidates,
   recommendationCandidatesFromProblems
 } from "../recommendation/candidatePool";
 import { recommendNextProblems } from "../recommendation/rules";
-import { requestMimoSolutionScore } from "../teaching/solutionScore";
-import { hasSubstantiveStudentCode, normalizeScoreOjVerdict } from "../teaching/solutionScoreGate";
-import { applyTeachingDiagnosis, profileSummary, type StudentProfile } from "../teaching/studentProfile";
+import { profileSummary, type StudentProfile } from "../teaching/studentProfile";
 import { loadStudentProfile, saveStudentProfile } from "../teaching/studentProfileStore";
 import {
   applyStudentSkillPatch,
@@ -82,17 +93,26 @@ import {
   rollbackStudentSkill,
   saveStudentSkill
 } from "../teaching/studentSkillStore";
-import { requestMimoSubmissionJudge } from "../teaching/submissionJudge";
-import type { TeachingPainPoint } from "../teaching/teachingReport";
 import {
   findTeacherPack,
-  requestMimoTeacherPack,
+  requestTeacherPack,
   toTeacherPackReference,
   upsertTeacherPack,
   type TeacherPackRecord
 } from "../teaching/teacherPack";
 import type { OjVerdict } from "../teaching/types";
-import { runCoachDiagnosisWorkflow } from "../teaching/workflow/actions";
+import {
+  runCoachDiagnosisWorkflow,
+  runCoachFollowUpWorkflow,
+  runLessonReportWorkflow,
+  runOptimizationReviewWorkflow,
+  runSolutionScoreWorkflow,
+  runSubmissionJudgeWorkflow
+} from "../teaching/workflow/actions";
+import {
+  describeCoachActionPurpose,
+  mergeCoachRequestPurpose
+} from "../teaching/workflow/pedagogyPolicy";
 import type { HostEvent } from "./hostEvents";
 import { localizeTeachingDiagnosisReport } from "./localizeTeachingReport";
 import { buildManualProblemFromMarkdownFile } from "./manualMarkdownImport";
@@ -115,7 +135,6 @@ import { buildSidebarTeachingContext } from "./sidebarTeachingContext";
 import { createWebviewNonce } from "./html";
 import type {
   AiHealthCheckResult,
-  AiHealthCheckStep,
   AiRuntimeStatus,
   ProblemBankStateView,
   SavedProblemRecord,
@@ -645,11 +664,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
   private async handleSaveAiConfigRequest(config: AiProviderConfigUpdate): Promise<Record<string, unknown>> {
     await saveAiConfigToVsCode(this.context, {
-      mode: normalizeAiProviderMode(config.mode),
+      mode: normalizeProviderMode(config.mode),
       authMode: config.authMode,
       baseUrl: config.baseUrl?.trim() ?? "",
       autocompleteBaseUrl: config.autocompleteBaseUrl?.trim() ?? "",
       apiKey: config.apiKey,
+      autocompleteApiKey: config.autocompleteApiKey,
       chatModel: config.chatModel?.trim() ?? "",
       autocompleteModel: config.autocompleteModel?.trim() ?? "",
       autocompleteFormat: normalizeAutocompleteFormat(config.autocompleteFormat)
@@ -709,10 +729,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async handleFetchAiModelsRequest(config: AiProviderConfigUpdate): Promise<Record<string, unknown>> {
-    const mode = normalizeAiProviderMode(config.mode);
+    const mode = normalizeProviderMode(config.mode);
     const env = await this.loadRuntimeModelEnv();
-    const baseUrl = config.baseUrl?.trim() || savedBaseUrlForMode(env, mode);
-    const apiKey = config.apiKey?.trim() || savedApiKeyForMode(env, mode);
+    const baseUrl = config.baseUrl?.trim() || resolveSavedBaseUrlForMode(env, mode);
+    const apiKey = config.apiKey?.trim() || resolveSavedApiKeyForMode(env, mode, "analysis");
 
     if (!baseUrl) {
       throw new Error("请先填写接口地址 Base URL，再拉取模型。");
@@ -748,7 +768,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async handleRunAiHealthCheckRequest(config: AiProviderConfigUpdate): Promise<Record<string, unknown>> {
-    const mode = normalizeAiProviderMode(config.mode);
+    const mode = normalizeProviderMode(config.mode);
     const baseEnv = await this.loadRuntimeModelEnv();
     const env = applyAiConfigUpdateForHealthCheck(baseEnv, config);
     const knownSecrets = collectKnownSecrets(baseEnv, env, config);
@@ -960,12 +980,18 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       await this.loadRuntimeModelEnv(),
       this.codexServices.text
     );
+    const adapter = createTeachingModelAdapter(route);
     const config = route.config;
     const profile = await loadStudentProfile(this.profilePath());
     const studentSkill = await this.loadStudentSkillForProfile(profile);
+    const attemptStats = summarizeAttemptEvents(await this.loadAttemptEvents(), problemKey);
+    const session = await loadAttemptSession(this.attemptSessionsPath(), problemKey);
     let coachSkillAudit: SkillPlanAudit | undefined;
     const teacherPack = await this.ensureTeacherPack(problem, config);
     const occurredAt = new Date().toISOString();
+    const basePurpose = describeCoachActionPurpose(action, responseLanguage, {
+      hintCount: attemptStats.hintCount
+    });
     const context = buildSidebarTeachingContext({
       problem,
       teacherPack: teacherPack ? toTeacherPackReference(teacherPack) : undefined,
@@ -973,14 +999,20 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       studentCode: extractStudentCodeFromText(editor.document.getText()),
       profileSummary: studentSkillSummaryForTeaching(studentSkill),
       ojVerdict,
-      requestPurpose: mergeRequestPurpose(describeAiCoachAction(action, responseLanguage), studentRequest, previousCoachTurn),
+      requestPurpose: mergeCoachRequestPurpose(
+        basePurpose,
+        studentRequest,
+        previousCoachTurn,
+        session?.coachThread
+      ),
       responseLanguage: responseLanguage === "zh" ? "zh-CN" : responseLanguage === "en" ? "en-US" : "raw"
     });
 
     if (action === "followUp") {
-      const followUpReport = await requestMimoCoachFollowUpWithSkills(
-        config,
-        {
+      const followUpResult = await runCoachFollowUpWorkflow({
+        problemKey,
+        platform: problem.platform,
+        context: {
           problem: context.problem,
           teacherPack: context.teacherPack,
           language: context.language,
@@ -990,51 +1022,34 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
           previousCoachTurn,
           responseLanguage: context.responseLanguage
         },
-        {
-          studentSkill,
-          capabilities: route.capabilities,
-          onAudit: (audit) => {
-            coachSkillAudit = audit;
-          }
-        }
-      );
-      const event = buildAttemptEvent({
-          problemKey,
-          problemId: problem.id,
-          platform: problem.platform,
-          kind: actionToAttemptEventKind(action),
-          occurredAt,
-          action,
-          painPoints: [],
-          model: config.model
-        });
-      await this.appendAttemptEvent(problem, event, [
-        {
-          role: "student",
-          kind: event.kind,
-          text: studentRequest?.trim() || "请把上一条提示讲得更详细但更容易懂。",
-          occurredAt
-        },
-        {
-          role: "assistant",
-          kind: event.kind,
-          text: compactMultiline([followUpReport.answer, followUpReport.tinyExample, followUpReport.nextAction]),
-          occurredAt,
-          model: config.model
-        }
-      ]
-      );
+        studentSkill,
+        occurredAt,
+        model: adapter.model,
+        hintCount: attemptStats.hintCount,
+        responseLanguage,
+        followUp: (followUpContext) =>
+          adapter.followUp(followUpContext, {
+            studentSkill,
+            onAudit: (audit) => {
+              coachSkillAudit = audit;
+            }
+          })
+      });
+      const event = buildAttemptEvent(followUpResult.attemptEventInput);
+      await this.appendAttemptEvent(problem, event, followUpResult.coachThreadTurns);
       await this.recordInternalTestEvent({
         kind: "ai_coach",
         problemKey,
         problemId: problem.id,
         platform: problem.platform,
         action,
-        model: config.model,
+        model: adapter.model,
         payload: {
           followUpOnly: true,
+          hintStage: followUpResult.hintStage,
           hasPreviousCoachTurn: Boolean(previousCoachTurn?.trim()),
           hasStudentRequest: Boolean(studentRequest?.trim()),
+          workflowAudit: followUpResult.audit,
           coachSkillAudit
         }
       });
@@ -1046,8 +1061,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         type: "coachFollowUp",
         action,
         problemKey,
-        model: config.model,
-        report: followUpReport,
+        model: adapter.model,
+        hintStage: followUpResult.hintStage,
+        report: followUpResult.report,
+        workflowAudit: followUpResult.audit,
         skillAudit,
         status: `AI 已回答 ${problem.id} 的追问。`
       };
@@ -1061,46 +1078,29 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       profile,
       studentSkill,
       occurredAt,
-      patchSource: config.model,
+      patchSource: adapter.model,
+      hintCount: attemptStats.hintCount,
+      studentRequest,
+      responseLanguage,
       diagnose: (diagnosisContext) =>
-        requestMimoTeachingDiagnosisWithSkills(
-          config,
-          diagnosisContext,
-          {
-            studentSkill,
-            action,
-            capabilities: route.capabilities,
-            onAudit: (audit) => {
-              coachSkillAudit = audit;
-            }
+        adapter.diagnose(diagnosisContext, {
+          studentSkill,
+          action,
+          onAudit: (audit) => {
+            coachSkillAudit = audit;
           }
-        )
+        })
     });
     await saveStudentProfile(this.profilePath(), result.updatedProfile);
     await saveStudentSkill(this.studentSkillPath(), result.updatedStudentSkill);
     await archiveStudentSkillVersion(
       this.studentSkillVersionsDir(),
       result.updatedStudentSkill,
-      `${action} ${problem.id} via ${config.model}`,
+      `${action} ${problem.id} via ${adapter.model}`,
       occurredAt
     );
     const event = buildAttemptEvent(result.attemptEventInput);
-    await this.appendAttemptEvent(problem, event, [
-      {
-        role: "student",
-        kind: event.kind,
-        text: studentRequest?.trim() || describeAiCoachAction(action, responseLanguage),
-        occurredAt
-      },
-      {
-        role: "assistant",
-        kind: event.kind,
-        text: compactMultiline([result.report.hint, result.report.specificHint, result.report.checkpoint]),
-        occurredAt,
-        model: config.model
-      }
-    ]
-    );
+    await this.appendAttemptEvent(problem, event, result.coachThreadTurns);
     await this.recordInternalTestEvent({
       kind: "ai_coach",
       problemKey,
@@ -1108,8 +1108,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       platform: problem.platform,
       action,
       painPoints: result.report.painPoints.map((painPoint) => painPoint.label),
-      model: config.model,
+      model: adapter.model,
       payload: {
+        hintStage: result.hintStage,
         candidateSkill: result.report.skillUpdate?.candidate,
         skillMergeChangeCount: result.studentSkillMerge.changeSummary.length,
         workflowAudit: result.audit,
@@ -1124,7 +1125,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       type: "teachingDiagnosis",
       action,
       problemKey,
-      model: config.model,
+      model: adapter.model,
+      hintStage: result.hintStage,
       report: result.report,
       localizedReport: localizeTeachingDiagnosisReport(result.report),
       profileSummary: profileSummary(result.updatedProfile),
@@ -1349,103 +1351,97 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     const occurredAt = new Date().toISOString();
-    const config = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text).config;
+    const route = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text);
+    const adapter = createTeachingModelAdapter(route);
     const profile = await loadStudentProfile(this.profilePath());
+    const studentSkill = await this.loadStudentSkillForProfile(profile);
     const attemptStats = summarizeAttemptEvents(await this.loadAttemptEvents(), problemKey);
+    const session = await loadAttemptSession(this.attemptSessionsPath(), problemKey);
+    const teacherPack = await this.ensureTeacherPack(problem, route.config);
     const teachingContext = buildSidebarTeachingContext({
       problem,
+      teacherPack: teacherPack ? toTeacherPackReference(teacherPack) : undefined,
       language: editor.document.languageId,
       studentCode: extractStudentCodeFromText(editor.document.getText()),
-      profileSummary: profileSummary(profile),
-      requestPurpose: mergeRequestPurpose("学生点击「我放弃了」：进入讲解/补救阶段。", studentRequest),
+      profileSummary: studentSkillSummaryForTeaching(studentSkill),
+      requestPurpose: mergeCoachRequestPurpose(
+        "学生点击「我放弃了」：进入讲解/补救阶段。",
+        studentRequest,
+        undefined,
+        session?.coachThread
+      ),
       responseLanguage: "zh-CN"
     });
-    const report = await requestMimoLessonReport(config, {
-      problem: teachingContext.problem,
-      language: teachingContext.language,
-      studentCode: teachingContext.studentCode,
-      studentProfile: teachingContext.studentProfile,
-      studentRequest,
-      hintCount: attemptStats.hintCount
-    });
-    const updatedProfile = applyTeachingDiagnosis(
-      profile,
-      {
-        painPoints: report.painPoints,
-        hint: report.minimalFixPath[0] ?? report.standardApproach,
-        recommendation: report.remedialExercise.problemId
-          ? {
-              problemId: report.remedialExercise.problemId,
-              reason: report.remedialExercise.reason
-            }
-          : undefined
+    const lessonResult = await runLessonReportWorkflow({
+      problemKey,
+      platform: problem.platform,
+      context: {
+        problem: teachingContext.problem,
+        language: teachingContext.language,
+        studentCode: teachingContext.studentCode,
+        studentProfile: teachingContext.studentProfile,
+        studentRequest,
+        hintCount: attemptStats.hintCount
       },
+      profile,
+      studentSkill,
+      occurredAt,
+      patchSource: adapter.model,
+      hasTeacherPack: Boolean(teacherPack),
+      generateLesson: (lessonContext) => adapter.generateLessonReport(lessonContext)
+    });
+    await saveStudentProfile(this.profilePath(), lessonResult.updatedProfile);
+    await saveStudentSkill(this.studentSkillPath(), lessonResult.updatedStudentSkill);
+    await archiveStudentSkillVersion(
+      this.studentSkillVersionsDir(),
+      lessonResult.updatedStudentSkill,
+      `giveUp ${problem.id} via ${adapter.model}`,
       occurredAt
     );
-    await saveStudentProfile(this.profilePath(), updatedProfile);
 
     const archivedProblem = buildCompletedProblemRecord({
       problem,
       completedAt: occurredAt,
-      reason: report.archiveReason,
-      painSnapshot: profileSummary(updatedProfile),
-      lessonReport: report
+      reason: lessonResult.report.archiveReason,
+      painSnapshot: profileSummary(lessonResult.updatedProfile),
+      lessonReport: lessonResult.report
     });
     await writeJsonlRecords(this.problemsPath(), removeProblemFromActiveQueue(await this.loadSavedProblems(), problemKey));
     await this.upsertCompletedProblems([archivedProblem]);
     await this.appendAttemptEvent(
       problem,
-      buildAttemptEvent({
-        problemKey,
-        problemId: problem.id,
-        platform: problem.platform,
-        kind: "lesson_reported",
-        outcome: report.archiveReason,
-        occurredAt,
-        painPoints: report.painPoints.map((painPoint) => painPoint.label),
-        model: config.model
-      }),
-      [
-        {
-          role: "student",
-          kind: "lesson_reported",
-          text: studentRequest?.trim() || "我放弃了，需要讲解/补救。",
-          occurredAt
-        },
-        {
-          role: "assistant",
-          kind: "lesson_reported",
-          text: compactMultiline([report.standardApproach, ...report.minimalFixPath]),
-          occurredAt,
-          model: config.model
-        }
-      ]
+      buildAttemptEvent(lessonResult.attemptEventInput),
+      lessonResult.coachThreadTurns
     );
     await this.recordInternalTestEvent({
       kind: "lesson_report",
       problemKey,
       problemId: problem.id,
       platform: problem.platform,
-      outcome: report.archiveReason,
-      painPoints: report.painPoints.map((painPoint) => painPoint.label),
-      model: config.model,
+      outcome: lessonResult.report.archiveReason,
+      painPoints: lessonResult.report.painPoints.map((painPoint) => painPoint.label),
+      model: adapter.model,
       payload: {
         hintCount: attemptStats.hintCount,
-        remedialExercise: report.remedialExercise.problemId
+        remedialExercise: lessonResult.report.remedialExercise.problemId,
+        skillMergeChangeCount: lessonResult.studentSkillMerge.changeSummary.length,
+        workflowAudit: lessonResult.audit
       }
     });
 
     return this.problemBankState(problemKey, `AI 已生成 ${problem.id} 的讲解/补救报告，并归档为错题。`, {
       lessonReport: {
         problem: { id: problem.id, title: problem.title },
-        model: config.model,
-        report
+        model: adapter.model,
+        report: lessonResult.report,
+        workflowAudit: lessonResult.audit,
+        studentSkillMerge: lessonResult.studentSkillMerge
       },
       archivedProblem: {
         ...archivedProblem,
         painSummary: summarizePainSnapshot(archivedProblem.painSnapshot)
       },
-      profileSummary: profileSummary(updatedProfile)
+      profileSummary: profileSummary(lessonResult.updatedProfile)
     });
   }
 
@@ -1474,66 +1470,69 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     const occurredAt = new Date().toISOString();
-    const config = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text).config;
+    const route = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text);
+    const adapter = createTeachingModelAdapter(route);
     const profile = await loadStudentProfile(this.profilePath());
+    const studentSkill = await this.loadStudentSkillForProfile(profile);
     const attemptStats = summarizeAttemptEvents(await this.loadAttemptEvents(), problemKey);
+    const session = await loadAttemptSession(this.attemptSessionsPath(), problemKey);
     const studentCode = extractStudentCodeFromText(editor.document.getText());
-    const safeOjVerdict = normalizeScoreOjVerdict(ojVerdict);
-    if (!hasSubstantiveStudentCode(studentCode)) {
-      throw new Error("当前学生代码看起来还是模板或空 pass，不能做学习评分。先写一点真实代码；如果已经卡住，请用“给点提示”或“我放弃了”。");
-    }
     const teachingContext = buildSidebarTeachingContext({
       problem,
       language: editor.document.languageId,
       studentCode,
-      profileSummary: profileSummary(profile),
-      ojVerdict: safeOjVerdict,
-      requestPurpose: mergeRequestPurpose(
+      profileSummary: studentSkillSummaryForTeaching(studentSkill),
+      ojVerdict,
+      requestPurpose: mergeCoachRequestPurpose(
         isCompletionReview
           ? "学生点击「我已完成」：这是完成后复盘。请回顾题目上下文、当前编辑器代码、提示次数、是否放弃/看答案和学生历史画像，更新这次做题反映出的学习画像。OJ 结果可能未提交或不确定；不要假装官方 AC，但仍要给学习评分、痛点和下一步。"
           : isArchivedReview
             ? "已归档题目的学习评分：请基于当前编辑器代码、题目上下文和历史提示，区分 OJ 结果与学习成长价值。"
             : "学生点击「我 AC 了 / 评分」：请区分 OJ AC 与学习评分。",
-        studentRequest
+        studentRequest,
+        undefined,
+        session?.coachThread
       ),
       responseLanguage: "zh-CN"
     });
-    const rawReport = await requestMimoSolutionScore(config, {
+    const scoreResult = await runSolutionScoreWorkflow({
+      problemKey,
+      platform: problem.platform,
       problem: teachingContext.problem,
       language: teachingContext.language,
       studentCode: teachingContext.studentCode,
-      studentProfile: teachingContext.studentProfile,
-      ojVerdict: safeOjVerdict,
+      ojVerdict,
       attemptStats: {
         hintCount: attemptStats.hintCount,
         gaveUp: attemptStats.gaveUp,
         revealedAnswer: attemptStats.revealedAnswer
       },
-      studentRequest
-    });
-    const report = {
-      ...rawReport,
-      ojResult: safeOjVerdict.status
-    };
-    const updatedProfile = applyTeachingDiagnosis(
+      studentRequest,
+      isArchivedReview,
+      isCompletionReview,
       profile,
-      {
-        painPoints: report.painPoints,
-        hint: report.nextAction,
-        recommendation: report.recommendation
-      },
+      studentSkill,
+      occurredAt,
+      patchSource: adapter.model,
+      scoreSolution: (scoreContext) => adapter.scoreSolution(scoreContext)
+    });
+    await saveStudentProfile(this.profilePath(), scoreResult.updatedProfile);
+    await saveStudentSkill(this.studentSkillPath(), scoreResult.updatedStudentSkill);
+    await archiveStudentSkillVersion(
+      this.studentSkillVersionsDir(),
+      scoreResult.updatedStudentSkill,
+      `${isCompletionReview ? "completeReview" : "solutionScore"} ${problem.id} via ${adapter.model}`,
       occurredAt
     );
-    await saveStudentProfile(this.profilePath(), updatedProfile);
 
-    const shouldArchive = (safeOjVerdict.status === "AC" || isCompletionReview) && !isArchivedReview;
+    const { report, shouldArchive } = scoreResult;
     let archivedProblem: CompletedProblemRecord | undefined;
     if (shouldArchive) {
       archivedProblem = buildCompletedProblemRecord({
         problem,
         completedAt: occurredAt,
         reason: "completed",
-        painSnapshot: profileSummary(updatedProfile),
+        painSnapshot: profileSummary(scoreResult.updatedProfile),
         solutionScore: report
       });
       await writeJsonlRecords(this.problemsPath(), removeProblemFromActiveQueue(await this.loadSavedProblems(), problemKey));
@@ -1541,7 +1540,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     } else if (isArchivedReview && existingArchivedProblem) {
       archivedProblem = {
         ...existingArchivedProblem,
-        painSnapshot: profileSummary(updatedProfile),
+        painSnapshot: profileSummary(scoreResult.updatedProfile),
         solutionScore: report
       };
       await this.upsertCompletedProblems([archivedProblem]);
@@ -1549,34 +1548,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     await this.appendAttemptEvent(
       problem,
-      buildAttemptEvent({
-        problemKey,
-        problemId: problem.id,
-        platform: problem.platform,
-        kind: "solution_scored",
-        outcome: isArchivedReview || isCompletionReview ? "completed" : report.ojResult === "AC" ? "ac" : "active",
-        ojStatus: report.ojResult,
-        learningScore: report.learningScore,
-        occurredAt,
-        painPoints: report.painPoints.map((painPoint) => painPoint.label),
-        model: config.model,
-        note: isCompletionReview ? "completion_review" : isArchivedReview ? "archived_review" : undefined
-      }),
-      [
-        {
-          role: "student",
-          kind: "solution_scored",
-          text: studentRequest?.trim() || (isCompletionReview ? "我已完成，进行复盘。" : "请做学习评分。"),
-          occurredAt
-        },
-        {
-          role: "assistant",
-          kind: "solution_scored",
-          text: compactMultiline([report.summary, report.nextAction, report.complexityAssessment.reason]),
-          occurredAt,
-          model: config.model
-        }
-      ]
+      buildAttemptEvent(scoreResult.attemptEventInput),
+      scoreResult.coachThreadTurns
     );
     await this.recordInternalTestEvent({
       kind: "solution_score",
@@ -1587,10 +1560,12 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       ojStatus: report.ojResult,
       learningScore: report.learningScore,
       painPoints: report.painPoints.map((painPoint) => painPoint.label),
-      model: config.model,
+      model: adapter.model,
       payload: {
         completionReview: isCompletionReview,
-        complexityVerdict: report.complexityAssessment.verdict
+        complexityVerdict: report.complexityAssessment.verdict,
+        skillMergeChangeCount: scoreResult.studentSkillMerge.changeSummary.length,
+        workflowAudit: scoreResult.audit
       }
     });
 
@@ -1601,18 +1576,20 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         ? `AI 已完成 ${problem.id} 的完成复盘并更新学习画像。`
         : `AI 已完成 ${problem.id} 的学习评分。`,
       {
-      solutionScore: {
-        problem: { id: problem.id, title: problem.title },
-        model: config.model,
-        report
-      },
-      archivedProblem: archivedProblem
-        ? {
-            ...archivedProblem,
-            painSummary: summarizePainSnapshot(archivedProblem.painSnapshot)
-          }
-        : undefined,
-      profileSummary: profileSummary(updatedProfile)
+        solutionScore: {
+          problem: { id: problem.id, title: problem.title },
+          model: adapter.model,
+          report,
+          workflowAudit: scoreResult.audit,
+          studentSkillMerge: scoreResult.studentSkillMerge
+        },
+        archivedProblem: archivedProblem
+          ? {
+              ...archivedProblem,
+              painSummary: summarizePainSnapshot(archivedProblem.painSnapshot)
+            }
+          : undefined,
+        profileSummary: profileSummary(scoreResult.updatedProfile)
       }
     );
   }
@@ -1632,52 +1609,55 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     const studentCode = extractStudentCodeFromText(editor.document.getText());
-    if (!hasSubstantiveStudentCode(studentCode)) {
-      throw new Error("当前学生代码看起来还是模板或空 pass，不能做优化复盘。先打开真实作答代码。");
-    }
-
     const occurredAt = new Date().toISOString();
-    const config = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text).config;
+    const route = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text);
+    const adapter = createTeachingModelAdapter(route);
     const profile = await loadStudentProfile(this.profilePath());
-    const profileBefore = profileSummary(profile);
+    const studentSkill = await this.loadStudentSkillForProfile(profile);
+    const session = await loadAttemptSession(this.attemptSessionsPath(), problemKey);
     const teachingContext = buildSidebarTeachingContext({
       problem: archivedProblem,
       language: editor.document.languageId,
       studentCode,
-      profileSummary: profileBefore,
-      requestPurpose: mergeRequestPurpose(
+      profileSummary: studentSkillSummaryForTeaching(studentSkill),
+      requestPurpose: mergeCoachRequestPurpose(
         "已归档题目的第二层优化复盘：判断是否值得继续优化算法、内存、Big-O 或代码质量；简单题允许明确说无需优化。",
-        studentRequest
+        studentRequest,
+        undefined,
+        session?.coachThread
       ),
       responseLanguage: "zh-CN"
     });
-    const report = await requestMimoOptimizationReport(config, {
+    const optimizationResult = await runOptimizationReviewWorkflow({
+      problemKey,
+      platform: archivedProblem.platform,
       problem: teachingContext.problem,
       language: teachingContext.language,
       studentCode: teachingContext.studentCode,
       archivedReason: archivedProblem.completionReason,
       previousScoreSummary: summarizePreviousLearning(archivedProblem),
-      studentProfile: teachingContext.studentProfile,
-      studentRequest
+      studentRequest,
+      profile,
+      studentSkill,
+      occurredAt,
+      patchSource: adapter.model,
+      reviewOptimization: (optContext) => adapter.reviewOptimization(optContext)
     });
 
-    const painPoints = optimizationPainPoints(report);
-    const updatedProfile =
-      painPoints.length > 0
-        ? applyTeachingDiagnosis(
-            profile,
-            {
-              painPoints,
-              hint: report.nextStep,
-              skillUpdate: optimizationSkillUpdate(report)
-            },
-            occurredAt
-          )
-        : profile;
-    if (updatedProfile !== profile) {
-      await saveStudentProfile(this.profilePath(), updatedProfile);
+    if (optimizationResult.updatedProfile !== profile) {
+      await saveStudentProfile(this.profilePath(), optimizationResult.updatedProfile);
+    }
+    if (optimizationResult.studentSkillMerge) {
+      await saveStudentSkill(this.studentSkillPath(), optimizationResult.updatedStudentSkill);
+      await archiveStudentSkillVersion(
+        this.studentSkillVersionsDir(),
+        optimizationResult.updatedStudentSkill,
+        `optimization ${archivedProblem.id} via ${adapter.model}`,
+        occurredAt
+      );
     }
 
+    const { report, painPoints, updatedProfile } = optimizationResult;
     const completedWithReport: CompletedProblemRecord = {
       ...archivedProblem,
       painSnapshot: profileSummary(updatedProfile),
@@ -1686,32 +1666,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     await this.upsertCompletedProblems([completedWithReport]);
     await this.appendAttemptEvent(
       archivedProblem,
-      buildAttemptEvent({
-        problemKey,
-        problemId: archivedProblem.id,
-        platform: archivedProblem.platform,
-        kind: "optimization_reviewed",
-        outcome: archivedProblem.completionReason,
-        occurredAt,
-        painPoints: painPoints.map((painPoint) => painPoint.label),
-        model: config.model,
-        note: report.verdict
-      }),
-      [
-        {
-          role: "student",
-          kind: "optimization_reviewed",
-          text: studentRequest?.trim() || "请复盘这道已归档题是否还需要优化。",
-          occurredAt
-        },
-        {
-          role: "assistant",
-          kind: "optimization_reviewed",
-          text: compactMultiline([report.summary, report.nextStep, report.verdict]),
-          occurredAt,
-          model: config.model
-        }
-      ]
+      buildAttemptEvent(optimizationResult.attemptEventInput),
+      optimizationResult.coachThreadTurns
     );
     await this.recordInternalTestEvent({
       kind: "optimization_review",
@@ -1720,26 +1676,31 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       platform: archivedProblem.platform,
       outcome: report.verdict,
       painPoints: painPoints.map((painPoint) => painPoint.label),
-      model: config.model,
+      model: adapter.model,
       payload: {
-        optimizationNeeded: report.optimizationNeeded
+        optimizationNeeded: report.optimizationNeeded,
+        skillMergeChangeCount: optimizationResult.studentSkillMerge?.changeSummary.length ?? 0,
+        workflowAudit: optimizationResult.audit
       }
     });
 
     return {
       type: "optimizationReport",
       problemKey,
-      model: config.model,
+      model: adapter.model,
       optimizationReport: {
         problem: { id: archivedProblem.id, title: archivedProblem.title },
-        model: config.model,
-        report
+        model: adapter.model,
+        report,
+        workflowAudit: optimizationResult.audit
       },
       completedProblem: {
         ...completedWithReport,
         painSummary: summarizePainSnapshot(completedWithReport.painSnapshot)
       },
       profileSummary: profileSummary(updatedProfile),
+      studentSkill: optimizationResult.updatedStudentSkill,
+      studentSkillVersions: await this.studentSkillVersionViews(),
       status:
         report.verdict === "no_need"
           ? `AI 判断 ${archivedProblem.id} 暂时无需继续优化。`
@@ -1789,6 +1750,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       await this.loadRuntimeModelEnv(),
       this.codexServices.text
     );
+    const adapter = createAutocompleteModelAdapter(route);
     const position = editor.selection.active;
     const input = buildAutocompleteInputFromText({
       text: editor.document.getText(),
@@ -1798,10 +1760,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     });
     const profile = await loadStudentProfile(this.profilePath());
     const studentSkill = await this.loadStudentSkillForProfile(profile);
-    const result = await requestMimoAutocompleteDetailed(route.config, {
+    const result = await adapter.completeDetailed({
       ...input,
-      studentSkill,
-      capabilities: route.capabilities
+      studentSkill
     });
     const contextAudit = toPublicSkillPlanAudit(
       "autocomplete_preview",
@@ -1810,7 +1771,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     await this.recordInternalTestEvent({
       kind: "autocomplete_event",
       action: "preview",
-      model: route.model,
+      model: adapter.model,
       payload: {
         language: editor.document.languageId,
         line: position.line + 1,
@@ -1830,7 +1791,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
 
     return {
       type: "autocompletePreview",
-      model: route.model,
+      model: adapter.model,
       suggestion: result.suggestion,
       validationStatus: result.status,
       rejectionReason: result.rejectionReason,
@@ -2058,40 +2019,51 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       throw new Error("先打开你的代码文件，再做 AI 找错复盘。");
     }
 
-    const config = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text).config;
+    const route = routeTeachingModel(await this.loadRuntimeModelEnv(), this.codexServices.text);
+    const adapter = createTeachingModelAdapter(route);
     const profile = await loadStudentProfile(this.profilePath());
+    const studentSkill = await this.loadStudentSkillForProfile(profile);
     const teachingContext = buildSidebarTeachingContext({
       problem,
       language: editor.document.languageId,
       studentCode: extractStudentCodeFromText(editor.document.getText()),
-      profileSummary: profileSummary(profile),
+      profileSummary: studentSkillSummaryForTeaching(studentSkill),
       requestPurpose: isArchivedReview
         ? "已完成后的 AI 找错复盘：从当前编辑器代码、题目上下文和学生历史痛点中找仍可能存在的错误或隐患；不要假装官方 OJ。"
         : "交题前 AI 自检：保守判断当前代码可能 AC、WA、RE、TLE，或者需要先运行样例。",
       responseLanguage: "zh-CN"
     });
-    const report = await requestMimoSubmissionJudge(config, {
-      problem: teachingContext.problem,
-      language: teachingContext.language,
-      studentCode: teachingContext.studentCode,
-      studentProfile: teachingContext.studentProfile
+    const judgeResult = await runSubmissionJudgeWorkflow({
+      problemKey,
+      platform: problem.platform,
+      reviewStage: isArchivedReview ? "archived" : "active",
+      context: {
+        problem: teachingContext.problem,
+        language: teachingContext.language,
+        studentCode: teachingContext.studentCode,
+        studentProfile: teachingContext.studentProfile
+      },
+      model: adapter.model,
+      judgeSubmission: (judgeContext) => adapter.judgeSubmission(judgeContext)
     });
+    const { report } = judgeResult;
     await this.recordInternalTestEvent({
       kind: "submission_judge",
       problemKey,
       problemId: problem.id,
       platform: problem.platform,
-      model: config.model,
+      model: adapter.model,
       outcome: isArchivedReview ? "archived_review" : "active",
       payload: report as unknown as Record<string, unknown>
     });
 
     return {
       type: "submissionJudge",
-      model: config.model,
+      model: adapter.model,
       problemKey,
-      reviewStage: isArchivedReview ? "archived" : "active",
+      reviewStage: judgeResult.reviewStage,
       report,
+      workflowAudit: judgeResult.audit,
       status: isArchivedReview ? `AI 已完成 ${problem.id} 的找错复盘。` : `AI 已完成 ${problem.id} 的交题前自检。`
     };
   }
@@ -2224,7 +2196,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     try {
-      const pack = await requestMimoTeacherPack(config, problem);
+      const pack = await requestTeacherPack(config, problem);
       await upsertTeacherPack(this.teacherPacksPath(), pack);
       return pack;
     } catch {
@@ -4067,6 +4039,10 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
                   <label for="aiApiKey">API Key / 密钥</label>
                   <input id="aiApiKey" type="password" placeholder="留空则保留已保存 key">
                 </div>
+                <div id="aiAutocompleteApiKeyField" class="field wide">
+                  <label for="aiAutocompleteApiKey">补全专用 API Key（可选）</label>
+                  <input id="aiAutocompleteApiKey" type="password" placeholder="留空则复用分析接口 API Key；跨平台补全时可独立保存">
+                </div>
                 <div class="field">
                   <label for="aiChatModel">提示/评分模型</label>
                   <input id="aiChatModel" placeholder="mimo-v2.5">
@@ -4205,6 +4181,8 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     const aiBaseUrl = document.getElementById("aiBaseUrl");
     const aiAutocompleteBaseUrl = document.getElementById("aiAutocompleteBaseUrl");
     const aiApiKey = document.getElementById("aiApiKey");
+    const aiAutocompleteApiKeyField = document.getElementById("aiAutocompleteApiKeyField");
+    const aiAutocompleteApiKey = document.getElementById("aiAutocompleteApiKey");
     const aiChatModel = document.getElementById("aiChatModel");
     const aiAutocompleteModel = document.getElementById("aiAutocompleteModel");
     const aiConfigSavedKey = document.getElementById("aiConfigSavedKey");
@@ -4492,6 +4470,11 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       }
       if (data.type === "optimizationReport") {
         setStatus(data.status || "AI 已完成优化复盘。");
+        if (data.studentSkill) {
+          state.studentSkill = data.studentSkill;
+          state.studentSkillVersions = data.studentSkillVersions ?? state.studentSkillVersions;
+          renderStudentSkill();
+        }
         if (data.completedProblem) {
           upsertCompletedProblem(data.completedProblem);
           renderCompletedList();
@@ -4780,7 +4763,13 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
       aiAutocompleteFormat.value = config.autocompleteFormat || "openai-completions";
       aiApiKey.value = "";
       aiApiKey.placeholder = config.hasApiKey ? "已保存，留空不修改" : "输入 API Key";
-      aiConfigSavedKey.textContent = config.hasApiKey ? "API Key：已保存" : "API Key：未保存";
+      aiAutocompleteApiKey.value = "";
+      aiAutocompleteApiKey.placeholder = config.hasAutocompleteApiKey
+        ? "已保存独立补全密钥，留空不修改"
+        : "留空则复用分析接口 API Key";
+      aiConfigSavedKey.textContent = config.hasAutocompleteApiKey
+        ? (config.hasApiKey ? "API Key：分析 + 补全均已保存" : "API Key：仅补全已保存")
+        : (config.hasApiKey ? "API Key：已保存" : "API Key：未保存");
       updateAiConfigModeUi(false);
       renderCodexOAuth();
     }
@@ -4797,6 +4786,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
             field.hidden = usesCodexOAuth;
           }
         });
+      if (aiAutocompleteApiKeyField) {
+        aiAutocompleteApiKeyField.hidden = usesCodexOAuth || mode !== "openai-compatible";
+      }
       document.getElementById("fetchAiModels").hidden = usesCodexOAuth;
       aiConfigSavedKey.hidden = usesCodexOAuth;
       if (mode === "openai") {
@@ -5039,6 +5031,7 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
         baseUrl: aiBaseUrl.value.trim(),
         autocompleteBaseUrl: mode === "openai-compatible" ? aiAutocompleteBaseUrl.value.trim() : "",
         apiKey: aiApiKey.value.trim(),
+        autocompleteApiKey: mode === "openai-compatible" ? aiAutocompleteApiKey.value.trim() : "",
         chatModel: aiChatModel.value.trim(),
         autocompleteModel: aiAutocompleteModel.value.trim(),
         autocompleteFormat: format
@@ -5118,6 +5111,9 @@ export class ProblemBankViewProvider implements vscode.WebviewViewProvider {
     }
 
     function healthCheckDefaultHint(kind, step) {
+      if (step?.error && /timed out|timeout|超时/i.test(step.error)) {
+        return "模型未在当前等待窗口内返回；请先重试一次或换更快的模型。";
+      }
       if (!step || step.status !== "pass") {
         return "修复建议：证据不足，请检查 endpoint、模型名和协议。";
       }
@@ -7650,50 +7646,6 @@ function hasProblemDetailsForTeacherPack(problem: ProblemRecord): boolean {
   );
 }
 
-function describeAiCoachAction(action: AiCoachAction, responseLanguage: CoachResponseLanguage): string {
-  const languageInstruction =
-    responseLanguage === "zh"
-      ? "输出语言：简体中文。"
-      : responseLanguage === "en"
-        ? "Output language: English."
-        : "输出语言：保留模型原文。";
-
-  if (action === "specific") {
-    return [
-      "学生点击「再具体点」：上一条提示不够具体，但不要变成完整讲解。",
-      "请沿同一个主痛点继续收窄，优先填写 specific_hint。",
-      "指出当前代码里的具体变量、循环、条件、return 或输出表达式；回答控制在 2-3 个短句。",
-      "不要切换到完整解法，不要粘完整 AC 代码。",
-      languageInstruction
-    ].join("");
-  }
-
-  if (action === "followUp") {
-    return [
-      "学生点击「追问 AI」：这是基于上一轮 AI 回复的继续追问。",
-      "追问可以详细回答，但必须讲给新手听：先回答学生额外输入里的具体问题，再用小例子或小步骤解释。",
-      "如果学生觉得太难，要少用术语；必须使用术语时，立刻用白话解释。",
-      "仍然不要粘完整 AC 代码。",
-      languageInstruction
-    ].join("");
-  }
-
-  if (action === "giveUp") {
-    return `学生点击「我放弃了」：先给标准思路轮廓，再指出学生代码痛点和下一次要练的技能，不要生成完整可提交代码。${languageInstruction}`;
-  }
-
-  if (action === "recommend") {
-    return `学生点击「推荐下一题」：重点根据历史痛点和当前代码推荐下一道题。${languageInstruction}`;
-  }
-
-  return [
-    "学生点击「简单提示」：给一个很短、可执行但不泄题的基础提示。",
-    "只写 1-2 个短句，包含观察到的症状、当前代码锚点、下一步要改的小范围。",
-    "不要只说“检查边界/注意输入输出/再读题”。",
-    languageInstruction
-  ].join("");
-}
-
 function normalizePracticeLanguage(value: string | undefined): PracticeLanguage {
   return practiceLanguageOptions.some((option) => option.id === value) ? (value as PracticeLanguage) : "python";
 }
@@ -7706,437 +7658,8 @@ function normalizeCoachResponseLanguage(value: string | undefined): CoachRespons
   return "zh";
 }
 
-function normalizeUiLanguage(value: string | undefined): UiLanguage {
-  return value === "en" ? "en" : "zh";
-}
-
-function normalizeAiProviderMode(value: string | undefined): AiProviderConfigUpdate["mode"] {
-  if (value === "openai" || value === "anthropic-native") {
-    return value;
-  }
-
-  return "openai-compatible";
-}
-
-function savedBaseUrlForMode(env: ModelEnv, mode: AiProviderMode): string {
-  if (mode === "openai") {
-    return env.AI_OPENAI_BASE_URL || "https://api.openai.com/v1";
-  }
-  if (mode === "anthropic-native") {
-    return env.AI_ANTHROPIC_BASE_URL || "https://api.anthropic.com/v1";
-  }
-
-  return env.AI_OPENAI_COMPAT_BASE_URL || env.MIMO_OPENAI_BASE_URL || env.DEEPSEEK_BASE_URL || "";
-}
-
-function savedApiKeyForMode(env: ModelEnv, mode: AiProviderMode): string {
-  if (mode === "openai") {
-    return env.AI_OPENAI_API_KEY || "";
-  }
-  if (mode === "anthropic-native") {
-    return env.AI_ANTHROPIC_API_KEY || "";
-  }
-
-  return env.AI_OPENAI_COMPAT_API_KEY || env.MIMO_API_KEY || env.DEEPSEEK_API_KEY || "";
-}
-
-function normalizeAutocompleteFormat(value: string | undefined): AiProviderConfigUpdate["autocompleteFormat"] {
-  if (value === "openai-chat" || value === "anthropic-messages" || value === "openai-completions") {
-    return value;
-  }
-
-  return "openai-completions";
-}
-
-function applyAiConfigUpdateForHealthCheck(env: ModelEnv, update: AiProviderConfigUpdate): ModelEnv {
-  const next: ModelEnv = { ...env };
-  const mode = normalizeAiProviderMode(update.mode);
-  next.AI_PROVIDER_MODE = mode;
-
-  if (mode === "openai") {
-    next.AI_OPENAI_AUTH_MODE = update.authMode ?? next.AI_OPENAI_AUTH_MODE ?? "api-key";
-    if (update.baseUrl?.trim()) {
-      next.AI_OPENAI_BASE_URL = update.baseUrl.trim();
-    }
-    if (update.apiKey?.trim()) {
-      next.AI_OPENAI_API_KEY = update.apiKey.trim();
-    }
-    next.AI_OPENAI_CHAT_MODEL = update.chatModel?.trim() ?? "";
-    next.AI_OPENAI_AUTOCOMPLETE_MODEL = update.autocompleteModel?.trim() ?? "";
-    return next;
-  }
-
-  if (mode === "anthropic-native") {
-    if (update.baseUrl?.trim()) {
-      next.AI_ANTHROPIC_BASE_URL = update.baseUrl.trim();
-    }
-    if (update.apiKey?.trim()) {
-      next.AI_ANTHROPIC_API_KEY = update.apiKey.trim();
-    }
-    next.AI_ANTHROPIC_CHAT_MODEL = update.chatModel?.trim() ?? "";
-    next.AI_ANTHROPIC_AUTOCOMPLETE_MODEL = update.autocompleteModel?.trim() ?? "";
-    return next;
-  }
-
-  if (update.baseUrl?.trim()) {
-    next.AI_OPENAI_COMPAT_BASE_URL = update.baseUrl.trim();
-  }
-  if (update.autocompleteBaseUrl?.trim()) {
-    next.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL = update.autocompleteBaseUrl.trim();
-  } else {
-    delete next.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL;
-  }
-  if (update.apiKey?.trim()) {
-    next.AI_OPENAI_COMPAT_API_KEY = update.apiKey.trim();
-  }
-  next.AI_OPENAI_COMPAT_CHAT_MODEL = update.chatModel?.trim() ?? "";
-  next.AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL = update.autocompleteModel?.trim() ?? "";
-  next.AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT = normalizeAutocompleteFormat(update.autocompleteFormat);
-  return next;
-}
-
-async function runModelListHealthCheck(
-  env: ModelEnv,
-  mode: AiProviderMode,
-  config: AiProviderConfigUpdate,
-  knownSecrets: string[],
-  codexModels: CodexModelService
-): Promise<AiHealthCheckStep> {
-  const startedAt = Date.now();
-  if (mode === "openai" && env.AI_OPENAI_AUTH_MODE === "codex-oauth") {
-    try {
-      const result = await codexModels.listModels();
-      return {
-        status: "pass",
-        endpoint: "codex://app-server/model/list",
-        count: result.models.length,
-        latencyMs: elapsedSince(startedAt)
-      };
-    } catch (error) {
-      const message = redactKnownSecrets(errorMessage(error), knownSecrets);
-      return failHealthCheckStep({
-        endpoint: "codex://app-server/model/list",
-        latencyMs: elapsedSince(startedAt),
-        error: message,
-        errorHint: healthCheckErrorHint(message, "models")
-      });
-    }
-  }
-  const endpointBase = savedBaseUrlForMode(env, mode);
-  const apiKey = savedApiKeyForMode(env, mode);
-  const keyState = keyStateForApiKey(apiKey, config.apiKey);
-
-  if (!endpointBase) {
-    return failHealthCheckStep({
-      keyState,
-      latencyMs: elapsedSince(startedAt),
-      error: "模型列表缺少 Base URL。",
-      errorHint: "先填写分析接口 Base URL；补全专用 Base URL 不用于 /models。"
-    });
-  }
-  if (!apiKey) {
-    return failHealthCheckStep({
-      endpoint: `${endpointBase.replace(/\/+$/, "")}/models`,
-      keyState,
-      latencyMs: elapsedSince(startedAt),
-      error: "模型列表缺少 API Key。",
-      errorHint: "填写 API Key 后点保存，或在本次检查里临时输入 key；界面不会显示明文。"
-    });
-  }
-
-  try {
-    const result = await listProviderModels({
-      mode,
-      baseUrl: endpointBase,
-      apiKey,
-      anthropicVersion: "2023-06-01"
-    });
-    return {
-      status: "pass",
-      endpoint: result.endpoint,
-      keyState,
-      count: result.models.length,
-      latencyMs: elapsedSince(startedAt)
-    };
-  } catch (error) {
-    const message = redactKnownSecrets(errorMessage(error), knownSecrets);
-    return failHealthCheckStep({
-      endpoint: `${endpointBase.replace(/\/+$/, "")}/models`,
-      keyState,
-      latencyMs: elapsedSince(startedAt),
-      error: message,
-      errorHint: healthCheckErrorHint(message, "models")
-    });
-  }
-}
-
-async function runChatSmokeHealthCheck(
-  env: ModelEnv,
-  config: AiProviderConfigUpdate,
-  knownSecrets: string[],
-  oauthTransport: ModelTextTransport
-): Promise<AiHealthCheckStep> {
-  const startedAt = Date.now();
-  try {
-    const route = routeTeachingModel(env, oauthTransport);
-    const text = await requestChatCompletionText(
-      route.config,
-      {
-        messages: [
-          {
-            role: "system",
-            content: "Return OK only. Do not include explanations."
-          },
-          {
-            role: "user",
-            content: "health check"
-          }
-        ],
-        maxTokens: 16,
-        temperature: 0,
-        usageLogPath: false
-      }
-    );
-    if (!text.trim()) {
-      throw new Error("Chat smoke 返回为空。");
-    }
-    return {
-      status: "pass",
-      endpoint: route.endpoint,
-      model: route.model,
-      format: route.format,
-      keyState: providerKeyState(route.config, config.apiKey),
-      latencyMs: elapsedSince(startedAt)
-    };
-  } catch (error) {
-    const message = redactKnownSecrets(errorMessage(error), knownSecrets);
-    const routeInfo = safeTeachingRouteInfo(env, oauthTransport, config.apiKey);
-    return failHealthCheckStep({
-      ...routeInfo,
-      latencyMs: elapsedSince(startedAt),
-      error: message,
-      errorHint: healthCheckErrorHint(message, "chat")
-    });
-  }
-}
-
-async function runAutocompleteSmokeHealthCheck(
-  env: ModelEnv,
-  config: AiProviderConfigUpdate,
-  knownSecrets: string[],
-  oauthTransport: ModelTextTransport
-): Promise<AiHealthCheckStep> {
-  const startedAt = Date.now();
-  try {
-    const route = routeAutocompleteModel(env, oauthTransport);
-    if (route.capabilities.configurationIssue === "deepseek-fim-beta-required") {
-      return failHealthCheckStep({
-        endpoint: route.endpoint,
-        model: route.model,
-        format: route.format,
-        renderer: route.capabilities.renderer,
-        keyState: providerKeyState(route.config, config.apiKey),
-        latencyMs: elapsedSince(startedAt),
-        error: "DeepSeek FIM 补全端点不是 /beta。",
-        errorHint: "DeepSeek FIM 补全需要把补全接口 Base URL 设置为 https://api.deepseek.com/beta；分析接口仍可保留 /v1。"
-      });
-    }
-    const result = await requestMimoAutocompleteDetailed(route.config, {
-      prefix: "def add(a, b):\n    ",
-      suffix: "\nprint(add(1, 2))",
-      language: "python",
-      filePath: "health-check.py",
-      capabilities: route.capabilities
-    });
-    const resultInfo = {
-      endpoint: route.endpoint,
-      model: route.model,
-      format: route.format,
-      renderer: result.audit.renderer,
-      validationStatus: result.status,
-      keyState: providerKeyState(route.config, config.apiKey),
-      latencyMs: elapsedSince(startedAt)
-    };
-    if (result.status === "model-empty") {
-      return failHealthCheckStep({
-        ...resultInfo,
-        error: "Autocomplete smoke model returned empty."
-      });
-    }
-    if (result.status === "validator-rejected") {
-      return failHealthCheckStep({
-        ...resultInfo,
-        error: "Autocomplete smoke rejected by policy: " +
-          (result.rejectionReason ?? "unknown")
-      });
-    }
-    return {
-      status: "pass",
-      ...resultInfo
-    };
-  } catch (error) {
-    const message = redactKnownSecrets(errorMessage(error), knownSecrets);
-    const routeInfo = safeAutocompleteRouteInfo(env, oauthTransport, config.apiKey);
-    return failHealthCheckStep({
-      ...routeInfo,
-      latencyMs: elapsedSince(startedAt),
-      error: message,
-      errorHint: healthCheckErrorHint(message, "autocomplete")
-    });
-  }
-}
-
-function failHealthCheckStep(step: Omit<AiHealthCheckStep, "status">): AiHealthCheckStep {
-  return {
-    status: "fail",
-    ...step
-  };
-}
-
-function safeTeachingRouteInfo(
-  env: ModelEnv,
-  oauthTransport: ModelTextTransport,
-  providedApiKey?: string
-): {
-  endpoint?: string;
-  model?: string;
-  format?: string;
-  keyState?: AiHealthCheckStep["keyState"];
-} {
-  try {
-    const route = routeTeachingModel(env, oauthTransport);
-    return {
-      endpoint: route.endpoint,
-      model: route.model,
-      format: route.format,
-      keyState: providerKeyState(route.config, providedApiKey)
-    };
-  } catch {
-    return {};
-  }
-}
-
-function safeAutocompleteRouteInfo(
-  env: ModelEnv,
-  oauthTransport: ModelTextTransport,
-  providedApiKey?: string
-): {
-  endpoint?: string;
-  model?: string;
-  format?: string;
-  renderer?: SkillPlanAudit["renderer"];
-  keyState?: AiHealthCheckStep["keyState"];
-} {
-  try {
-    const route = routeAutocompleteModel(env, oauthTransport);
-    return {
-      endpoint: route.endpoint,
-      model: route.model,
-      format: route.format,
-      renderer: route.capabilities.renderer,
-      keyState: providerKeyState(route.config, providedApiKey)
-    };
-  } catch {
-    return {};
-  }
-}
-
-function healthCheckErrorHint(message: string, scope: "models" | "chat" | "autocomplete"): string {
-  if (/api key|key|401|403/i.test(message)) {
-    return "API Key 缺失、无效或没有该模型权限；请重新保存 key，并确认当前角色使用的是同一个 endpoint。";
-  }
-  if (/base url/i.test(message)) {
-    return "Base URL 缺失或不完整；OpenAI 兼容服务通常形如 https://example.com/v1。";
-  }
-  if (/chat model|autocomplete model|model/i.test(message) && /missing|缺少/i.test(message)) {
-    return scope === "autocomplete" ? "请填写补全模型名。" : "请填写提示/评分模型名。";
-  }
-  if (/DeepSeek FIM|\/beta|deepseek/i.test(message)) {
-    return "DeepSeek FIM 补全需要把补全接口 Base URL 设置为 https://api.deepseek.com/beta。";
-  }
-  if (/\/models|模型列表|404/i.test(message) && scope === "models") {
-    return "当前服务可能不支持 /models；这不一定影响 chat/补全，请继续看另外两张卡。";
-  }
-  if (/fetch failed|network|ENOTFOUND|ECONNRESET|before HTTP response/i.test(message)) {
-    return "检查网络、代理或 Base URL；如果在国内网络，优先用当前可访问的兼容端点。";
-  }
-  if (/timed out|timeout|超时/i.test(message)) {
-    return "模型未在当前等待窗口内返回；先重试一次排除冷启动，仍失败则换更快的补全模型或检查 app-server 状态。";
-  }
-  if (/response did not include|响应缺少|返回为空|empty/i.test(message)) {
-    return "接口已连通，但返回格式不符合当前协议；请确认补全协议和模型类型是否匹配。";
-  }
-
-  return "请核对 endpoint、模型名和协议是否属于同一家 provider。";
-}
-
-function keyStateForApiKey(apiKey: string | undefined, providedApiKey: string | undefined): AiHealthCheckStep["keyState"] {
-  if (providedApiKey?.trim()) {
-    return "provided";
-  }
-  if (apiKey?.trim()) {
-    return "saved";
-  }
-  return "missing";
-}
-
-function providerApiKey(
-  config: ChatCompletionProviderConfig | CompletionProviderConfig
-): string | undefined {
-  return config.format === "codex-app-server" ? undefined : config.apiKey;
-}
-
-function providerKeyState(
-  config: ChatCompletionProviderConfig | CompletionProviderConfig,
-  providedApiKey?: string
-): AiHealthCheckStep["keyState"] {
-  return config.format === "codex-app-server"
-    ? undefined
-    : keyStateForApiKey(config.apiKey, providedApiKey);
-}
-
-function collectKnownSecrets(...sources: Array<ModelEnv | AiProviderConfigUpdate>): string[] {
-  const values: string[] = [];
-  for (const source of sources) {
-    const record = source as Record<string, string | undefined>;
-    values.push(
-      record.AI_OPENAI_API_KEY ?? "",
-      record.AI_OPENAI_COMPAT_API_KEY ?? "",
-      record.AI_ANTHROPIC_API_KEY ?? "",
-      record.MIMO_API_KEY ?? "",
-      record.DEEPSEEK_API_KEY ?? "",
-      record.apiKey ?? ""
-    );
-  }
-
-  return Array.from(new Set(values.map((value) => value.trim()).filter((value) => value.length >= 4)));
-}
-
-function redactKnownSecrets(message: string, secrets: string[]): string {
-  let redacted = message;
-  for (const secret of secrets) {
-    redacted = redacted.split(secret).join("[redacted]");
-  }
-  return redacted
-    .replace(/Bearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-    .replace(/x-api-key[=:]\s*[A-Za-z0-9._~+/=-]+/gi, "x-api-key=[redacted]");
-}
-
-function elapsedSince(startedAt: number): number {
-  return Date.now() - startedAt;
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
-}
-
-function sanitizeBaseUrlForDisplay(baseUrl: string): string {
-  try {
-    const parsed = new URL(baseUrl);
-    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, "")}`;
-  } catch {
-    return baseUrl.replace(/[?&]key=[^&]+/gi, "");
-  }
 }
 
 function normalizeCompletionReason(value: string | undefined): CompletionReason {
@@ -8163,39 +7686,6 @@ function normalizeSubmissionPlatform(value: string): SubmissionPlatform {
     throw new Error("OJ 平台必须是 Codeforces 或 AtCoder。");
   }
   return value;
-}
-
-function actionToAttemptEventKind(
-  action: AiCoachAction
-): "hint_requested" | "specific_hint_requested" | "follow_up_requested" | "recommendation_requested" {
-  if (action === "specific") {
-    return "specific_hint_requested";
-  }
-
-  if (action === "followUp") {
-    return "follow_up_requested";
-  }
-
-  if (action === "recommend") {
-    return "recommendation_requested";
-  }
-
-  return "hint_requested";
-}
-
-function mergeRequestPurpose(basePurpose: string, studentRequest: string | undefined, previousCoachTurn?: string): string {
-  const trimmedRequest = studentRequest?.trim();
-  const trimmedPrevious = previousCoachTurn?.trim();
-  const parts = [basePurpose];
-
-  if (trimmedPrevious) {
-    parts.push(`上一轮 AI 回复摘要：\n${trimmedPrevious}`);
-  }
-  if (trimmedRequest) {
-    parts.push(`学生额外输入：${trimmedRequest}`);
-  }
-
-  return parts.join("\n");
 }
 
 function defaultSkillFeedbackNote(feedbackType: StudentSkillCorrectionType): string {
@@ -8238,53 +7728,6 @@ function summarizePreviousLearning(problem: CompletedProblemRecord): string {
   }
 
   return completionReasonLabel(problem.completionReason);
-}
-
-function optimizationPainPoints(report: OptimizationReport): TeachingPainPoint[] {
-  if (!report.optimizationNeeded) {
-    return [];
-  }
-
-  const label = isBruteforceOptimization(report) ? "bruteforce_no_growth" : "time_complexity_mismatch";
-
-  return [
-    {
-      label,
-      confidence: 0.72,
-      evidence: report.timeComplexity.action
-    }
-  ];
-}
-
-function optimizationSkillUpdate(report: OptimizationReport):
-  | {
-      candidate: string;
-      reason: string;
-      rules: string[];
-    }
-  | undefined {
-  if (!report.optimizationNeeded) {
-    return undefined;
-  }
-
-  const bruteForceRelated = isBruteforceOptimization(report);
-  return {
-    candidate: bruteForceRelated ? "complexity-upgrade-from-bruteforce" : "post-ac-optimization-review",
-    reason: bruteForceRelated
-      ? "已归档题目的优化复盘显示：学生需要把通过样例或 AC 的暴力写法继续抽象成可迁移的复杂度模型。"
-      : "已归档题目的优化复盘显示：学生需要在 AC 后判断复杂度、内存和代码质量是否真的值得继续投入。",
-    rules: [
-      "先写出当前时间复杂度和目标时间复杂度。",
-      "只改一个核心循环或数据结构，不整题重写。",
-      "简单题若已匹配训练目标，应明确跳过优化，进入下一题。"
-    ]
-  };
-}
-
-function isBruteforceOptimization(report: OptimizationReport): boolean {
-  return /暴力|枚举|brute|bruteforce|双重|三重/i.test(
-    [report.summary, report.timeComplexity.current, report.timeComplexity.target, report.timeComplexity.action].join(" ")
-  );
 }
 
 function completionReasonLabel(reason: CompletionReason): string {

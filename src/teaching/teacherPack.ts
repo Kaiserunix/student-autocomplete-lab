@@ -103,6 +103,8 @@ export function buildTeacherPackPrompt(problem: ProblemRecord): string {
   ].join("\n");
 }
 
+export const requestTeacherPack = requestMimoTeacherPack;
+
 export async function requestMimoTeacherPack(
   config: ChatCompletionProviderConfig,
   problem: ProblemRecord,

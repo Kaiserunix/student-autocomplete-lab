@@ -5,6 +5,7 @@ import type { HttpChatCompletionProviderConfig } from "../models/chatCompletions
 export type AiProviderMode = "openai" | "openai-compatible" | "anthropic-native";
 export type OpenAiAuthMode = "api-key" | "codex-oauth";
 export type AutocompleteFormat = "openai-completions" | "openai-chat" | "anthropic-messages";
+export type AiCredentialRole = "analysis" | "autocomplete";
 
 export interface ModelEnv {
   [key: string]: string | undefined;
@@ -17,6 +18,7 @@ export interface ModelEnv {
   AI_OPENAI_COMPAT_BASE_URL?: string;
   AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL?: string;
   AI_OPENAI_COMPAT_API_KEY?: string;
+  AI_OPENAI_COMPAT_AUTOCOMPLETE_API_KEY?: string;
   AI_OPENAI_COMPAT_CHAT_MODEL?: string;
   AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL?: string;
   AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT?: string;
@@ -39,6 +41,7 @@ export interface AiProviderConfigUpdate {
   baseUrl: string;
   autocompleteBaseUrl?: string;
   apiKey?: string;
+  autocompleteApiKey?: string;
   chatModel: string;
   autocompleteModel: string;
   autocompleteFormat?: AutocompleteFormat;
@@ -49,6 +52,7 @@ export interface AiProviderSettings {
   baseUrl?: string;
   autocompleteBaseUrl?: string;
   apiKey?: string;
+  autocompleteApiKey?: string;
   chatModel?: string;
   autocompleteModel?: string;
   autocompleteFormat?: AutocompleteFormat;
@@ -64,6 +68,7 @@ export interface AiSettingsSnapshot {
 export interface AiSecretSnapshot {
   openaiApiKey?: string;
   openaiCompatibleApiKey?: string;
+  openaiCompatibleAutocompleteApiKey?: string;
   anthropicApiKey?: string;
 }
 
@@ -74,6 +79,8 @@ export interface AiConfigView {
   autocompleteBaseUrl: string;
   hasApiKey: boolean;
   apiKeyPreview: string;
+  hasAutocompleteApiKey?: boolean;
+  autocompleteApiKeyPreview?: string;
   chatModel: string;
   autocompleteModel: string;
   autocompleteFormat: AutocompleteFormat;
@@ -116,7 +123,12 @@ export function modelEnvFromSettings(
   }
 
   applyOpenAiSettings(env, settings.openai, secrets.openaiApiKey);
-  applyOpenAiCompatibleSettings(env, settings.openaiCompatible, secrets.openaiCompatibleApiKey);
+  applyOpenAiCompatibleSettings(
+    env,
+    settings.openaiCompatible,
+    secrets.openaiCompatibleApiKey,
+    secrets.openaiCompatibleAutocompleteApiKey
+  );
   applyAnthropicSettings(env, settings.anthropic, secrets.anthropicApiKey);
   return env;
 }
@@ -158,7 +170,10 @@ export function requireTeachingConfig(env: ModelEnv): TeachingProviderConfig {
     mode: "openai-compatible",
     format: "openai-chat",
     baseUrl,
-    apiKey: requireValue(openAiCompatibleApiKey(env, baseUrl), "Missing OpenAI-compatible API key in secrets/models.env."),
+    apiKey: requireValue(
+      openAiCompatibleApiKey(env, baseUrl, "analysis"),
+      "Missing OpenAI-compatible API key in secrets/models.env."
+    ),
     model: env.AI_OPENAI_COMPAT_CHAT_MODEL || env.MIMO_CHAT_MODEL || "mimo-v2.5"
   };
 }
@@ -207,7 +222,10 @@ export function requireAutocompleteConfig(env: ModelEnv): AutocompleteProviderCo
     mode: "openai-compatible",
     format: normalizeAutocompleteFormat(env.AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT, "openai-completions"),
     baseUrl,
-    apiKey: requireValue(openAiCompatibleApiKey(env, baseUrl), "Missing OpenAI-compatible API key in secrets/models.env."),
+    apiKey: requireValue(
+      openAiCompatibleApiKey(env, baseUrl, "autocomplete"),
+      "Missing OpenAI-compatible API key in secrets/models.env."
+    ),
     model: openAiCompatibleAutocompleteModel(env, baseUrl)
   };
 }
@@ -259,6 +277,8 @@ export function buildAiConfigView(env: ModelEnv): AiConfigView {
       autocompleteBaseUrl: "",
       hasApiKey: Boolean(env.AI_OPENAI_API_KEY),
       apiKeyPreview: env.AI_OPENAI_API_KEY ? "已保存" : "",
+      hasAutocompleteApiKey: false,
+      autocompleteApiKeyPreview: "",
       chatModel: env.AI_OPENAI_CHAT_MODEL || "",
       autocompleteModel: env.AI_OPENAI_AUTOCOMPLETE_MODEL || env.AI_OPENAI_CHAT_MODEL || "",
       autocompleteFormat: "openai-chat"
@@ -273,6 +293,8 @@ export function buildAiConfigView(env: ModelEnv): AiConfigView {
       autocompleteBaseUrl: "",
       hasApiKey: Boolean(env.AI_ANTHROPIC_API_KEY),
       apiKeyPreview: env.AI_ANTHROPIC_API_KEY ? "已保存" : "",
+      hasAutocompleteApiKey: false,
+      autocompleteApiKeyPreview: "",
       chatModel: env.AI_ANTHROPIC_CHAT_MODEL || "",
       autocompleteModel: env.AI_ANTHROPIC_AUTOCOMPLETE_MODEL || env.AI_ANTHROPIC_CHAT_MODEL || "",
       autocompleteFormat: "anthropic-messages"
@@ -281,67 +303,133 @@ export function buildAiConfigView(env: ModelEnv): AiConfigView {
 
   const baseUrl = env.AI_OPENAI_COMPAT_BASE_URL || env.MIMO_OPENAI_BASE_URL || env.DEEPSEEK_BASE_URL || "";
   const autocompleteBaseUrl = env.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL || "";
-  const apiKey = openAiCompatibleApiKey(env, autocompleteBaseUrl || baseUrl);
+  const analysisApiKey = openAiCompatibleApiKey(env, baseUrl || autocompleteBaseUrl, "analysis");
+  const dedicatedAutocompleteApiKey = env.AI_OPENAI_COMPAT_AUTOCOMPLETE_API_KEY?.trim();
 
   return {
     mode: "openai-compatible",
     authMode: "api-key",
     baseUrl,
     autocompleteBaseUrl,
-    hasApiKey: Boolean(apiKey),
-    apiKeyPreview: apiKey ? "已保存" : "",
+    hasApiKey: Boolean(analysisApiKey),
+    apiKeyPreview: analysisApiKey ? "已保存" : "",
+    hasAutocompleteApiKey: Boolean(dedicatedAutocompleteApiKey),
+    autocompleteApiKeyPreview: dedicatedAutocompleteApiKey ? "已保存" : "",
     chatModel: env.AI_OPENAI_COMPAT_CHAT_MODEL || env.MIMO_CHAT_MODEL || "mimo-v2.5",
     autocompleteModel: openAiCompatibleAutocompleteModel(env, autocompleteBaseUrl || baseUrl),
     autocompleteFormat: normalizeAutocompleteFormat(env.AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT, "openai-completions")
   };
 }
 
-export function applyAiConfigUpdateToEnvText(existingText: string, update: AiProviderConfigUpdate): string {
-  const env = loadModelEnvFromText(existingText);
-  env.AI_PROVIDER_MODE = update.mode;
+export function applyAiConfigUpdateToEnv(
+  existingEnv: ModelEnv,
+  update: AiProviderConfigUpdate,
+  options: { preserveEmptyModels?: boolean } = {}
+): ModelEnv {
+  const env: ModelEnv = { ...existingEnv };
+  const mode = normalizeProviderMode(update.mode);
+  env.AI_PROVIDER_MODE = mode;
 
-  if (update.mode === "openai") {
-    env.AI_OPENAI_AUTH_MODE = normalizeOpenAiAuthMode(update.authMode);
-    env.AI_OPENAI_BASE_URL = update.baseUrl || "https://api.openai.com/v1";
+  if (mode === "openai") {
+    env.AI_OPENAI_AUTH_MODE = normalizeOpenAiAuthMode(update.authMode ?? env.AI_OPENAI_AUTH_MODE);
+    if (update.baseUrl?.trim() || !options.preserveEmptyModels) {
+      env.AI_OPENAI_BASE_URL = update.baseUrl?.trim() || env.AI_OPENAI_BASE_URL || "https://api.openai.com/v1";
+    }
     if (update.apiKey?.trim()) {
       env.AI_OPENAI_API_KEY = update.apiKey.trim();
     }
-    env.AI_OPENAI_CHAT_MODEL = update.chatModel.trim();
-    env.AI_OPENAI_AUTOCOMPLETE_MODEL = update.autocompleteModel.trim();
-  } else if (update.mode === "anthropic-native") {
-    env.AI_ANTHROPIC_BASE_URL = update.baseUrl || "https://api.anthropic.com/v1";
+    env.AI_OPENAI_CHAT_MODEL = update.chatModel?.trim() ?? "";
+    env.AI_OPENAI_AUTOCOMPLETE_MODEL = update.autocompleteModel?.trim() ?? "";
+    return env;
+  }
+
+  if (mode === "anthropic-native") {
+    if (update.baseUrl?.trim() || !options.preserveEmptyModels) {
+      env.AI_ANTHROPIC_BASE_URL = update.baseUrl?.trim() || env.AI_ANTHROPIC_BASE_URL || "https://api.anthropic.com/v1";
+    }
     if (update.apiKey?.trim()) {
       env.AI_ANTHROPIC_API_KEY = update.apiKey.trim();
     }
-    env.AI_ANTHROPIC_CHAT_MODEL = update.chatModel.trim();
-    env.AI_ANTHROPIC_AUTOCOMPLETE_MODEL = update.autocompleteModel.trim();
-  } else {
-    env.AI_OPENAI_COMPAT_BASE_URL = update.baseUrl.trim();
-    if (update.autocompleteBaseUrl?.trim()) {
-      env.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL = update.autocompleteBaseUrl.trim();
-    } else {
-      delete env.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL;
-    }
-    if (update.apiKey?.trim()) {
-      env.AI_OPENAI_COMPAT_API_KEY = update.apiKey.trim();
-    }
-    env.AI_OPENAI_COMPAT_CHAT_MODEL = update.chatModel.trim();
-    env.AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL = update.autocompleteModel.trim();
-    env.AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT = normalizeAutocompleteFormat(
-      update.autocompleteFormat,
-      "openai-completions"
-    );
+    env.AI_ANTHROPIC_CHAT_MODEL = update.chatModel?.trim() ?? "";
+    env.AI_ANTHROPIC_AUTOCOMPLETE_MODEL = update.autocompleteModel?.trim() ?? "";
+    return env;
   }
 
+  if (update.baseUrl?.trim() || !options.preserveEmptyModels) {
+    env.AI_OPENAI_COMPAT_BASE_URL = update.baseUrl?.trim() ?? "";
+  }
+  if (update.autocompleteBaseUrl?.trim()) {
+    env.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL = update.autocompleteBaseUrl.trim();
+  } else {
+    delete env.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL;
+  }
+  if (update.apiKey?.trim()) {
+    env.AI_OPENAI_COMPAT_API_KEY = update.apiKey.trim();
+  }
+  if (update.autocompleteApiKey?.trim()) {
+    env.AI_OPENAI_COMPAT_AUTOCOMPLETE_API_KEY = update.autocompleteApiKey.trim();
+  }
+  env.AI_OPENAI_COMPAT_CHAT_MODEL = update.chatModel?.trim() ?? "";
+  env.AI_OPENAI_COMPAT_AUTOCOMPLETE_MODEL = update.autocompleteModel?.trim() ?? "";
+  env.AI_OPENAI_COMPAT_AUTOCOMPLETE_FORMAT = normalizeAutocompleteFormat(
+    update.autocompleteFormat,
+    "openai-completions"
+  );
+  return env;
+}
+
+export function applyAiConfigUpdateToEnvText(existingText: string, update: AiProviderConfigUpdate): string {
+  const env = applyAiConfigUpdateToEnv(loadModelEnvFromText(existingText), update);
   return serializeModelEnv(env);
 }
 
-function normalizeProviderMode(value: string | undefined): AiProviderMode {
+export function normalizeProviderMode(value: string | undefined): AiProviderMode {
   if (value === "openai" || value === "anthropic-native") {
     return value;
   }
 
   return "openai-compatible";
+}
+
+export function normalizeAutocompleteFormat(
+  value: string | undefined,
+  fallback: AutocompleteFormat = "openai-completions"
+): AutocompleteFormat {
+  if (value === "openai-chat" || value === "anthropic-messages" || value === "openai-completions") {
+    return value;
+  }
+
+  return fallback;
+}
+
+export function resolveSavedBaseUrlForMode(env: ModelEnv, mode: AiProviderMode): string {
+  if (mode === "openai") {
+    return env.AI_OPENAI_BASE_URL || "https://api.openai.com/v1";
+  }
+  if (mode === "anthropic-native") {
+    return env.AI_ANTHROPIC_BASE_URL || "https://api.anthropic.com/v1";
+  }
+
+  return env.AI_OPENAI_COMPAT_BASE_URL || env.MIMO_OPENAI_BASE_URL || env.DEEPSEEK_BASE_URL || "";
+}
+
+export function resolveSavedApiKeyForMode(
+  env: ModelEnv,
+  mode: AiProviderMode,
+  role: AiCredentialRole = "analysis"
+): string {
+  if (mode === "openai") {
+    return env.AI_OPENAI_API_KEY || "";
+  }
+  if (mode === "anthropic-native") {
+    return env.AI_ANTHROPIC_API_KEY || "";
+  }
+
+  const baseUrl =
+    role === "autocomplete"
+      ? env.AI_OPENAI_COMPAT_AUTOCOMPLETE_BASE_URL || resolveSavedBaseUrlForMode(env, mode)
+      : resolveSavedBaseUrlForMode(env, mode);
+  return openAiCompatibleApiKey(env, baseUrl, role) || "";
 }
 
 function applyOpenAiSettings(env: ModelEnv, settings: AiProviderSettings | undefined, secretApiKey: string | undefined): void {
@@ -369,9 +457,10 @@ function applyOpenAiSettings(env: ModelEnv, settings: AiProviderSettings | undef
 function applyOpenAiCompatibleSettings(
   env: ModelEnv,
   settings: AiProviderSettings | undefined,
-  secretApiKey: string | undefined
+  secretApiKey: string | undefined,
+  secretAutocompleteApiKey?: string
 ): void {
-  if (!settings && !secretApiKey) {
+  if (!settings && !secretApiKey && !secretAutocompleteApiKey) {
     return;
   }
 
@@ -383,6 +472,13 @@ function applyOpenAiCompatibleSettings(
   }
   if (secretApiKey?.trim() || settings?.apiKey?.trim()) {
     env.AI_OPENAI_COMPAT_API_KEY = (secretApiKey || settings?.apiKey || "").trim();
+  }
+  if (secretAutocompleteApiKey?.trim() || settings?.autocompleteApiKey?.trim()) {
+    env.AI_OPENAI_COMPAT_AUTOCOMPLETE_API_KEY = (
+      secretAutocompleteApiKey ||
+      settings?.autocompleteApiKey ||
+      ""
+    ).trim();
   }
   if (settings?.chatModel?.trim()) {
     env.AI_OPENAI_COMPAT_CHAT_MODEL = settings.chatModel.trim();
@@ -421,14 +517,6 @@ function applyAnthropicSettings(
   }
 }
 
-function normalizeAutocompleteFormat(value: string | undefined, fallback: AutocompleteFormat): AutocompleteFormat {
-  if (value === "openai-chat" || value === "anthropic-messages" || value === "openai-completions") {
-    return value;
-  }
-
-  return fallback;
-}
-
 function normalizeOpenAiAuthMode(value: string | undefined): OpenAiAuthMode {
   return value === "codex-oauth" ? "codex-oauth" : "api-key";
 }
@@ -441,7 +529,15 @@ function requireValue(value: string | undefined, message: string): string {
   return value.trim();
 }
 
-function openAiCompatibleApiKey(env: ModelEnv, baseUrl: string): string | undefined {
+function openAiCompatibleApiKey(
+  env: ModelEnv,
+  baseUrl: string,
+  role: AiCredentialRole = "analysis"
+): string | undefined {
+  if (role === "autocomplete" && env.AI_OPENAI_COMPAT_AUTOCOMPLETE_API_KEY?.trim()) {
+    return env.AI_OPENAI_COMPAT_AUTOCOMPLETE_API_KEY.trim();
+  }
+
   if (env.AI_OPENAI_COMPAT_API_KEY?.trim()) {
     return env.AI_OPENAI_COMPAT_API_KEY.trim();
   }

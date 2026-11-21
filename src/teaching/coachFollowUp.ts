@@ -104,6 +104,9 @@ export async function requestMimoCoachFollowUpWithSkills(
   return parseCoachFollowUpText(text);
 }
 
+export const requestCoachFollowUp = requestMimoCoachFollowUp;
+export const requestCoachFollowUpWithSkills = requestMimoCoachFollowUpWithSkills;
+
 function parseCoachFollowUpText(text: string): CoachFollowUpReport {
   try {
     return parseCoachFollowUpReport(text);

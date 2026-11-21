@@ -101,6 +101,8 @@ export async function requestMimoSolutionScore(
   }
 }
 
+export const requestSolutionScore = requestMimoSolutionScore;
+
 export function parseSolutionScoreReport(text: string): SolutionScoreReport {
   const raw = JSON.parse(extractJson(text)) as RawSolutionScoreReport;
   return {
