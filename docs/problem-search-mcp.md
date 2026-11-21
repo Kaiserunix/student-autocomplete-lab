@@ -1,23 +1,29 @@
 # Problem Search MCP
 
-This repo ships a small stdio MCP server for model-side problem discovery.
+Status: Reference — verified against `src/mcp/problemSearchServer.ts` and `src/mcp/problemSearchTools.ts`.
+
+This repository ships a small standalone stdio MCP server (`student-problem-search`) for external model/client problem discovery.
+
+> **Relationship to `src/oj/`**: Inside the VS Code extension itself, multi-platform search and read-only problem import across Luogu, LeetCode, NowCoder, Codeforces, and AtCoder are powered by `src/oj/broker.ts` (connecting to hosted HTTP MCP endpoints or external local stdio adapters). This server (`dist/src/mcp/problemSearchServer.js`) is a separate local Luogu + pain-point recommendation stdio MCP server and is excluded from the clean beta-release VSIX.
 
 ## Tools
 
-- `luogu_search_problems`: search Luogu problems by keyword.
-- `luogu_search_problem_sets`: search Luogu training/problem sets by keyword.
-- `luogu_fetch_problem`: fetch one Luogu problem by `pid`.
-- `recommend_by_pain_point`: recommend practice problems from a normalized student pain point.
+| Tool | Description | Annotations |
+| --- | --- | --- |
+| `luogu_search_problems` | Search Luogu problems by `keyword` (`limit` 1–20, default 8) | `readOnlyHint: true`, `openWorldHint: true` |
+| `luogu_search_problem_sets` | Search Luogu training/problem sets by `keyword` (`limit` 1–20, default 8) | `readOnlyHint: true`, `openWorldHint: true` |
+| `luogu_fetch_problem` | Fetch a Luogu problem statement, formats, samples, tags, and URL by `pid` (`maxStatementChars` 200–20000, default 4000) | `readOnlyHint: true`, `openWorldHint: true` |
+| `recommend_by_pain_point` | Deterministically recommend built-in practice problems and search hints from a normalized pain point (`painPoint`, optional `painPointCounts`, `transferEvidence`, `limit` 1–10, `currentProblemId`) | `readOnlyHint: true`, `openWorldHint: false` |
 
 ## Build
 
 ```powershell
-cmd /c npm run compile
+npm run compile
 ```
 
-## MCP Client Config
+## MCP Client Configuration
 
-Use `node` directly as the MCP command. Avoid plain `npm run` as a stdio MCP command because npm can print lifecycle text to stdout and corrupt JSON-RPC.
+Invoke `node` directly as the stdio MCP command. Avoid plain `npm run` in MCP client configs because npm lifecycle output on stdout corrupts JSON-RPC framing.
 
 ```json
 {
@@ -33,17 +39,14 @@ Use `node` directly as the MCP command. Avoid plain `npm run` as a stdio MCP com
 }
 ```
 
-For manual local runs after compiling:
+Manual local launch after compiling:
 
 ```powershell
-cmd /c npm run --silent mcp:problem-search
+npm run --silent mcp:problem-search
 ```
 
-## Current Scope
+## Scope
 
-The first version keeps the server small:
-
-- Luogu uses the existing content-only HTTP adapters already used by the extension.
-- Recommendations are deterministic and pain-point keyed, so MiMo can ask for practice targets without hallucinating a random next problem.
-- Playwright is intentionally a fallback layer for later blocked/dynamic pages, not the default path.
-- LeetCode can later be wired either through a local adapter or an existing community LeetCode MCP server.
+- Luogu lookups reuse the extension's content-only HTTP adapters (`src/problemBank/luoguClient.ts`, `luoguSearchClient.ts`).
+- `recommend_by_pain_point` runs the deterministic rule engine (`src/recommendation/rules.ts`) over the built-in candidate pool so MCP clients receive grounded recommendations without hallucinating problem IDs.
+- No API keys or private student records are read or exposed.

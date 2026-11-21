@@ -1,18 +1,46 @@
-# Student Autocomplete Lab
+# Student Autocomplete Lab · 不替你交卷的 VS Code 算法私教
 
-### 写算法题时，你可能只差一行，也可能需要一个反例。它会尽量分清。
+> **Public Beta** · 中文优先的 VS Code 算法学习助手 | *A Chinese-first, anti-spoiler VS Code algorithm coach that structurally separates 1–3 line context-blind autocomplete from Socratic hints and a local, inspectable Student Skill profile.*
 
-Student Autocomplete Lab 是一个中文优先的 VS Code 算法学习助手。
+**用 Copilot 刷算法题，一按 Tab 整道题全剧透了？**
+Student Autocomplete Lab 把**「故意看不到题面的 1–3 行防剧透短补全」**与**「主动触发的苏格拉底式阶梯提示 + 本地可纠偏学习画像」**在架构上彻底隔离——帮你省掉重复模板手敲，但把真正的算法思考留给你自己。
 
-少写了一行输入，它可以帮你补上；思路卡住了，它先给一个小提示；反复在同类问题上出错，它会把这些线索整理成一份只留在本地的学习画像。
+[3 分钟安装（VSIX）](#快速开始推荐打包安装-vsix) · [DeepSeek 双模型速查](#30-秒-deepseek-与-openai-compatible-双模型配置) · [五平台 OJ 能力矩阵](#五平台-oj-能力与交题矩阵) · [产品策略与路线图](docs/PRODUCT_STRATEGY.md)
 
-它不会默认给出整题答案。代码依然由你完成，AI 只在合适的时候向前推一步。
+---
 
-> 🧪 **Beta 状态：** 核心流程已经可用，细节仍在持续完善。目前建议从源码启动体验。
+## 为什么不直接给完整答案？（架构级防剧透隔离）
 
-## 快速开始
+“看懂一份题解”和“自己独立 AC”之间，往往隔着几次关键尝试。为了让自动补全绝不越界剧透，本项目在代码层将**短补全通道**与**教学通道**物理隔离（并由单元测试持续守护边界）：
 
-你需要 VS Code `1.125.0` 或更新版本，以及 Node.js 20+ 和 npm。
+| 通道 | ✅ 能看到的上下文 | 🚫 架构上严格隔离（绝不可见） |
+| --- | --- | --- |
+| **短补全（Ghost Text / FIM，1–3 行）** | 光标附近的学生代码、当前语言与文件信息、允许使用的个人编码习惯 | **完整题面、标准答案、Teacher Pack、教练对话记录、讲解报告与学习结论** |
+| **AI 教练（侧栏主动触发）** | 当前题面、你的代码、历史提示层级与本地学习画像 | 仅在你点击「给点提示 / 再具体一点 / 我放弃了」时按阶梯释放信息 |
+
+一句话总结：**短补全只顺着你的代码续写 1–3 行减少机械输入，AI 教练按阶梯推动思考，本地学习画像 (`Student Skill`) 沉淀长期错因线索。**
+
+---
+
+## 快速开始（推荐打包安装 VSIX）
+
+环境要求：VS Code `1.125.0+`、Node.js `20+` 与 npm。*(当前主要在 Windows + PowerShell 上开发与验证，欢迎 macOS / Linux 用户试用并提交兼容性反馈。)*
+
+### 方式 A：打包为 `.vsix` 装进日常 VS Code（适合直接刷题）
+
+无需每次开调试窗口，构建清理后的 Public Beta 安装包并安装到你的主力 VS Code：
+
+```powershell
+git clone https://github.com/Kaiserunix/student-autocomplete-lab.git
+cd student-autocomplete-lab
+npm ci
+npm run package:beta-release
+code --install-extension .\.runtime\student-autocomplete-lab-0.1.0-beta.1-release.vsix
+```
+
+*(macOS / Linux 将最后一行路径改为 `.runtime/student-autocomplete-lab-0.1.0-beta.1-release.vsix`。)*
+
+### 方式 B：源码调试启动（适合贡献者与二次开发）
 
 ```powershell
 git clone https://github.com/Kaiserunix/student-autocomplete-lab.git
@@ -22,150 +50,112 @@ npm test
 npm run compile
 ```
 
-然后用 VS Code 打开项目，按 `F5`，选择 `Run Student Autocomplete Extension`。
+用 VS Code 打开项目根目录，按 `F5` 选择 `Run Student Autocomplete Extension` 启动 Extension Development Host。
 
-项目目前主要在 Windows + PowerShell 上开发和验证。macOS、Linux 用户也欢迎试用并反馈兼容性问题。
+### 第一次使用（6 步跑通）
 
-### 第一次使用
+1. 打开左侧活动栏的 **`AI 做题陪练`**。
+2. 在 **`AI 配置`** 中选好 Provider、教学模型与补全模型（强烈推荐按下方双模型表配置）。
+3. 在线导入一道 **洛谷** 或 **AtCoder** 题，或直接选择一份本地 **Markdown** 题面。
+4. 创建 Python / C / C++ / Rust 练习文件开始写代码。
+5. 停顿约 `350 ms` 看到灰色 Ghost Text 按需接受；卡住时再点侧栏 AI 教练要一个小提示。
+6. 做完后做一次找错/复盘，顺手检查并纠正本地 **Student Skill** 学习画像。
 
-1. 打开活动栏里的 `AI 做题陪练`。
-2. 在 `AI 配置` 里选好 Provider 和模型。
-3. 导入一道洛谷题，或选择一份 Markdown。
-4. 创建练习文件，开始写代码。
-5. 看到 Ghost Text 就按需接受；卡住了再去问教练。
-6. 做完后复盘一下，再看看学习画像记录得是否准确。
+> 如果短补全没有响应，优先检查补全 Base URL 是否匹配 FIM 接口（例如 DeepSeek 需用 `/beta`），也可运行命令：`AI 做题陪练：立即补全一次（备用）`。
 
-如果补全没有响应，可以尝试命令：`AI 做题陪练：立即补全一次（备用）`。
+---
 
-## 它能帮你做什么？
+## 30 秒 DeepSeek 与 OpenAI-Compatible 双模型配置
+
+教学与补全支持拆分不同模型：高频短补全追求极速低延迟，复杂提示与复盘交给强推理模型。
+
+| 角色 | 推荐模型（DeepSeek 示例） | Base URL（⚠️ 务必注意路径） | 用途 |
+| --- | --- | --- | --- |
+| **短补全（FIM Autocomplete）** | `deepseek-chat` | `https://api.deepseek.com/beta` *(FIM 必须用 `/beta`，填 `/v1` 会导致补全静默无响应！)* | 约 350ms 极速续写 1–3 行代码 |
+| **AI 教练（教学 / 提示 / 复盘）** | `deepseek-reasoner` 或 `deepseek-chat` | `https://api.deepseek.com/v1` | 阶梯提示、WA 反例构造、代码评分与复盘 |
+
+### 全部支持的模型接入方式（不绑定单一厂商）
+
+| 方式 | 适合场景 |
+| --- | --- |
+| **OpenAI-compatible** | 接入 DeepSeek、MiMo、OpenRouter 或自建兼容服务 |
+| **OpenAI API Key** | 直接使用 OpenAI 官方接口 |
+| **Anthropic Messages** | 使用 Anthropic 原生接口 |
+| **Codex OAuth（实验性）** | 复用本地 Codex CLI 的 ChatGPT 登录会话 |
+
+> [!WARNING]
+> **Codex OAuth 风险提示**：该接入方式可能存在账号风险或受上游服务策略调整影响。作者自测期间未遇封号仅代表个人测试结果，不构成零风险或官方保证；介意请优先使用标准 API Key。
+
+通过侧栏保存的 API Key 会存入 **VS Code SecretStorage**。`secrets/models.env` 仅用于本地开发备用且已被 Git 忽略，请勿提交任何密钥到仓库。
+
+---
+
+## 五平台 OJ 能力与交题矩阵
+
+不同 OJ 平台的公开接口与反爬策略差异很大，下表如实标注当前版本的开箱能力与所需本地组件：
+
+| 平台 | 题面与样例导入 | 交题 / 评测链路 |
+| --- | --- | --- |
+| **洛谷 (Luogu)** | ✅ **开箱直读**公开题面、样例与标签（如需独立 MCP 接入其他客户端见 [`Kaiserunix/luogu-mcp-server`](https://github.com/Kaiserunix/luogu-mcp-server)） | 扩展内仅只读，在洛谷网页提交 |
+| **AtCoder** | ✅ **开箱直读**公开题面与样例 | ⚠️ 实验性调用本机 [`online-judge-tools/oj`](https://github.com/online-judge-tools/oj)（当前受 AtCoder 上游 Cloudflare Turnstile 限制） |
+| **Codeforces** | ⚙️ 远端搜索读取**公开元数据**；完整题面通过 **Competitive Companion**（端口 `10043`）或本地 Markdown 导入 | 🧪 实验性调用本机 `online-judge-tools/oj`（强制 2 分钟一次性显式确认） |
+| **牛客 (NowCoder)** | ⚙️ 需另配本地牛客 MCP 适配器（[`ketherworks/competitive-programming-mcp`](https://github.com/ketherworks/competitive-programming-mcp)），未配时可用 Markdown 导入 | 🧪 通过独立本地 `stdio` 牛客 MCP 运行与二次确认提交 |
+| **LeetCode** | ⚙️ 需另配本地适配器或使用 Markdown 备用通道 | 只读 / Markdown 练习链路 |
+
+> **可靠兜底**：无论网络或外部适配器状态如何，**本地 Markdown 题面导入**始终开箱可用，并支持生成 Python、C、C++、Rust 练习文件。
+
+---
+
+## 核心功能一览
 
 | 你正在…… | 它会…… |
 | --- | --- |
-| 重复输入模板代码 | 补一小段 Ghost Text，通常只有 1–3 行 |
-| 遇到 WA 或思路停滞 | 从边界、状态或反例里挑一个方向提醒你 |
-| 需要更明确的提示 | 逐步增加细节，同时尽量保留思考空间 |
-| 完成一道题 | 陪你找错、评分、复盘，看看是否还有更好的写法 |
-| 反复卡在同类问题 | 把证据记进可查看、可纠正的 Student Skill |
-| 不知道下一题练什么 | 给出推荐题目，也解释推荐理由 |
-
-一句话总结：**短补全减少重复输入，AI 教练推动思考，学习画像沉淀长期线索。**
-
-## 核心功能
-
-### ✨ 短补全
-
-支持 Python、C、C++、Rust 等常见算法语言。停下输入约 350 ms，编辑器会尝试给出一小段灰色续写；想立刻再来一次，也可以手动触发。
-
-它会尽量顺着现有代码继续写，而不是接管整个解题过程。
-
-### 💬 AI 教练
-
-侧栏里的 `AI 教练` 可以：
-
-- 给一个小提示；
-- 再具体一点；
-- 接着追问；
-- 放弃后看讲解；
-- 做完后找错、评分和复盘；
-- 推荐下一道练习题。
-
-AI 找错和评分都只是辅助判断。最终结果仍以编译器、样例和官方 OJ 为准。
-
-### 📚 题库
-
-在线题库可以切换洛谷、LeetCode、牛客、Codeforces 和 AtCoder，也可以直接导入一份 Markdown。项目还能帮你创建 Python、C、C++、Rust 练习文件。
-
-洛谷和 AtCoder 可以直接读取公开题面；LeetCode、牛客需要本地适配器；Codeforces 当前读取公开元数据，完整题面可以通过 Competitive Companion 或 Markdown 导入。连接不可用时，Markdown 仍是一条可靠的备用通道。
-
-### 🪴 会长大的学习画像
-
-Student Skill 会记录反复出现的痛点、可能有用的习惯和最近证据。它提供的是可回看的学习线索，而不是一份替你定义“是否学会”的成绩单。
-
-判断不准确时可以纠正，不想继续使用的结论可以禁用，也可以查看历史版本并回滚。
-
-### 🔌 你选模型，不绑一家
-
-| 方式 | 适合什么情况 |
-| --- | --- |
-| OpenAI API Key | 直接使用 OpenAI 模型 |
-| Codex OAuth（实验性） | 使用本地 Codex CLI 的 ChatGPT 登录会话 |
-| OpenAI-compatible | 接入 DeepSeek、MiMo 或其他兼容服务 |
-| Anthropic Messages | 使用 Anthropic 原生接口 |
-
-> **Codex OAuth 风险提示：** 这条接入方式可能存在账号风险，也可能受到 Codex 服务调整的影响。作者自测期间暂未遇到封号，但这只是个人测试结果，不代表零风险或官方保证。介意的话，建议改用 API Key。
-
-教学和补全可以使用不同模型：高频补全更看重速度，复杂复盘则可以交给更擅长推理的模型。
-
-## 配置 AI
-
-在侧栏 `AI 配置` 或 VS Code Settings 中填写：
-
-- Provider 模式；
-- Base URL；
-- 教学模型；
-- 自动补全模型；
-- 补全请求格式；
-- API Key，或 Codex OAuth。
-
-从侧栏保存的 API Key 会进入 VS Code SecretStorage。`secrets/models.env` 只用于本地开发备用，并已被 Git 忽略。请不要把密钥提交到仓库。
+| 重复输入模板代码（快读、建图、边界判断） | 顺着当前代码续写 1–3 行防剧透 Ghost Text |
+| 遇到 WA 或思路卡壳 | 从边界、状态转移或反例中挑一个方向给小提示 |
+| 需要更进一步引导 | 按阶梯逐步细化提示，直到你主动选择「我放弃了」才看完整讲解 |
+| 完成一道题 | 辅助找错、评分与复盘，对比是否存在更优解法（最终结果以编译器与官方 OJ 为准） |
+| 反复踩同一类坑 | 沉淀为可查看、可纠正、可禁用、可回滚历史版本的本地 **Student Skill** 学习画像 |
+| 不知道下一题练什么 | 结合薄弱线索给出下一题推荐并解释推荐理由 |
 
 <details>
-<summary><strong>实验性 Codeforces / AtCoder 提交</strong></summary>
+<summary><strong>实验性 Codeforces / AtCoder 提交说明（点击展开）</strong></summary>
 
-当前版本可以调用你自己安装的 [`online-judge-tools/oj`](https://github.com/online-judge-tools/oj)，向 Codeforces 或 AtCoder 提交已经保存的活动代码文件。
+当前版本支持调用你自己安装的 [`online-judge-tools/oj`](https://github.com/online-judge-tools/oj)，向 Codeforces 或 AtCoder 提交已保存的活动代码文件（提交始终需要用户显式确认）：
 
-每次提交前，你都要亲自检查题目链接、文件、语言和代码大小，再生成一次性确认。确认两分钟后失效，代码一改也会失效。
-
-提交始终需要用户显式确认。扩展不会自动重试，也不会读取浏览器凭据或保存带源码的原始 CLI 输出。
-
-只想看看流程，可以启动不会真的提交代码的本地演示：
+- 每次提交前，你都要亲自检查题目链接、文件、语言与代码大小，再生成一次性确认（2 分钟失效，代码改动立即失效）。
+- 扩展绝不自动重试，不读取浏览器凭据，也不持久化带源码的原始 CLI 输出。
+- 仅想本地体验提交流程（不访问真实 OJ，仅监听 `127.0.0.1`）：
 
 ```powershell
 npm run prototype:oj
 ```
 
-它只监听 `127.0.0.1`，默认演示模式不会访问真实 OJ。
-
 </details>
 
-## 数据保存在本地
+---
 
-默认都在本机：题库、做题记录、学习画像、Teacher Pack 和模型用量记录。
+## 数据默认保存在本机
 
-这些东西不会进 Git：
+题库缓存、做题记录、Student Skill 学习画像、Teacher Pack 与模型用量统计全部默认留在本地，且以下目录/内容均被 `.gitignore` 排除、不会进入 Git：
 
-- API Key 和 OAuth 会话；
-- `.runtime/` 里的运行记录；
-- `.student-autocomplete/` 里的个人学习数据；
-- `practice/` 里的练习文件；
-- 本地生成的 VSIX。
+- API Key 与 OAuth 会话（存于 VS Code SecretStorage）
+- `.runtime/` 里的运行产物与本地打包 VSIX
+- `.student-autocomplete/` 里的个人学习画像与记录
+- `practice/` 里的个人练习代码
 
-## 为什么不直接给完整答案？
-
-因为“看懂一份答案”和“自己能写出来”中间，通常还隔着几次尝试。
-
-所以项目把补全和教学分成了两条路：
-
-| 短补全能看到 | 短补全看不到 |
-| --- | --- |
-| 光标附近的学生代码 | 完整题面 |
-| 当前语言与文件信息 | 标准答案 |
-| 允许使用的代码习惯 | Teacher Pack |
-|  | 教练对话、讲解报告和学习结论 |
-
-题面和隐藏参考材料只会进入你主动发起的教学流程，不会被自动补全用来生成整题答案。
+---
 
 ## 开发者指南
 
 ```text
 src/
-├─ autocomplete/    短补全：上下文、触发、请求、过滤
+├─ autocomplete/    防剧透短补全：上下文隔离、触发、请求、过滤
 ├─ skills/          语言策略、个人习惯与模型渲染
 ├─ sidebar/         VS Code 侧栏与交互
-├─ problemBank/     洛谷和 Markdown 题库
-├─ teaching/        提示、讲解、评分与 Student Skill
+├─ problemBank/     洛谷与 Markdown 题库
+├─ teaching/        阶梯提示、讲解、评分与 Student Skill
 ├─ recommendation/  下一题推荐
-├─ models/          模型客户端
+├─ models/          多 Provider 模型客户端
 ├─ codex/           Codex OAuth 与 app-server
 ├─ oj/              五平台题库连接、契约与状态
 ├─ submission/      实验性 OJ 提交
@@ -176,47 +166,27 @@ src/
 
 | 命令 | 用途 |
 | --- | --- |
-| `npm test` | 运行全部测试 |
+| `npm test` | 运行全部 Vitest 测试（含上下文隔离边界测试） |
 | `npm run compile` | 编译扩展 |
 | `npm run smoke:oj-read` | 实测五平台搜索与只读导题 |
-| `npm run prototype:oj` | 启动本地 OJ Console |
-| `npm run package:beta` | 生成完整本地测试包 |
-| `npm run package:beta-release` | 生成清理后的公开候选包 |
-| `npm run check:hygiene` | 检查发行包是否包含本地数据或敏感内容 |
+| `npm run prototype:oj` | 启动本地 OJ Console 演示 |
+| `npm run package:beta` | 生成本地调试 VSIX 包 |
+| `npm run package:beta-release` | 生成清理后的公开 Beta 候选 VSIX 包 |
+| `npm run check:hygiene` | 检查发行包是否夹带本地数据或敏感内容 |
 
-想了解更深的设计、实验和评测，可以从 [`docs/`](docs/) 开始。Live trial 可能消耗付费模型额度，运行前请确认模型配置和预算。
+更深入的设计、评测与演进规划见 [`docs/`](docs/)、[`docs/PRODUCT_STRATEGY.md`](docs/PRODUCT_STRATEGY.md) 与 [`docs/current-gaps-and-next-steps.md`](docs/current-gaps-and-next-steps.md)。*（注：Live trial 会消耗付费模型额度，运行前请确认预算；当前 1,000 步长期画像演进评测属于合成模拟评测。）*
 
-## 仍在完善
+---
 
-核心功能已经可用，但还不是稳定发行版：
+## 已知边界与 Public Beta 演进中
 
-- 英文界面只覆盖主要路径；
-- LeetCode、牛客的在线导题需要另装本地适配器；
-- Codeforces 完整题面仍需要 Competitive Companion 或 Markdown；
-- Codeforces、AtCoder 提交还是实验功能；
-- C、C++、Rust 的补全仍在持续打磨；
-- 推荐和学习画像需要更多真实练习来校准；
-- macOS、Linux 还需要更多兼容性反馈。
+- 英文界面目前仅覆盖主要路径；
+- C / C++ / Rust 短补全与学习画像校准仍在持续打磨；
+- 推荐排序与学习画像需要更多真实刷题样本验证；
+- macOS / Linux 仍需更多实机兼容性反馈。
 
-接下来会把当前题目、代码、教练对话和复盘连成更自然的一条线，再逐步接入更多题库和 OJ。
-
-详细进度记录在 [`docs/current-gaps-and-next-steps.md`](docs/current-gaps-and-next-steps.md)。
-
-## 参与项目
-
-欢迎提交 Issue，尤其是这些反馈：
-
-- 补全过长或偏离当前代码；
-- 提示过于直接，已经接近完整答案；
-- 某个边界条件没有得到提醒；
-- 题目无法导入；
-- 学习画像记录不准确；
-- 配置完成后没有正常响应。
-
-提交问题前，请删除 API Key、OAuth 信息、个人代码和未公开题面。
+欢迎提交 Issue 反馈以下场景（**提交前请删除 API Key、OAuth 信息、个人代码与未公开题面**）：补全过长或剧透、提示过于直接、边界条件遗漏、题目无法导入、学习画像判断偏差或配置后无响应。
 
 ## License
 
-[MIT](LICENSE) © 2026 kaiserunix
-
-第三方组件与许可见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
+[MIT](LICENSE) © 2026 kaiserunix · 第三方组件与许可见 [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md)。
