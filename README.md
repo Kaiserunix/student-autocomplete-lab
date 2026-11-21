@@ -118,11 +118,11 @@ npm run compile
 | 不知道下一题练什么 | 结合薄弱线索给出下一题推荐并解释推荐理由 |
 
 <details>
-<summary><strong>实验性 Codeforces / AtCoder 本地提交说明（点击展开）</strong></summary>
+<summary><strong>实验性 Codeforces / AtCoder 提交说明（点击展开）</strong></summary>
 
-当前版本支持调用你自己安装的 [`online-judge-tools/oj`](https://github.com/online-judge-tools/oj)，向 Codeforces 或 AtCoder 提交已保存的活动代码文件：
+当前版本支持调用你自己安装的 [`online-judge-tools/oj`](https://github.com/online-judge-tools/oj)，向 Codeforces 或 AtCoder 提交已保存的活动代码文件（提交始终需要用户显式确认）：
 
-- 每次提交前须亲自核对题目链接、文件、语言与代码大小，再生成一次性确认（2 分钟失效，代码改动立即失效）。
+- 每次提交前，你都要亲自检查题目链接、文件、语言与代码大小，再生成一次性确认（2 分钟失效，代码改动立即失效）。
 - 扩展绝不自动重试，不读取浏览器凭据，也不持久化带源码的原始 CLI 输出。
 - 仅想本地体验提交流程（不访问真实 OJ，仅监听 `127.0.0.1`）：
 

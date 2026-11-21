@@ -16,6 +16,9 @@ Map of all documentation files in `student-autocomplete-lab`, verified against `
 | Document | Purpose | Status |
 | --- | --- | --- |
 | [INDEX.md](INDEX.md) | Canonical documentation map and lifecycle status index | Active |
+| [PRODUCT_STRATEGY.md](PRODUCT_STRATEGY.md) | Product strategy, anti-spoiler positioning, honest 5-OJ capability boundaries, and roadmap | Active |
+| [UX_EXPERIENCE_AND_DESIGN_SPEC.md](UX_EXPERIENCE_AND_DESIGN_SPEC.md) | Code-verified UX experience & product design specification, persona friction audit, and interaction blueprints | Active |
+| [USER_JOURNEY_COPY.md](USER_JOURNEY_COPY.md) | Bilingual (`zh-CN` / `en-US`) user journey & microcopy deck, hero positioning, and error-recovery dictionary | Active |
 | [architecture.md](architecture.md) | Code-truthful system architecture, `src/` module map, context gatekeeper, schemas, and governance | Active |
 | [current-gaps-and-next-steps.md](current-gaps-and-next-steps.md) | Maintained backlog of verified gaps, educational hard gates, and prioritized next slices | Active |
 | [release-lanes.md](release-lanes.md) | Three VSIX lanes (`beta`, `beta-release`, `internal`), CI hygiene gates, and friend-test build guide | Active |
