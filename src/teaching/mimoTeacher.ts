@@ -7,6 +7,10 @@ import { providerCapabilitiesFor } from "../models/providerCapabilities";
 import { composeCoachSkillPlan } from "../skills/composeSkillPlan";
 import { selectLearnerRules } from "../skills/habitSelector";
 import { renderCoachSkillPlan } from "../skills/renderers/skillRenderer";
+import {
+  validateCoachDiagnosisSafety,
+  type CoachSpoilerValidationResult
+} from "../skills/validators/coachSpoilerPolicy";
 import type {
   CoachSkillAction,
   ProviderCapabilities,
@@ -23,6 +27,7 @@ export interface TeachingDiagnosisSkillOptions {
   action?: CoachSkillAction;
   capabilities?: ProviderCapabilities;
   onAudit?: (audit: SkillPlanAudit) => void;
+  onSafetyCheck?: (result: CoachSpoilerValidationResult<TeachingDiagnosisReport>) => void;
 }
 
 export async function requestMimoTeachingDiagnosis(
@@ -54,9 +59,10 @@ export async function requestMimoTeachingDiagnosisWithSkills(
     language: context.language,
     localCode: context.studentCode
   });
+  const action = options.action ?? "hint";
   const plan = composeCoachSkillPlan({
     language: context.language,
-    action: options.action ?? "hint",
+    action,
     learnerSelection
   });
   const capabilities = options.capabilities ?? providerCapabilitiesFor({
@@ -82,8 +88,19 @@ export async function requestMimoTeachingDiagnosisWithSkills(
     fetchImpl
   );
 
-  return parseAndNormalizeTeachingReport(text, context);
+  const report = parseAndNormalizeTeachingReport(text, context);
+  const safety = validateCoachDiagnosisSafety(report, {
+    mode: action,
+    studentCode: context.studentCode,
+    teacherPack: context.teacherPack,
+    responseLanguage: context.responseLanguage
+  });
+  options.onSafetyCheck?.(safety);
+  return safety.sanitizedReport;
 }
+
+export const requestTeachingDiagnosis = requestMimoTeachingDiagnosis;
+export const requestTeachingDiagnosisWithSkills = requestMimoTeachingDiagnosisWithSkills;
 
 function parseAndNormalizeTeachingReport(
   text: string,

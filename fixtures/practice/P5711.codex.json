@@ -1,0 +1,34 @@
+{
+  "problem_id": "P5711",
+  "reference_solution": "y = int(input())\nprint(1 if (y % 400 == 0 or (y % 4 == 0 and y % 100 != 0)) else 0)\n",
+  "wrong_submissions": [
+    {
+      "code": "y = int(input())\nif y % 4 == 0:\n    print(1)\nelse:\n    print(0)\n",
+      "expected_error": "Treats every year divisible by 4 as a leap year, missing the century non-leap exception when y % 100 == 0 and y % 400 != 0.",
+      "pain_points": [
+        "branch_condition_coverage"
+      ]
+    },
+    {
+      "code": "y = int(input())\nif y % 4 == 0 and y % 100 != 0:\n    print(1)\nelse:\n    print(0)\n",
+      "expected_error": "Excludes all multiples of 100, missing the y % 400 == 0 leap-year override such as year 2000.",
+      "pain_points": [
+        "branch_condition_coverage"
+      ]
+    },
+    {
+      "code": "y = int(input())\nif y % 400 == 0 or y % 4 == 0 and y % 100 == 0:\n    print(1)\nelse:\n    print(0)\n",
+      "expected_error": "Uses y % 100 == 0 instead of y % 100 != 0, rejecting regular non-century leap years like 2024.",
+      "pain_points": [
+        "branch_condition_coverage"
+      ]
+    }
+  ],
+  "skill_update_candidate": {
+    "name": "branch-boundary-check",
+    "rules": [
+      "Verify mutually exclusive and exception branches explicitly, including century and 400-year rules.",
+      "Test boundary inputs for every branch condition: divisible by 400, divisible by 100 only, divisible by 4 only, and non-divisible."
+    ]
+  }
+}

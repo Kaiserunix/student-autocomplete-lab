@@ -1,0 +1,34 @@
+{
+  "problem_id": "P2249",
+  "reference_solution": "import sys\n\ndata = list(map(int, sys.stdin.buffer.read().split()))\nn, m = data[0], data[1]\na = data[2:2 + n]\nqueries = data[2 + n:2 + n + m]\n\nout = []\nfor x in queries:\n    l, r = 0, n - 1\n    ans = -1\n    while l <= r:\n        mid = (l + r) // 2\n        if a[mid] >= x:\n            if a[mid] == x:\n                ans = mid + 1\n            r = mid - 1\n        else:\n            l = mid + 1\n    out.append(str(ans))\n\nprint(' '.join(out))\n",
+  "wrong_submissions": [
+    {
+      "code": "import sys\n\ndata = list(map(int, sys.stdin.buffer.read().split()))\nn, m = data[0], data[1]\na = data[2:2 + n]\nqueries = data[2 + n:2 + n + m]\n\nout = []\nfor x in queries:\n    l, r = 0, n - 1\n    ans = -1\n    while l <= r:\n        mid = (l + r) // 2\n        if a[mid] == x:\n            ans = mid + 1\n            break\n        elif a[mid] < x:\n            l = mid + 1\n        else:\n            r = mid - 1\n    out.append(str(ans))\n\nprint(' '.join(out))\n",
+      "expected_error": "Breaks on the first equality match in binary search instead of shrinking the right boundary to find the leftmost occurrence.",
+      "pain_points": [
+        "binary_search_invariant"
+      ]
+    },
+    {
+      "code": "import sys\n\ndata = list(map(int, sys.stdin.buffer.read().split()))\nn, m = data[0], data[1]\na = data[2:2 + n]\nqueries = data[2 + n:2 + n + m]\n\nout = []\nfor x in queries:\n    l, r = 0, n - 1\n    ans = -1\n    while l <= r:\n        mid = (l + r) // 2\n        if a[mid] >= x:\n            if a[mid] == x:\n                ans = mid\n            r = mid - 1\n        else:\n            l = mid + 1\n    out.append(str(ans))\n\nprint(' '.join(out))\n",
+      "expected_error": "Records the zero-based array index instead of the one-based position required by the problem.",
+      "pain_points": [
+        "array_indexing"
+      ]
+    },
+    {
+      "code": "import sys\n\ndata = list(map(int, sys.stdin.buffer.read().split()))\nn, m = data[0], data[1]\na = data[2:2 + n]\nqueries = data[2 + n:2 + n + m]\n\nout = []\nfor x in queries:\n    l, r = 0, n - 1\n    while l < r:\n        mid = (l + r) // 2\n        if a[mid] >= x:\n            r = mid\n        else:\n            l = mid + 1\n    out.append(str(l + 1))\n\nprint(' '.join(out))\n",
+      "expected_error": "Returns the lower-bound index without checking whether a[l] actually equals the query target x.",
+      "pain_points": [
+        "binary_search_invariant"
+      ]
+    }
+  ],
+  "skill_update_candidate": {
+    "name": "binary-search-boundary-check",
+    "rules": [
+      "Keep the binary search invariant explicit for lower-bound queries: shrink the right side when a[mid] >= x and verify a[pos] == x before returning.",
+      "Convert zero-based array positions to one-based problem indices only after locating the leftmost match."
+    ]
+  }
+}

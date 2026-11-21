@@ -96,6 +96,11 @@ export async function requestMimoAutocomplete(
   return (await requestMimoAutocompleteDetailed(config, input, fetchImpl)).suggestion;
 }
 
+export type AutocompleteInput = MimoAutocompleteInput;
+export type AutocompleteResult = MimoAutocompleteResult;
+export const requestAutocompleteDetailed = requestMimoAutocompleteDetailed;
+export const requestAutocomplete = requestMimoAutocomplete;
+
 function skillFromLegacyHabits(habits: string[] | undefined): StudentSkill {
   const skill = createEmptyStudentSkill("legacy-autocomplete");
   skill.codeHabits.globalRules = [...(habits ?? [])];

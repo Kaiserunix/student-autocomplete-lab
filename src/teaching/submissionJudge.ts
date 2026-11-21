@@ -80,6 +80,8 @@ export async function requestMimoSubmissionJudge(
   }
 }
 
+export const requestSubmissionJudge = requestMimoSubmissionJudge;
+
 export function parseSubmissionJudgeReport(text: string): SubmissionJudgeReport {
   const raw = JSON.parse(extractJson(text)) as RawSubmissionJudgeReport;
   const verdict = requireVerdict(raw.verdict);

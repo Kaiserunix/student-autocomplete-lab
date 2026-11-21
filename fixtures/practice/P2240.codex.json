@@ -1,0 +1,34 @@
+{
+  "problem_id": "P2240",
+  "reference_solution": "import sys\n\ndata = sys.stdin.read().split()\nn = int(data[0])\nt = float(data[1])\nitems = []\npos = 2\nfor _ in range(n):\n    m = float(data[pos])\n    v = float(data[pos + 1])\n    pos += 2\n    items.append((m, v))\n\nitems.sort(key=lambda item: item[1] / item[0], reverse=True)\nans = 0.0\nfor m, v in items:\n    if t >= m:\n        ans += v\n        t -= m\n    else:\n        ans += v * (t / m)\n        break\n\nprint(f\"{ans:.2f}\")\n",
+  "wrong_submissions": [
+    {
+      "code": "import sys\n\ndata = sys.stdin.read().split()\nn = int(data[0])\nt = float(data[1])\nitems = []\npos = 2\nfor _ in range(n):\n    m = float(data[pos])\n    v = float(data[pos + 1])\n    pos += 2\n    items.append((m, v))\n\nitems.sort(key=lambda item: item[1], reverse=True)\nans = 0.0\nfor m, v in items:\n    if t >= m:\n        ans += v\n        t -= m\n    else:\n        ans += v * (t / m)\n        break\n\nprint(f\"{ans:.2f}\")\n",
+      "expected_error": "Sorts piles by total value instead of value-per-unit-weight ratio, choosing suboptimal heavy piles first.",
+      "pain_points": [
+        "greedy_choice_model"
+      ]
+    },
+    {
+      "code": "import sys\n\ndata = sys.stdin.read().split()\nn = int(data[0])\nt = float(data[1])\nitems = []\npos = 2\nfor _ in range(n):\n    m = float(data[pos])\n    v = float(data[pos + 1])\n    pos += 2\n    items.append((m, v))\n\nitems.sort(key=lambda item: item[1] / item[0], reverse=True)\nans = 0.0\nfor m, v in items:\n    if t >= m:\n        ans += v\n        t -= m\n\nprint(f\"{ans:.2f}\")\n",
+      "expected_error": "Skips taking a partial fraction of the next best pile when remaining capacity t < m.",
+      "pain_points": [
+        "greedy_choice_model"
+      ]
+    },
+    {
+      "code": "import sys\n\ndata = sys.stdin.read().split()\nn = int(data[0])\nt = float(data[1])\nitems = []\npos = 2\nfor _ in range(n):\n    m = float(data[pos])\n    v = float(data[pos + 1])\n    pos += 2\n    items.append((m, v))\n\nitems.sort(key=lambda item: item[1] / item[0], reverse=True)\nans = 0.0\nfor m, v in items:\n    if t >= m:\n        ans += v\n        t -= m\n    else:\n        ans += v * (t / m)\n        break\n\nprint(ans)\n",
+      "expected_error": "Prints raw float without two-decimal formatting (.2f), failing exact output precision.",
+      "pain_points": [
+        "output_format"
+      ]
+    }
+  ],
+  "skill_update_candidate": {
+    "name": "greedy-choice-proof-check",
+    "rules": [
+      "Verify the greedy exchange key (such as unit value v/m for divisible items) before sorting.",
+      "Handle the boundary partial-take case separately from formatting output precision."
+    ]
+  }
+}

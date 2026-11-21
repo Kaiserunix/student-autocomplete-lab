@@ -19,6 +19,22 @@ describe("practice oracle registry", () => {
     expect(getPracticeTestCases("P1364")[0]).toMatchObject({
       expectedOutput: "81\n"
     });
+    expect(getPracticeTestCases("P5711")).toHaveLength(4);
+    expect(getPracticeTestCases("P2249")[0]).toMatchObject({
+      expectedOutput: "1 2 -1\n"
+    });
+    expect(getPracticeTestCases("P1601")[1]).toMatchObject({
+      expectedOutput: "10100\n"
+    });
+    expect(getPracticeTestCases("P2240")[0]).toMatchObject({
+      expectedOutput: "240.00\n"
+    });
+    expect(getPracticeTestCases("P1551")[0]).toMatchObject({
+      expectedOutput: "Yes\nYes\nNo\n"
+    });
+    expect(getPracticeTestCases("P5318")[0]).toMatchObject({
+      expectedOutput: "1 2 5 6 3 7 8 4\n1 2 3 4 5 6 7 8\n"
+    });
   });
 
   test("fails clearly when a problem has no local oracle", () => {
