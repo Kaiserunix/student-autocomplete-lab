@@ -1,0 +1,12 @@
+node_modules/
+dist/
+out/
+*.vsix
+.runtime/
+.algo-coach/
+coverage/
+.DS_Store
+Thumbs.db
+secrets/
+*.env
+!.env.example

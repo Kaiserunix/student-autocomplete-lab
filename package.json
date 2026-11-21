@@ -1,0 +1,383 @@
+{
+  "name": "algo-coach",
+  "displayName": "Algo Coach",
+  "description": "Multi-OJ local runner, Socratic algorithm tutor, and anti-spoiler code completion.",
+  "version": "0.2.0",
+  "publisher": "kaiserunix",
+  "license": "MIT",
+  "keywords": [
+    "algorithms",
+    "leetcode",
+    "competitive-programming",
+    "tutor",
+    "oj"
+  ],
+  "categories": [
+    "Education",
+    "Programming Languages",
+    "Other"
+  ],
+  "engines": {
+    "vscode": "^1.93.0",
+    "node": ">=20.0.0"
+  },
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onView:algoCoach.sidebar",
+    "onCommand:algoCoach.openSidebar",
+    "onCommand:algoCoach.openWalkthrough",
+    "onCommand:algoCoach.runSamples",
+    "onCommand:algoCoach.requestHint",
+    "onCommand:algoCoach.triggerGhostText",
+    "onLanguage:python",
+    "onLanguage:cpp",
+    "onLanguage:c",
+    "onLanguage:rust",
+    "onLanguage:java"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "algoCoach",
+          "title": "Algo Coach",
+          "icon": "resources/activity.svg"
+        }
+      ]
+    },
+    "views": {
+      "algoCoach": [
+        {
+          "type": "webview",
+          "id": "algoCoach.sidebar",
+          "name": "Algo Coach"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "algoCoach.openSidebar",
+        "title": "Open Sidebar",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.openWalkthrough",
+        "title": "Open Starter Tutorial Pack",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.selectPreset",
+        "title": "Switch Mode Preset (Starter / Focus / Contest)",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.applyStarterVisualPreset",
+        "title": "Apply Beginner Visual Preset (Rainbow Brackets & Guides)",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.restoreStarterVisualPreset",
+        "title": "Restore Previous VS Code Visual Settings",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.loadWarmupPack",
+        "title": "Load 3-Problem Beginner Warmup Pack",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.importProblem",
+        "title": "Import Problem (URL / ID / Markdown / Clipboard)",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.runSamples",
+        "title": "Run Local Samples",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.checkToolchain",
+        "title": "Run Toolchain Doctor",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.copyAndOpenSubmit",
+        "title": "Copy Clean Solution & Open Official Submit Page",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.requestHint",
+        "title": "Request Next Socratic Hint",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.openPatternMapper",
+        "title": "Analyze Problem Pattern (30s Pattern Mapper)",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.triggerGhostText",
+        "title": "Trigger Anti-Spoiler Ghost Text Once",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.toggleSound",
+        "title": "Toggle Sound Effects Mute",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.configureAiKeys",
+        "title": "Configure Chat & FIM API Keys",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.runHealthCheck",
+        "title": "Run 3-Step AI Health Check",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.internal.selectPlaceholder",
+        "title": "Select Ghost Text Placeholder"
+      },
+      {
+        "command": "algoCoach.internal.recordWordAccept",
+        "title": "Record Word-by-Word Ghost Text Accept"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "algoCoach.runSamples",
+        "key": "ctrl+alt+r",
+        "mac": "cmd+alt+r",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "algoCoach.requestHint",
+        "key": "ctrl+alt+h",
+        "mac": "cmd+alt+h",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "algoCoach.triggerGhostText",
+        "key": "alt+\\",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "editor.action.inlineSuggest.acceptNextWord",
+        "key": "tab",
+        "when": "inlineSuggestionVisible && algoCoach.strictWordAccept"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "algoCoach.starterPack",
+        "title": "Algo Coach Starter Tutorial Pack",
+        "description": "Set up a distraction-free VS Code algorithm training workspace with anti-spoiler guardrails.",
+        "steps": [
+          {
+            "id": "visualPreset",
+            "title": "1. Apply Beginner Visual Preset (Optional & Reversible)",
+            "description": "Turn on VS Code native rainbow brackets, active bracket guides, and sticky scroll for this workspace only. Restorable in one click.\n[Apply Visual Preset](command:algoCoach.applyStarterVisualPreset) · [Restore Settings](command:algoCoach.restoreStarterVisualPreset)",
+            "completionEvents": [
+              "onCommand:algoCoach.applyStarterVisualPreset"
+            ]
+          },
+          {
+            "id": "toolchainAndWarmup",
+            "title": "2. Check Compilers & Open 3-Problem Warmup Pack",
+            "description": "Verify local Python/C++ toolchains and create your first local warmup problem file.\n[Run Toolchain Doctor](command:algoCoach.checkToolchain) · [Load Warmup Pack](command:algoCoach.loadWarmupPack)",
+            "completionEvents": [
+              "onCommand:algoCoach.loadWarmupPack"
+            ]
+          },
+          {
+            "id": "localRunner",
+            "title": "3. Run Local Samples Before Submitting",
+            "description": "Test your code locally in under 200ms with clean diff output using `Ctrl+Alt+R` (`Cmd+Alt+R` on macOS).\n[Run Local Samples](command:algoCoach.runSamples)",
+            "completionEvents": [
+              "onCommand:algoCoach.runSamples"
+            ]
+          },
+          {
+            "id": "ghostTextAndCoach",
+            "title": "4. Use Anti-Spoiler Ghost Text & 5-Level Socratic Hints",
+            "description": "Ghost text only completes mechanical syntax (never reads the problem statement). Use `Ctrl+Right` to accept word-by-word, `Alt+\\` to invoke on demand, and `Ctrl+Alt+H` when genuinely stuck.\n[Configure AI Keys](command:algoCoach.configureAiKeys) · [Request Hint](command:algoCoach.requestHint)",
+            "completionEvents": [
+              "onCommand:algoCoach.requestHint"
+            ]
+          },
+          {
+            "id": "customizeFlags",
+            "title": "5. Tune Mode Preset & Optional Tactile Audio",
+            "description": "Switch between Starter, Focus, and Contest presets anytime. Mechanical typing sounds and AC chimes stay off by default and can be toggled from the sidebar.\n[Switch Mode Preset](command:algoCoach.selectPreset)",
+            "completionEvents": [
+              "onCommand:algoCoach.selectPreset"
+            ]
+          }
+        ]
+      }
+    ],
+    "configuration": {
+      "title": "Algo Coach",
+      "properties": {
+        "algoCoach.preset": {
+          "type": "string",
+          "enum": ["starter", "focus", "contest"],
+          "default": "focus",
+          "description": "Active experience preset: starter (beginner onboarding), focus (default clean training), or contest (strict minimal mode)."
+        },
+        "algoCoach.ui.language": {
+          "type": "string",
+          "enum": ["zh-CN", "en-US"],
+          "default": "zh-CN",
+          "description": "Primary UI and coaching response language."
+        },
+        "algoCoach.ghostText.mode": {
+          "type": "string",
+          "enum": ["adaptive", "fast-syntax", "manual", "off"],
+          "default": "adaptive",
+          "description": "Anti-spoiler ghost text trigger mode."
+        },
+        "algoCoach.ghostText.strictWordAccept": {
+          "type": "boolean",
+          "default": false,
+          "description": "When enabled, Tab accepts ghost text word-by-word instead of the whole block."
+        },
+        "algoCoach.ghostText.microFriction": {
+          "type": "string",
+          "enum": ["off", "multi-choice", "lead-and-reveal"],
+          "default": "off",
+          "description": "Optional desirable-difficulty micro-friction mode on manual ghost text invoke."
+        },
+        "algoCoach.coach.strictness": {
+          "type": "string",
+          "enum": ["gentle", "standard", "strict"],
+          "default": "standard",
+          "description": "Socratic coaching tone (strict enables zero-sycophancy direct critique)."
+        },
+        "algoCoach.coach.patternMapper.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable 30-second Pattern Mapper card before coding."
+        },
+        "algoCoach.coach.mockInterview.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable optional Mock Interview mode entry in sidebar."
+        },
+        "algoCoach.starterPack.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Master switch for the Beginner Starter Tutorial Pack."
+        },
+        "algoCoach.onboarding.shortcutHints.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable non-intrusive status bar shortcut whispers (auto-graduates after use)."
+        },
+        "algoCoach.stylishRank.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable DMC-style deterministic Stylish Rank (D to SSS) in the status bar."
+        },
+        "algoCoach.feedback.typingSound.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable low-latency mechanical keyboard typing sound via Web Audio (off by default)."
+        },
+        "algoCoach.feedback.typingSound.pack": {
+          "type": "string",
+          "enum": ["crisp-blue", "muted-brown", "soft-drop"],
+          "default": "muted-brown",
+          "description": "Mechanical switch sound profile."
+        },
+        "algoCoach.feedback.typingSound.volume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.25,
+          "description": "Typing sound volume (0.0 to 1.0)."
+        },
+        "algoCoach.feedback.celebrationSound.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable restrained harmonic chime on local/official AC and S+ rank promotions (off by default)."
+        },
+        "algoCoach.feedback.celebrationSound.volume": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "default": 0.35,
+          "description": "Celebration chime volume (0.0 to 1.0)."
+        },
+        "algoCoach.ai.chat.provider": {
+          "type": "string",
+          "enum": ["openai-compatible", "openai", "anthropic", "ollama"],
+          "default": "openai-compatible",
+          "description": "Provider type for Socratic coaching and diagnosis."
+        },
+        "algoCoach.ai.chat.baseUrl": {
+          "type": "string",
+          "default": "https://api.deepseek.com/v1",
+          "description": "Base URL for coaching chat requests."
+        },
+        "algoCoach.ai.chat.model": {
+          "type": "string",
+          "default": "deepseek-chat",
+          "description": "Model name for Socratic coaching."
+        },
+        "algoCoach.ai.fim.provider": {
+          "type": "string",
+          "enum": ["openai-compatible", "openai", "anthropic", "ollama"],
+          "default": "openai-compatible",
+          "description": "Provider type for 1-3 line anti-spoiler FIM autocomplete."
+        },
+        "algoCoach.ai.fim.baseUrl": {
+          "type": "string",
+          "default": "https://api.deepseek.com/beta",
+          "description": "Base URL for FIM autocomplete (DeepSeek FIM requires /beta)."
+        },
+        "algoCoach.ai.fim.model": {
+          "type": "string",
+          "default": "deepseek-chat",
+          "description": "Model name for low-latency FIM autocomplete."
+        },
+        "algoCoach.oj.bridgePort": {
+          "type": "number",
+          "default": 27121,
+          "description": "Primary localhost port for Competitive Companion / browser bridge (falls back safely if occupied)."
+        },
+        "algoCoach.oj.codeforcesHandle": {
+          "type": "string",
+          "default": "",
+          "description": "Optional public Codeforces handle for zero-login official verdict polling."
+        },
+        "algoCoach.runner.timeoutMs": {
+          "type": "number",
+          "minimum": 500,
+          "maximum": 30000,
+          "default": 3000,
+          "description": "Per-sample execution timeout in milliseconds."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs",
+    "watch": "node esbuild.config.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:arch": "node scripts/checkArchBoundaries.mjs",
+    "verify": "npm run typecheck && npm run test:arch && npm test && npm run build"
+  },
+  "dependencies": {
+    "ts-fsrs": "^5.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/vscode": "^1.93.0",
+    "esbuild": "^0.25.0",
+    "typescript": "^5.8.0",
+    "vitest": "^3.1.0"
+  }
+}
