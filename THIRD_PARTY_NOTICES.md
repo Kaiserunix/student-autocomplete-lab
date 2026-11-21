@@ -8,8 +8,8 @@ The following exact versions are included in the compiled OJ MCP client and prob
 
 | Package | Version | License | Copyright |
 | --- | --- | --- | --- |
-| `@modelcontextprotocol/client` | 2.0.0 | MIT | Anthropic, PBC |
-| `@modelcontextprotocol/core` | 2.0.0 | MIT | Anthropic, PBC |
+| `@modelcontextprotocol/client` | 2.4.0 | MIT | Anthropic, PBC |
+| `@modelcontextprotocol/core` | 2.4.0 | MIT | Anthropic, PBC |
 | `cross-spawn` | 7.0.6 | MIT | 2018 Made With MOXY Lda |
 | `eventsource` | 3.0.7 | MIT | Espen Hovlandsdal |
 | `eventsource-parser` | 3.0.8 | MIT | 2026 Espen Hovlandsdal |
@@ -20,7 +20,7 @@ The following exact versions are included in the compiled OJ MCP client and prob
 | `shebang-command` | 2.0.0 | MIT | Kevin Mårtensson |
 | `shebang-regex` | 3.0.0 | MIT | Sindre Sorhus |
 | `which` | 2.0.2 | ISC | Isaac Z. Schlueter and Contributors |
-| `zod` | 4.3.6 | MIT | 2025 Colin McDonnell |
+| `zod` | 4.6.7 | MIT | 2025 Colin McDonnell |
 | `entities` | 8.0.0 | BSD-2-Clause | Felix Böhm |
 | `parse5` | 8.0.1 | MIT | 2013-2019 Ivan Nikulin |
 
