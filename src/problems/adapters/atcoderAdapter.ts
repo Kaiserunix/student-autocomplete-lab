@@ -1,0 +1,587 @@
+import {
+  ProblemAdapterError,
+  type AdapterCapabilities,
+  type ProblemDocument,
+  type ProblemSample,
+  type ProblemSearchQuery,
+  type ProblemSourceAdapter
+} from "../../core/contracts";
+import { decodeHtmlEntities, htmlToMarkdown, stripHtmlTags } from "./htmlUtils";
+
+export interface AtCoderAdapterOptions {
+  fetchImpl?: typeof fetch;
+  userAgent?: string;
+  indexTtlMs?: number;
+}
+
+interface KenkooooProblem {
+  id: string;
+  contest_id: string;
+  problem_index?: string;
+  name?: string;
+  title?: string;
+}
+
+interface KenkooooProblemModel {
+  difficulty?: number;
+  is_experimental?: boolean;
+}
+
+const DEFAULT_UA =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) AlgoCoach/0.2.0";
+
+const KENKOOOO_PROBLEMS_URL = "https://kenkoooo.com/atcoder/resources/problems.json";
+const KENKOOOO_MODELS_URL = "https://kenkoooo.com/atcoder/resources/problem-models.json";
+
+export function atcoderDifficultyToTier(rating?: number): 1 | 2 | 3 | 4 | 5 | undefined {
+  if (rating === undefined || !Number.isFinite(rating)) {
+    return undefined;
+  }
+  if (rating < 600) return 1;
+  if (rating < 1100) return 2;
+  if (rating < 1600) return 3;
+  if (rating < 2100) return 4;
+  return 5;
+}
+
+function extractBalancedElementById(html: string, id: string): string | undefined {
+  const openRe = new RegExp(`<div\\b[^>]*\\bid=["']${id}["'][^>]*>`, "i");
+  const openMatch = openRe.exec(html);
+  if (!openMatch) {
+    return undefined;
+  }
+  const start = openMatch.index + openMatch[0].length;
+  const tagRe = /<\/?div\b[^>]*>/gi;
+  tagRe.lastIndex = start;
+  let depth = 1;
+  let match: RegExpExecArray | null;
+  while ((match = tagRe.exec(html)) !== null) {
+    if (match[0].startsWith("</")) {
+      depth -= 1;
+      if (depth === 0) {
+        return html.slice(start, match.index);
+      }
+    } else {
+      depth += 1;
+    }
+  }
+  return html.slice(start);
+}
+
+function extractBalancedSpanByClass(html: string, className: string): string | undefined {
+  const openRe = new RegExp(`<span\\b[^>]*\\bclass=["'][^"']*\\b${className}\\b[^"']*["'][^>]*>`, "i");
+  const openMatch = openRe.exec(html);
+  if (!openMatch) {
+    return undefined;
+  }
+  const start = openMatch.index + openMatch[0].length;
+  const tagRe = /<\/?span\b[^>]*>/gi;
+  tagRe.lastIndex = start;
+  let depth = 1;
+  let match: RegExpExecArray | null;
+  while ((match = tagRe.exec(html)) !== null) {
+    if (match[0].startsWith("</")) {
+      depth -= 1;
+      if (depth === 0) {
+        return html.slice(start, match.index);
+      }
+    } else {
+      depth += 1;
+    }
+  }
+  return html.slice(start);
+}
+
+export interface ParsedAtCoderTaskHtml {
+  title: string;
+  locale: "en-US" | "ja-JP";
+  statementMarkdown: string;
+  samples: ProblemSample[];
+  constraints?: { timeLimitMs?: number; memoryLimitMb?: number };
+}
+
+export function parseAtCoderTaskHtml(html: string, fallbackTitle: string): ParsedAtCoderTaskHtml {
+  const titleMatch =
+    html.match(/<span\b[^>]*class=["'][^"']*\bh2\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/i) ??
+    html.match(/<title>([\s\S]*?)<\/title>/i);
+  const rawTitle = titleMatch?.[1] ? stripHtmlTags(titleMatch[1]).replace(/\s+/g, " ").trim() : "";
+  const title = rawTitle.replace(/\s*Editorial\s*$/i, "").trim() || fallbackTitle;
+
+  const timeMatch = html.match(/Time Limit:\s*([\d.]+)\s*(?:sec|s)/i);
+  const memMatch = html.match(/Memory Limit:\s*(\d+)\s*(?:MB|MiB)/i);
+  const timeLimitMs = timeMatch?.[1] ? Math.round(Number.parseFloat(timeMatch[1]) * 1000) : undefined;
+  const memoryLimitMb = memMatch?.[1] ? Number.parseInt(memMatch[1], 10) : undefined;
+
+  const statementContainer = extractBalancedElementById(html, "task-statement");
+  if (!statementContainer) {
+    return {
+      title,
+      locale: "en-US",
+      statementMarkdown: "",
+      samples: [],
+      ...(timeLimitMs !== undefined || memoryLimitMb !== undefined
+        ? {
+            constraints: {
+              ...(timeLimitMs !== undefined ? { timeLimitMs } : {}),
+              ...(memoryLimitMb !== undefined ? { memoryLimitMb } : {})
+            }
+          }
+        : {})
+    };
+  }
+
+  const enSection = extractBalancedSpanByClass(statementContainer, "lang-en");
+  const jaSection = extractBalancedSpanByClass(statementContainer, "lang-ja");
+  const chosenHtml = enSection ?? jaSection ?? statementContainer;
+  const locale: "en-US" | "ja-JP" = enSection ? "en-US" : jaSection ? "ja-JP" : "en-US";
+
+  // Extract Sample Input N / Sample Output N pairs from <section><h3>...</h3><pre>...</pre></section>
+  const sampleInputs = new Map<string, string>();
+  const sampleOutputs = new Map<string, string>();
+  const sectionRe = /<section[^>]*>([\s\S]*?)<\/section>/gi;
+  let secMatch: RegExpExecArray | null;
+  while ((secMatch = sectionRe.exec(chosenHtml)) !== null) {
+    const body = secMatch[1] ?? "";
+    const headingMatch = body.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
+    const preMatch = body.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+    if (!headingMatch?.[1] || !preMatch?.[1]) {
+      continue;
+    }
+    const heading = stripHtmlTags(headingMatch[1]).trim();
+    const preValue = decodeHtmlEntities(preMatch[1].replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, ""))
+      .replace(/\r\n/g, "\n")
+      .replace(/^\n+|\n+$/g, "");
+
+    const inMatch = heading.match(/^(?:Sample Input|入力例)\s*(\d+)/i);
+    if (inMatch?.[1]) {
+      sampleInputs.set(inMatch[1], preValue);
+      continue;
+    }
+    const outMatch = heading.match(/^(?:Sample Output|出力例)\s*(\d+)/i);
+    if (outMatch?.[1]) {
+      sampleOutputs.set(outMatch[1], preValue);
+    }
+  }
+
+  const sampleNums = [...new Set([...sampleInputs.keys(), ...sampleOutputs.keys()])].sort(
+    (a, b) => Number(a) - Number(b)
+  );
+  const samples: ProblemSample[] = [];
+  for (const num of sampleNums) {
+    const input = sampleInputs.get(num);
+    if (input === undefined) {
+      continue;
+    }
+    const expectedOutput = sampleOutputs.get(num);
+    samples.push({
+      id: `sample-${num}`,
+      input,
+      ...(expectedOutput !== undefined ? { expectedOutput } : {}),
+      isOriginal: true
+    });
+  }
+
+  const statementMarkdown = htmlToMarkdown(chosenHtml);
+
+  return {
+    title,
+    locale,
+    statementMarkdown,
+    samples,
+    ...(timeLimitMs !== undefined || memoryLimitMb !== undefined
+      ? {
+          constraints: {
+            ...(timeLimitMs !== undefined ? { timeLimitMs } : {}),
+            ...(memoryLimitMb !== undefined ? { memoryLimitMb } : {})
+          }
+        }
+      : {})
+  };
+}
+
+export class AtCoderAdapter implements ProblemSourceAdapter {
+  readonly id = "atcoder" as const;
+  readonly displayName = "AtCoder";
+  readonly capabilities: AdapterCapabilities = {
+    search: true,
+    problemLists: false,
+    directStatementFetch: true,
+    directSamplesFetch: true,
+    ioModes: ["stdio"],
+    supportsOptionalUserSession: false
+  };
+
+  private readonly fetchImpl: typeof fetch;
+  private readonly userAgent: string;
+  private readonly indexTtlMs: number;
+  private cachedProblems: KenkooooProblem[] | null = null;
+  private cachedModels: Record<string, KenkooooProblemModel> | null = null;
+  private cachedAt = 0;
+
+  constructor(options: AtCoderAdapterOptions = {}) {
+    this.fetchImpl = options.fetchImpl ?? fetch;
+    this.userAgent = options.userAgent ?? DEFAULT_UA;
+    this.indexTtlMs = options.indexTtlMs ?? 30 * 60 * 1000;
+  }
+
+  canHandleUrl(url: string): boolean {
+    try {
+      const parsed = new URL(url.trim());
+      if (parsed.hostname.toLowerCase() !== "atcoder.jp") {
+        return false;
+      }
+      return /^\/contests\/[a-z0-9_-]+\/tasks\/[a-z0-9_-]+(?:\/.*)?$/i.test(parsed.pathname);
+    } catch {
+      return false;
+    }
+  }
+
+  resolveRef(input: string): { sourceId: string; canonicalUrl?: string } | null {
+    const trimmed = input.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    if (/^https?:\/\//i.test(trimmed)) {
+      if (!this.canHandleUrl(trimmed)) {
+        return null;
+      }
+      const parsed = new URL(trimmed);
+      const match = parsed.pathname.match(/^\/contests\/([a-z0-9_-]+)\/tasks\/([a-z0-9_-]+)/i);
+      if (!match?.[1] || !match?.[2]) {
+        return null;
+      }
+      const contestId = match[1].toLowerCase();
+      const taskId = match[2].toLowerCase();
+      return {
+        sourceId: `${contestId}/${taskId}`,
+        canonicalUrl: `https://atcoder.jp/contests/${contestId}/tasks/${taskId}`
+      };
+    }
+
+    const prefixed = trimmed.match(/^(?:atcoder|at):([a-z0-9_-]+)(?:\/([a-z0-9_-]+))?$/i);
+    if (prefixed?.[1]) {
+      if (prefixed[2]) {
+        const contestId = prefixed[1].toLowerCase();
+        const taskId = prefixed[2].toLowerCase();
+        return {
+          sourceId: `${contestId}/${taskId}`,
+          canonicalUrl: `https://atcoder.jp/contests/${contestId}/tasks/${taskId}`
+        };
+      }
+      const inferred = this.inferContestAndTask(prefixed[1]);
+      if (inferred) {
+        return {
+          sourceId: `${inferred.contestId}/${inferred.taskId}`,
+          canonicalUrl: `https://atcoder.jp/contests/${inferred.contestId}/tasks/${inferred.taskId}`
+        };
+      }
+    }
+
+    const inferred = this.inferContestAndTask(trimmed);
+    if (inferred) {
+      return {
+        sourceId: `${inferred.contestId}/${inferred.taskId}`,
+        canonicalUrl: `https://atcoder.jp/contests/${inferred.contestId}/tasks/${inferred.taskId}`
+      };
+    }
+
+    return null;
+  }
+
+  private inferContestAndTask(token: string): { contestId: string; taskId: string } | null {
+    const lower = token.trim().toLowerCase();
+    // Standard task screen names like abc300_a, arc160_b, agc050_a, dp_a
+    const match = lower.match(/^((?:abc|arc|agc|ahc|typical90|dp|edpc|tdpc)[a-z0-9-]*)_([a-z0-9]+)$/i);
+    if (!match?.[1] || !match?.[2]) {
+      return null;
+    }
+    const contestId = match[1].replace(/_/g, "-");
+    return { contestId, taskId: lower };
+  }
+
+  async fetchProblem(
+    ref: string,
+    opts?: { forceRefresh?: boolean; signal?: AbortSignal }
+  ): Promise<ProblemDocument> {
+    const resolved = this.resolveRef(ref);
+    if (!resolved) {
+      throw new ProblemAdapterError(
+        "NOT_FOUND",
+        "atcoder",
+        `Invalid AtCoder reference: "${ref}". Expected e.g. abc300_a or https://atcoder.jp/contests/abc300/tasks/abc300_a.`
+      );
+    }
+
+    const [contestId, taskId] = resolved.sourceId.split("/");
+    if (!contestId || !taskId) {
+      throw new ProblemAdapterError("NOT_FOUND", "atcoder", `Malformed AtCoder task ref: "${ref}".`);
+    }
+
+    const url = `https://atcoder.jp/contests/${encodeURIComponent(contestId)}/tasks/${encodeURIComponent(taskId)}`;
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url, {
+        headers: {
+          "user-agent": this.userAgent,
+          accept: "text/html,application/xhtml+xml"
+        },
+        signal: opts?.signal
+      });
+    } catch (error) {
+      throw new ProblemAdapterError(
+        "NETWORK_ERROR",
+        "atcoder",
+        `Network error fetching AtCoder task ${taskId}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    if (response.status === 404) {
+      throw new ProblemAdapterError("NOT_FOUND", "atcoder", `AtCoder task not found: ${taskId}`);
+    }
+    if (response.status === 403) {
+      throw new ProblemAdapterError(
+        "ANTIBOT_BLOCKED",
+        "atcoder",
+        "AtCoder returned HTTP 403. Please use Localhost Bridge (Competitive Companion) or Markdown/Clipboard import."
+      );
+    }
+    if (response.status === 429) {
+      throw new ProblemAdapterError(
+        "RATE_LIMITED",
+        "atcoder",
+        "AtCoder rate limited the request (HTTP 429). Please retry later."
+      );
+    }
+    if (!response.ok) {
+      throw new ProblemAdapterError(
+        "NETWORK_ERROR",
+        "atcoder",
+        `AtCoder task fetch failed with HTTP ${response.status}.`
+      );
+    }
+
+    const html = await response.text();
+    if (/cf-turnstile|Just a moment|challenge-platform/i.test(html) && !html.includes("task-statement")) {
+      throw new ProblemAdapterError(
+        "ANTIBOT_BLOCKED",
+        "atcoder",
+        "AtCoder returned a bot/Turnstile challenge page. Algo Coach will not bypass challenges; please use Competitive Companion or Clipboard import."
+      );
+    }
+    if (/\/login\?continue=/i.test(html) && !html.includes("task-statement")) {
+      throw new ProblemAdapterError(
+        "AUTH_REQUIRED",
+        "atcoder",
+        "AtCoder task requires contest login (ongoing or private contest). Please use Competitive Companion in your browser."
+      );
+    }
+
+    const parsed = parseAtCoderTaskHtml(html, taskId);
+    if (!parsed.statementMarkdown) {
+      throw new ProblemAdapterError(
+        "SCHEMA_DRIFT",
+        "atcoder",
+        `Could not locate #task-statement in AtCoder HTML for ${taskId}.`
+      );
+    }
+
+    // Best-effort difficulty lookup from kenkoooo models (never fail main fetch if index is unavailable)
+    let numericRating: number | undefined;
+    try {
+      const models = await this.loadModels(opts?.signal);
+      const rawDiff = models[taskId]?.difficulty;
+      if (typeof rawDiff === "number" && Number.isFinite(rawDiff)) {
+        numericRating = Math.round(rawDiff);
+      }
+    } catch {
+      // Optional enrichment only
+    }
+
+    const tier = atcoderDifficultyToTier(numericRating);
+
+    return {
+      schemaVersion: "problem-doc/v2",
+      problemKey: `atcoder:${taskId}`,
+      source: "atcoder",
+      sourceId: taskId,
+      canonicalUrl: url,
+      title: parsed.title,
+      locale: parsed.locale,
+      completeness: "full",
+      ioMode: "stdio",
+      statementMarkdown: parsed.statementMarkdown,
+      samples: parsed.samples,
+      ...(parsed.constraints ? { constraints: parsed.constraints } : {}),
+      ...(numericRating !== undefined
+        ? {
+            difficulty: {
+              rawLabel: `AtCoder ${numericRating}`,
+              numericRating,
+              ...(tier !== undefined ? { normalizedTier: tier } : {})
+            }
+          }
+        : {}),
+      rawTags: [contestId],
+      provenance: {
+        ingestChannel: "builtin-adapter",
+        fetchedAt: new Date().toISOString()
+      }
+    };
+  }
+
+  async search(
+    query: ProblemSearchQuery,
+    signal?: AbortSignal
+  ): Promise<{ items: ProblemDocument[]; total?: number }> {
+    const [problems, models] = await Promise.all([
+      this.loadProblems(signal),
+      this.loadModels(signal).catch(() => ({} as Record<string, KenkooooProblemModel>))
+    ]);
+
+    const keyword = query.keyword?.trim().toLowerCase() ?? "";
+    const tagFilters = (query.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
+
+    const filtered = problems.filter((p) => {
+      const title = (p.title ?? p.name ?? p.id).toLowerCase();
+      if (keyword && !title.includes(keyword) && !p.id.toLowerCase().includes(keyword) && !p.contest_id.toLowerCase().includes(keyword)) {
+        return false;
+      }
+      if (tagFilters.length > 0 && !tagFilters.some((t) => p.contest_id.toLowerCase().includes(t))) {
+        return false;
+      }
+      const rating = models[p.id]?.difficulty;
+      const tier = atcoderDifficultyToTier(rating);
+      if (query.minTier !== undefined && (tier === undefined || tier < query.minTier)) {
+        return false;
+      }
+      if (query.maxTier !== undefined && (tier === undefined || tier > query.maxTier)) {
+        return false;
+      }
+      return true;
+    });
+
+    const page = Math.max(1, query.page ?? 1);
+    const pageSize = 20;
+    const slice = filtered.slice((page - 1) * pageSize, page * pageSize);
+
+    const items: ProblemDocument[] = slice.map((p) => {
+      const rawDiff = models[p.id]?.difficulty;
+      const rating = typeof rawDiff === "number" && Number.isFinite(rawDiff) ? Math.round(rawDiff) : undefined;
+      const tier = atcoderDifficultyToTier(rating);
+      return {
+        schemaVersion: "problem-doc/v2",
+        problemKey: `atcoder:${p.id}`,
+        source: "atcoder",
+        sourceId: p.id,
+        canonicalUrl: `https://atcoder.jp/contests/${p.contest_id}/tasks/${p.id}`,
+        title: p.title ?? p.name ?? p.id,
+        locale: "en-US",
+        completeness: "metadata_only",
+        ioMode: "stdio",
+        samples: [],
+        ...(rating !== undefined
+          ? {
+              difficulty: {
+                rawLabel: `AtCoder ${rating}`,
+                numericRating: rating,
+                ...(tier !== undefined ? { normalizedTier: tier } : {})
+              }
+            }
+          : {}),
+        rawTags: [p.contest_id],
+        provenance: {
+          ingestChannel: "builtin-adapter",
+          fetchedAt: new Date().toISOString()
+        }
+      };
+    });
+
+    return { items, total: filtered.length };
+  }
+
+  async healthCheck(
+    signal?: AbortSignal
+  ): Promise<{ ok: boolean; code?: ProblemAdapterError["code"]; message?: string }> {
+    try {
+      const problems = await this.loadProblems(signal);
+      return {
+        ok: problems.length > 0,
+        message: `AtCoder kenkoooo static index loaded (${problems.length} tasks).`
+      };
+    } catch (error) {
+      if (error instanceof ProblemAdapterError) {
+        return { ok: false, code: error.code, message: error.message };
+      }
+      return {
+        ok: false,
+        code: "NETWORK_ERROR",
+        message: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  private async loadProblems(signal?: AbortSignal): Promise<KenkooooProblem[]> {
+    if (this.cachedProblems && Date.now() - this.cachedAt < this.indexTtlMs) {
+      return this.cachedProblems;
+    }
+    let response: Response;
+    try {
+      response = await this.fetchImpl(KENKOOOO_PROBLEMS_URL, {
+        headers: { "user-agent": this.userAgent, accept: "application/json" },
+        signal
+      });
+    } catch (error) {
+      throw new ProblemAdapterError(
+        "NETWORK_ERROR",
+        "atcoder",
+        `Failed to fetch kenkoooo problems index: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    if (!response.ok) {
+      throw new ProblemAdapterError(
+        "NETWORK_ERROR",
+        "atcoder",
+        `kenkoooo problems index returned HTTP ${response.status}.`
+      );
+    }
+    const data = (await response.json()) as unknown;
+    if (!Array.isArray(data)) {
+      throw new ProblemAdapterError(
+        "SCHEMA_DRIFT",
+        "atcoder",
+        "kenkoooo problems.json did not return an array."
+      );
+    }
+    this.cachedProblems = data as KenkooooProblem[];
+    this.cachedAt = Date.now();
+    return this.cachedProblems;
+  }
+
+  private async loadModels(signal?: AbortSignal): Promise<Record<string, KenkooooProblemModel>> {
+    if (this.cachedModels && Date.now() - this.cachedAt < this.indexTtlMs) {
+      return this.cachedModels;
+    }
+    const response = await this.fetchImpl(KENKOOOO_MODELS_URL, {
+      headers: { "user-agent": this.userAgent, accept: "application/json" },
+      signal
+    });
+    if (!response.ok) {
+      throw new ProblemAdapterError(
+        "NETWORK_ERROR",
+        "atcoder",
+        `kenkoooo problem-models.json returned HTTP ${response.status}.`
+      );
+    }
+    const data = (await response.json()) as unknown;
+    if (!data || typeof data !== "object" || Array.isArray(data)) {
+      throw new ProblemAdapterError(
+        "SCHEMA_DRIFT",
+        "atcoder",
+        "kenkoooo problem-models.json did not return an object."
+      );
+    }
+    this.cachedModels = data as Record<string, KenkooooProblemModel>;
+    return this.cachedModels;
+  }
+}
