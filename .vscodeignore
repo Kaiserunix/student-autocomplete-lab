@@ -5,7 +5,7 @@ test/**
 scripts/**
 node_modules/**
 *.ts
-*.map
+**/*.map
 tsconfig.json
 vitest.config.ts
 esbuild.config.mjs
