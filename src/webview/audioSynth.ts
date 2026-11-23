@@ -1,65 +1,28 @@
 import type { SoundEventKind, TypingSoundPack } from "../core/contracts";
 
 export type AudioEngineState = "uninitialized" | "running" | "suspended" | "unsupported";
-
 export interface SfxPlayPayload {
-  kind: SoundEventKind;
-  pack: TypingSoundPack;
-  volume: number;
-  gainDbOffset: number;
-  pitchJitter: number;
-  overtone: boolean;
+  kind: SoundEventKind; pack: TypingSoundPack; volume: number;
+  gainDbOffset: number; pitchJitter: number; overtone: boolean;
 }
-
 export interface SwitchAcousticProfile {
-  pack: TypingSoundPack;
-  clickFreqHz: number;
-  clickQ: number;
-  clickGain: number;
-  clickDurationMs: number;
-  bodyFreqHz: number;
-  bodyEndFreqHz: number;
-  bodyGain: number;
-  bodyDurationMs: number;
-  bodyWaveform: OscillatorType;
-  filterType: BiquadFilterType;
-  lowpassCutoffHz: number;
+  pack: TypingSoundPack; clickFreqHz: number; clickQ: number; clickGain: number;
+  clickDurationMs: number; bodyFreqHz: number; bodyEndFreqHz: number; bodyGain: number;
+  bodyDurationMs: number; bodyWaveform: OscillatorType; filterType: BiquadFilterType; lowpassCutoffHz: number;
 }
-
 export interface ComputedSynthParams {
-  kind: SoundEventKind;
-  pack: TypingSoundPack;
-  effectiveGain: number;
-  gainDbApplied: number;
-  pitchMultiplier: number;
-  durationMs: number;
-  bodyFreqHz: number;
-  bodyEndFreqHz: number;
-  clickFreqHz: number;
-  clickGain: number;
-  clickDurationMs: number;
-  overtoneEnabled: boolean;
-  overtoneDurationMs: number;
-  overtoneFreqsHz: number[];
-  chordFreqsHz: number[];
-  chordStepMs: number;
-  lowpassCutoffHz: number;
+  kind: SoundEventKind; pack: TypingSoundPack; effectiveGain: number; gainDbApplied: number;
+  pitchMultiplier: number; durationMs: number; bodyFreqHz: number; bodyEndFreqHz: number;
+  clickFreqHz: number; clickGain: number; clickDurationMs: number; overtoneEnabled: boolean;
+  overtoneDurationMs: number; overtoneFreqsHz: number[]; chordFreqsHz: number[];
+  chordStepMs: number; lowpassCutoffHz: number;
 }
-
 export interface AudioContextLike {
-  readonly state: string;
-  readonly currentTime: number;
-  readonly sampleRate: number;
-  readonly destination: AudioNode;
-  resume(): Promise<void>;
-  close(): Promise<void>;
-  createOscillator(): OscillatorNode;
-  createGain(): GainNode;
-  createBiquadFilter(): BiquadFilterNode;
-  createBuffer(channels: number, length: number, sampleRate: number): AudioBuffer;
-  createBufferSource(): AudioBufferSourceNode;
+  readonly state: string; readonly currentTime: number; readonly sampleRate: number; readonly destination: AudioNode;
+  resume(): Promise<void>; close(): Promise<void>;
+  createOscillator(): OscillatorNode; createGain(): GainNode; createBiquadFilter(): BiquadFilterNode;
+  createBuffer(channels: number, length: number, sampleRate: number): AudioBuffer; createBufferSource(): AudioBufferSourceNode;
 }
-
 export type AudioContextCtorLike = new () => AudioContextLike;
 export interface AudioSynthOptions { random?: () => number; audioContextCtor?: AudioContextCtorLike | null; }
 
@@ -151,14 +114,9 @@ export class AudioSynthEngine {
 
   async unlockFromUserGesture(): Promise<AudioEngineState> {
     if (!this.ctor) return "unsupported";
-    try {
-      this.ctx ??= new this.ctor();
-      if (this.ctx.state === "suspended") await this.ctx.resume();
-      this.getNoise();
-    } catch { /* ignore */ }
+    try { this.ctx ??= new this.ctor(); if (this.ctx.state === "suspended") await this.ctx.resume(); this.getNoise(); } catch {}
     return this.getState();
   }
-
   play(payload: SfxPlayPayload): boolean {
     if (!this.ctor) return false;
     const [pack, eg, , , dur, bf0, bf1, cf, cg, cd, ov, od, ofs, chs, cs, lp] = calc(payload, this.rand);
@@ -167,21 +125,17 @@ export class AudioSynthEngine {
     if (this.ctx.state !== "running") return false;
     const c = this.ctx, t0 = c.currentTime;
     const env = (g: GainNode, st: number, pk: number, dSec: number, atk = 0.002) => {
-      g.gain.setValueAtTime(1e-4, st);
-      g.gain.linearRampToValueAtTime(pk, st + atk);
-      g.gain.exponentialRampToValueAtTime(1e-4, st + dSec);
+      g.gain.setValueAtTime(1e-4, st); g.gain.linearRampToValueAtTime(pk, st + atk); g.gain.exponentialRampToValueAtTime(1e-4, st + dSec);
     };
     const tone = (st: number, w: OscillatorType, f0: number, f1: number, dSec: number, pk: number, lpf: number, dst: AudioNode) => {
       const o = c.createOscillator(), g = c.createGain();
-      o.type = w;
-      o.frequency.setValueAtTime(f0, st);
+      o.type = w; o.frequency.setValueAtTime(f0, st);
       if (f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, st + dSec);
       env(g, st, pk, dSec);
       if (lpf > 0) { const f = c.createBiquadFilter(); f.type = "lowpass"; f.frequency.setValueAtTime(lpf, st); o.connect(f); f.connect(g); }
       else o.connect(g);
       g.connect(dst); o.start(st); o.stop(st + dSec + 0.004);
     };
-
     if (chs.length) {
       const f = c.createBiquadFilter(); f.type = "lowpass"; f.frequency.setValueAtTime(lp, t0); f.connect(c.destination);
       const pk = Math.min(0.32, (eg * 0.65) / chs.length);
@@ -203,10 +157,9 @@ export class AudioSynthEngine {
     }
     return true;
   }
-
   async dispose(): Promise<void> {
     if (!this.ctx) return;
-    try { await this.ctx.close(); } catch { /* ignore */ }
+    try { await this.ctx.close(); } catch {}
     this.ctx = this.noise = null;
   }
 
