@@ -75,6 +75,7 @@ export interface InlineCompletionPipelineInput
   extends PrepareInlineCompletionInput {
   transport: AutocompleteTransport;
   signal?: AbortSignal;
+  precomputed?: PreparedInlineCompletion;
 }
 
 export type InlineCompletionDecisionStatus =
@@ -222,8 +223,7 @@ export function prepareInlineCompletionRequest(
   const isolatedContext = buildIsolatedAutocompleteContext(input.context);
 
   const renderer = input.renderer ?? "deepseek-fim";
-  const stopSequences =
-    trigger.maxLines <= 1 ? ["\n", "\n\n", "```"] : ["\n\n", "```"];
+  const stopSequences = ["\n\n", "```"];
 
   const extraRules: ProjectionRule[] = [
     createZoneActionRule(zone),
@@ -290,7 +290,7 @@ export async function runInlineCompletionPipeline(
     };
   }
 
-  const prepared = prepareInlineCompletionRequest(input);
+  const prepared = input.precomputed ?? prepareInlineCompletionRequest(input);
 
   if (!prepared.shouldInvokeTransport || !prepared.renderedRequest || !prepared.isolatedContext) {
     return {

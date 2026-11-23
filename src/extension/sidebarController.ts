@@ -30,6 +30,7 @@ import type {
   SoundEventKind,
   StuckCategory,
   SupportedLanguage,
+  ToastActionCta,
   ToolchainProbe,
   UserOverridesV2,
   WebviewToHostMessage
@@ -204,6 +205,9 @@ function mapOfficialVerdictToLearningVerdict(verdict: OfficialVerdictStatus): Le
 }
 
 function pickPrimaryFailureVerdict(result: LocalRunResult): SampleVerdict {
+  if (result.skippedReason) {
+    return "SKIPPED";
+  }
   if (!result.compileOk) {
     return "CE";
   }
@@ -305,6 +309,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
   private activeLanguage: SupportedLanguage = "python";
   private problemsCache: ProblemDocument[] = [];
   private lastRunByProblem = new Map<string, LocalRunResult>();
+  private lastRunByProblemLang = new Map<string, LocalRunResult>();
   private coachHistoryByProblem = new Map<string, CoachResponsePayload[]>();
   private latestMisconceptionsByProblem = new Map<string, string[]>();
   private rankEngines = new Map<string, StylishRankEngine>();
@@ -314,7 +319,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
   private coachBusy = false;
   private runnerBusy = false;
   private verdictSyncing = false;
-  private verdictPollAbort: AbortController | undefined;
+  private readonly verdictPollAborts = new Map<string, AbortController>();
   private searchBusy = false;
   private searchResults: SidebarSearchResults | undefined;
   private userOverrides: UserOverridesV2;
@@ -418,6 +423,10 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     return this.activeProblem;
   }
 
+  getKnownProblemKeys(): string[] {
+    return this.problemsCache.map((p) => p.problemKey);
+  }
+
   getUserOverrides(): UserOverridesV2 {
     return this.userOverrides;
   }
@@ -510,12 +519,39 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     });
   }
 
-  postToast(level: "info" | "warn" | "error", text: string, undoEventId?: string): void {
-    this.statusBanner = { level, text, ...(undoEventId ? { undoEventId } : {}) };
-    this.postMessage({
-      type: "toast/inline",
-      payload: { level, text, ...(undoEventId ? { undoEventId } : {}) }
-    });
+  postToast(
+    level: "info" | "warn" | "error",
+    text: string,
+    undoEventId?: string,
+    cta?: ToastActionCta
+  ): void {
+    this.statusBanner = {
+      level,
+      text,
+      ...(undoEventId ? { undoEventId } : {}),
+      ...(cta ? { cta } : {})
+    };
+    if (this.view && !this.disposed) {
+      this.postMessage({
+        type: "toast/inline",
+        payload: {
+          level,
+          text,
+          ...(undoEventId ? { undoEventId } : {}),
+          ...(cta ? { cta } : {})
+        }
+      });
+      return;
+    }
+    if (!this.disposed) {
+      if (level === "error") {
+        void vscode.window.showErrorMessage(text);
+      } else if (level === "warn") {
+        void vscode.window.showWarningMessage(text);
+      } else {
+        void vscode.window.showInformationMessage(text);
+      }
+    }
   }
 
   postMessage(message: HostToWebviewMessage): void {
@@ -567,8 +603,8 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
       problems: this.problemsCache,
       ...(this.searchBusy ? { searchBusy: true } : {}),
       ...(this.searchResults ? { searchResults: this.searchResults } : {}),
-      ...(this.activeProblem && this.lastRunByProblem.get(this.activeProblem.problemKey)
-        ? { lastRun: this.lastRunByProblem.get(this.activeProblem.problemKey) }
+      ...(this.activeProblem && this.getLastRunForProblem(this.activeProblem.problemKey, this.activeLanguage)
+        ? { lastRun: this.getLastRunForProblem(this.activeProblem.problemKey, this.activeLanguage) }
         : {}),
       hintLevel,
       giveUpUnlocked: hintState?.giveUpUnlocked ?? false,
@@ -774,6 +810,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
             message.payload.input,
             message.payload.expectedOutput
           );
+          this.clearLastRunsForProblem(message.payload.problemKey);
           this.postToast(
             "info",
             this.isEn() ? "Custom sample added." : "已添加自定义样例。"
@@ -781,13 +818,17 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
           await this.syncState();
           return;
 
-        case "problem/deleteSample":
-          await this.deps.workspaceFiles.deleteCustomSample(
+        case "problem/deleteSample": {
+          const deleted = await this.deps.workspaceFiles.deleteCustomSample(
             message.payload.problemKey,
             message.payload.sampleId
           );
+          if (deleted) {
+            this.clearLastRunsForProblem(message.payload.problemKey);
+          }
           await this.syncState();
           return;
+        }
 
         case "problem/openReader":
           await this.openProblemReader(message.payload?.problemKey, false);
@@ -957,7 +998,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   async loadWarmupPack(): Promise<void> {
-    const warmups = getWarmupProblems();
+    const warmups = getWarmupProblems(this.flags.uiLanguage);
     for (const doc of warmups) {
       await this.deps.problemRepository.saveProblem(doc);
     }
@@ -1134,26 +1175,13 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     if (this.disposed) {
       return;
     }
-    this.cancelBackgroundVerdictPoll();
 
-    let problem: ProblemDocument | undefined;
-    const matchesProblem = (p: ProblemDocument): boolean =>
-      p.problemKey === verdict.event.problemKey ||
-      Boolean(
-        verdict.sourceId &&
-          p.source === verdict.event.platform &&
-          p.sourceId.toLowerCase() === verdict.sourceId.toLowerCase()
-      );
-
-    if (this.activeProblem && matchesProblem(this.activeProblem)) {
-      problem = this.activeProblem;
-    } else {
-      problem = this.problemsCache.find(matchesProblem);
-      if (!problem) {
-        this.problemsCache = await this.deps.problemRepository.listCachedProblems();
-        problem = this.problemsCache.find(matchesProblem);
-      }
-    }
+    let problem = await this.findProblemMatch({
+      problemKey: verdict.event.problemKey,
+      source: verdict.event.platform,
+      sourceId: verdict.sourceId
+    });
+    this.cancelBackgroundVerdictPoll(problem?.problemKey ?? verdict.event.problemKey);
 
     if (!problem) {
       problem = {
@@ -1343,12 +1371,23 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     }
 
     const codeSnapshot = this.deps.workspaceFiles.getActiveCodeSnapshot();
-    if (!codeSnapshot) {
+    if (!codeSnapshot || codeSnapshot.language === "generic") {
       this.postToast(
         "warn",
         this.isEn()
-          ? "Open a solution file in the editor first."
-          : "请先在编辑器中打开当前题目的代码文件。"
+          ? "Open a supported solution file (.py/.cpp/.c/.java/.rs/.js/.ts) in the editor first."
+          : "请先在编辑器中打开当前题目的代码文件（支持 py/cpp/c/java/rs/js/ts）。"
+      );
+      await this.syncState();
+      return undefined;
+    }
+
+    if (codeSnapshot.problemKey && codeSnapshot.problemKey !== problem.problemKey) {
+      this.postToast(
+        "warn",
+        this.isEn()
+          ? `Active editor belongs to "${codeSnapshot.problemKey}", not "${problem.title}". Switch editor or select that problem first.`
+          : `当前编辑器文件属于题目「${codeSnapshot.problemKey}」，与当前题目「${problem.title}」不一致，请先切换文件或题目后再运行。`
       );
       await this.syncState();
       return undefined;
@@ -1383,7 +1422,41 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
         cacheDir
       });
 
-      this.lastRunByProblem.set(problem.problemKey, result);
+      this.setLastRunForProblem(problem.problemKey, codeSnapshot.language, result);
+
+      if (result.skippedReason) {
+        const detail = result.compileStderr?.trim();
+        let message: string;
+        let cta: ToastActionCta | undefined;
+        if (result.skippedReason === "missing_toolchain") {
+          message =
+            detail ||
+            (this.isEn()
+              ? "Required compiler/runtime not found. Check Settings -> AI & Env."
+              : "未检测到可用的本地编译器或运行环境，请前往「设置 -> AI 与环境」检查配置。");
+          cta = {
+            label: this.isEn() ? "Open Env Settings" : "打开环境体检",
+            tab: "settings",
+            subKey: "sub.settings",
+            subVal: "env",
+            drawerId: "settings-toolchain"
+          };
+        } else if (result.skippedReason === "unsupported_harness") {
+          message =
+            detail ||
+            (this.isEn()
+              ? "Function-mode harness metadata is incomplete for this problem."
+              : "当前函数模式题目缺少签名元数据，暂无法直接自动包装运行。");
+        } else {
+          message =
+            detail ||
+            (this.isEn()
+              ? "This language is not supported by the local runner."
+              : "当前语言暂不支持本地样例运行。");
+        }
+        this.postToast("warn", message, undefined, cta);
+        return result;
+      }
 
       // 1. Feed TriggerSignalTracker WA/RE/CE cooldown window (or clear on AC)
       const primaryVerdict = pickPrimaryFailureVerdict(result);
@@ -1428,14 +1501,34 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     }
   }
 
-  async checkToolchains(): Promise<ToolchainProbe[]> {
+  async checkToolchains(openSettingsDrawer = false): Promise<ToolchainProbe[]> {
     this.toolchains = await this.deps.runnerEngine.probeToolchains();
     const availableCount = this.toolchains.filter((t) => t.available).length;
+    const cta: ToastActionCta = {
+      label: this.isEn() ? "Open Env Settings" : "查看环境体检",
+      tab: "settings",
+      subKey: "sub.settings",
+      subVal: "env",
+      drawerId: "settings-toolchain"
+    };
+    if (openSettingsDrawer) {
+      this.postMessage({
+        type: "ui/switchTab",
+        payload: {
+          tab: "settings",
+          subKey: "sub.settings",
+          subVal: "env",
+          drawerId: "settings-toolchain"
+        }
+      });
+    }
     this.postToast(
-      "info",
+      availableCount > 0 ? "info" : "warn",
       this.isEn()
         ? `Toolchain Doctor: ${availableCount}/${this.toolchains.length} languages available.`
-        : `编译环境体检完成：${availableCount}/${this.toolchains.length} 种语言可用。`
+        : `编译环境体检完成：${availableCount}/${this.toolchains.length} 种语言可用。`,
+      undefined,
+      cta
     );
     await this.syncState();
     return this.toolchains;
@@ -1453,10 +1546,23 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     }
 
     const codeSnapshot = this.deps.workspaceFiles.getActiveCodeSnapshot();
-    if (!codeSnapshot) {
+    if (!codeSnapshot || codeSnapshot.language === "generic") {
       this.postToast(
         "warn",
-        this.isEn() ? "Open a solution file first." : "请先打开当前代码文件。"
+        this.isEn()
+          ? "Open a supported solution file first."
+          : "请先打开当前题目的代码文件（非通用文本）。"
+      );
+      await this.syncState();
+      return;
+    }
+
+    if (codeSnapshot.problemKey && codeSnapshot.problemKey !== problem.problemKey) {
+      this.postToast(
+        "warn",
+        this.isEn()
+          ? `Active editor belongs to "${codeSnapshot.problemKey}", not "${problem.title}". Switch editor or select that problem first.`
+          : `当前编辑器文件属于题目「${codeSnapshot.problemKey}」，与当前题目「${problem.title}」不一致，请先切换后再复制提交。`
       );
       await this.syncState();
       return;
@@ -1465,13 +1571,13 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     const prepared = prepareSubmitPayload(problem, codeSnapshot.code, codeSnapshot.language);
     await vscode.env.clipboard.writeText(prepared.cleanedCode);
     const submittedAfterSeconds = Math.floor(this.now() / 1000);
-    this.lastSubmitSecByProblem.set(problem.problemKey, submittedAfterSeconds);
 
     if (
       openBrowser &&
       prepared.target &&
       isAllowedSubmitUrl(prepared.target.submitUrl, prepared.target.platform)
     ) {
+      this.lastSubmitSecByProblem.set(problem.problemKey, submittedAfterSeconds);
       await vscode.env.openExternal(vscode.Uri.parse(prepared.target.submitUrl));
       const autoPollEnabled =
         this.deps.config.get<boolean>(AI_CONFIG_KEYS.autoPollVerdict, true) !== false;
@@ -1500,6 +1606,9 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
           : `已仅复制纯净代码（清理 ${prepared.removedBlocks} 处调试块），请切到已登录浏览器粘贴提交。`
       );
     } else {
+      if (openBrowser) {
+        this.lastSubmitSecByProblem.set(problem.problemKey, submittedAfterSeconds);
+      }
       this.postToast(
         "info",
         this.isEn()
@@ -1516,7 +1625,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     if (!problem) {
       return;
     }
-    this.cancelBackgroundVerdictPoll();
+    this.cancelBackgroundVerdictPoll(problem.problemKey);
 
     const event = createManualVerdictEvent({
       problemKey: problem.problemKey,
@@ -1559,13 +1668,20 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
         "warn",
         this.isEn()
           ? `Configure your public ${label} handle in Settings first.`
-          : `请先在「设置」中填写公开 ${label} 用户名（Handle）。`
+          : `请先在「设置」中填写公开 ${label} 用户名（Handle）。`,
+        undefined,
+        {
+          label: this.isEn() ? "Open Settings" : "去配置 Handle",
+          tab: "settings",
+          subKey: "sub.settings",
+          subVal: "env"
+        }
       );
       await this.syncState();
       return;
     }
 
-    this.cancelBackgroundVerdictPoll();
+    this.cancelBackgroundVerdictPoll(problem.problemKey);
     this.verdictSyncing = true;
     await this.syncState();
 
@@ -1593,7 +1709,13 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
         return;
       }
 
-      const eventId = await this.ingestOfficialVerdict(problem, result.event, result.dedupKey);
+      const targetProblem =
+        (await this.findProblemMatch({
+          problemKey: result.event.problemKey,
+          source: result.event.platform,
+          sourceId: problem.sourceId
+        })) ?? problem;
+      const eventId = await this.ingestOfficialVerdict(targetProblem, result.event, result.dedupKey);
       this.postToast(
         result.event.verdict === "AC" ? "info" : "warn",
         this.isEn()
@@ -1624,20 +1746,29 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     };
   }
 
-  private cancelBackgroundVerdictPoll(): void {
-    if (this.verdictPollAbort) {
-      this.verdictPollAbort.abort();
-      this.verdictPollAbort = undefined;
+  private cancelBackgroundVerdictPoll(problemKey?: string): void {
+    if (problemKey) {
+      const controller = this.verdictPollAborts.get(problemKey);
+      if (controller) {
+        controller.abort();
+        this.verdictPollAborts.delete(problemKey);
+      }
+      return;
     }
+    for (const controller of this.verdictPollAborts.values()) {
+      controller.abort();
+    }
+    this.verdictPollAborts.clear();
   }
 
   private startBackgroundVerdictPoll(
     problem: ProblemDocument,
     submittedAfterSeconds: number
   ): void {
-    this.cancelBackgroundVerdictPoll();
+    const key = problem.problemKey;
+    this.cancelBackgroundVerdictPoll(key);
     const controller = new AbortController();
-    this.verdictPollAbort = controller;
+    this.verdictPollAborts.set(key, controller);
     const handles = this.readOjPublicHandles();
     const label = shortSourceLabel(problem.source, this.isEn());
 
@@ -1655,8 +1786,8 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
         if (this.disposed || controller.signal.aborted || result.status !== "judged") {
           return;
         }
-        if (this.verdictPollAbort === controller) {
-          this.verdictPollAbort = undefined;
+        if (this.verdictPollAborts.get(key) === controller) {
+          this.verdictPollAborts.delete(key);
         }
         const eventId = await this.ingestOfficialVerdict(problem, result.event, result.dedupKey);
         this.postToast(
@@ -1670,8 +1801,8 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
       } catch {
         // Background polling fails silently so manual sync/report remain unimpeded.
       } finally {
-        if (this.verdictPollAbort === controller) {
-          this.verdictPollAbort = undefined;
+        if (this.verdictPollAborts.get(key) === controller) {
+          this.verdictPollAborts.delete(key);
         }
       }
     })();
@@ -1723,7 +1854,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
           studentCode,
           studentMessage: payload.studentQuestion,
           previousCoachTurn: lastTurn ? `${lastTurn.headline}\n${lastTurn.guidance}` : undefined,
-          localRunResult: this.lastRunByProblem.get(problem.problemKey),
+          localRunResult: this.getLastRunForProblem(problem.problemKey, language),
           stuckCategory: payload.stuckCategory,
           strictness: this.flags.coachStrictness,
           uiLanguage: this.flags.uiLanguage,
@@ -1909,10 +2040,76 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     }
   }
 
-  private setActiveProblemInternal(doc: ProblemDocument): void {
-    if (this.activeProblem?.problemKey !== doc.problemKey) {
-      this.cancelBackgroundVerdictPoll();
+  private setLastRunForProblem(
+    problemKey: string,
+    language: SupportedLanguage,
+    result: LocalRunResult
+  ): void {
+    this.lastRunByProblem.set(problemKey, result);
+    this.lastRunByProblemLang.set(`${problemKey}::${language}`, result);
+  }
+
+  private getLastRunForProblem(
+    problemKey: string,
+    language: SupportedLanguage
+  ): LocalRunResult | undefined {
+    const exact = this.lastRunByProblemLang.get(`${problemKey}::${language}`);
+    if (exact) {
+      return exact;
     }
+    const fallback = this.lastRunByProblem.get(problemKey);
+    return fallback && fallback.language === language ? fallback : undefined;
+  }
+
+  private clearLastRunsForProblem(problemKey: string): void {
+    this.lastRunByProblem.delete(problemKey);
+    const prefix = `${problemKey}::`;
+    for (const key of Array.from(this.lastRunByProblemLang.keys())) {
+      if (key.startsWith(prefix)) {
+        this.lastRunByProblemLang.delete(key);
+      }
+    }
+  }
+
+  private async findProblemMatch(ref: {
+    problemKey?: string;
+    source: ProblemSourceId;
+    sourceId?: string;
+  }): Promise<ProblemDocument | undefined> {
+    const normalizedRefId = ref.sourceId?.trim().toLowerCase();
+    const compactRefId = normalizedRefId?.replace(/\//g, "");
+    const tailRefId = normalizedRefId?.split("/").filter(Boolean).pop();
+
+    const matches = (p: ProblemDocument): boolean => {
+      if (ref.problemKey && p.problemKey === ref.problemKey) {
+        return true;
+      }
+      if (!normalizedRefId || p.source !== ref.source) {
+        return false;
+      }
+      const pId = p.sourceId.trim().toLowerCase();
+      if (pId === normalizedRefId || pId.replace(/\//g, "") === compactRefId) {
+        return true;
+      }
+      if (tailRefId && (pId === tailRefId || pId.split("/").pop() === tailRefId)) {
+        return true;
+      }
+      const url = (p.canonicalUrl ?? "").toLowerCase();
+      return Boolean(tailRefId && url.includes(`/${tailRefId}`));
+    };
+
+    if (this.activeProblem && matches(this.activeProblem)) {
+      return this.activeProblem;
+    }
+    let found = this.problemsCache.find(matches);
+    if (!found) {
+      this.problemsCache = await this.deps.problemRepository.listCachedProblems();
+      found = this.problemsCache.find(matches);
+    }
+    return found;
+  }
+
+  private setActiveProblemInternal(doc: ProblemDocument): void {
     this.activeProblem = doc;
     if (!this.sessionStartMsByProblem.has(doc.problemKey)) {
       this.sessionStartMsByProblem.set(doc.problemKey, this.now());
@@ -2081,7 +2278,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     for (const doc of this.problemsCache) {
       addDoc(doc);
     }
-    for (const warmup of getWarmupProblems()) {
+    for (const warmup of getWarmupProblems(this.flags.uiLanguage)) {
       addDoc(warmup);
     }
     for (const sheet of listCuratedSheets()) {

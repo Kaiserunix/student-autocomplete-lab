@@ -62,6 +62,9 @@ function inferActiveFunctionName(prefix: string): string | undefined {
     for (const pattern of ACTIVE_FUNC_PATTERNS) {
       const match = line.match(pattern);
       if (match?.[1] && !/^(?:if|for|while|switch|catch)$/.test(match[1])) {
+        if (match[1] === "solve" && /^\s*(?:async\s+)?def\s+solve\s*\(\s*\)/.test(line)) {
+          return "main";
+        }
         return match[1];
       }
     }
@@ -181,6 +184,10 @@ export class AlgoCoachInlineCompletionProvider
         : "automatic";
 
     const router = this.getModelRouter();
+    if (!router.isRoleReady("fim") || token.isCancellationRequested) {
+      return [];
+    }
+
     const fimRoute = router.describeRoute("fim");
     const activeFunctionName = inferActiveFunctionName(prefix);
     const nowMs = this.now();
@@ -230,7 +237,7 @@ export class AlgoCoachInlineCompletionProvider
     try {
       const result = await runInlineCompletionPipeline({
         ...isolatedInput,
-        nowMs: this.now(),
+        precomputed: prepared,
         signal: abortController.signal,
         transport: async (renderedRequest, signal) =>
           this.invokeFimTransport(router, renderedRequest, signal)

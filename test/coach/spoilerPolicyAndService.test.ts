@@ -484,8 +484,25 @@ describe("CoachService end-to-end (Prompt Isolation, Anti-Spoiler Gate, Offline 
     );
 
     expect(streamedChunks.length).toBeGreaterThan(0);
+    const joinedStream = streamedChunks.join("");
+    expect(joinedStream.trimStart().startsWith("{")).toBe(false);
+    expect(joinedStream).toContain("Check monotonicity first.");
     expect(res.spoilerSafe).toBe(true);
     expect(res.guidance).toBe("Check monotonicity first.");
     expect(res.conceptTags).toContain("array.binary_search");
+
+    // Offline followUp acknowledges offline mode & gives structural feedback instead of repeating L0/L1
+    const offlineService = new CoachService();
+    const followUp = await offlineService.respond({
+      action: "followUp",
+      problem: SAMPLE_PROBLEM,
+      language: "python",
+      studentCode: "for i in range(n):\n    for j in range(i, n):\n        pass",
+      studentMessage: "Why is this timing out?",
+      uiLanguage: "en-US"
+    });
+    expect(followUp.headline).toContain("Offline Follow-Up");
+    expect(followUp.guidance).toContain("Offline Structural Check");
+    expect(followUp.guidance).toContain("nested loops");
   });
 });

@@ -4,6 +4,7 @@ export interface DiffOptions {
   mode?: DiffMode;
   floatEpsilon?: number;
   maxDiffLines?: number;
+  normalizeJson?: boolean;
 }
 
 export interface DiffResult {
@@ -67,6 +68,80 @@ export function buildLineDiffSummary(
   return diffs.join("\n");
 }
 
+function tryParseJson(text: string): { ok: true; value: unknown } | { ok: false } {
+  const trimmed = text.trim();
+  if (!trimmed) {
+    return { ok: false };
+  }
+  try {
+    return { ok: true, value: JSON.parse(trimmed) as unknown };
+  } catch {
+    return { ok: false };
+  }
+}
+
+export function normalizeJsonOutput(text: string): string | undefined {
+  const parsed = tryParseJson(text);
+  return parsed.ok ? JSON.stringify(parsed.value) : undefined;
+}
+
+function compareJsonWithEpsilon(
+  actual: unknown,
+  expected: unknown,
+  eps: number,
+  path: string
+): string | undefined {
+  if (typeof actual === "number" && typeof expected === "number") {
+    const tol = Math.max(eps, eps * Math.abs(expected));
+    if (Number.isFinite(actual) && Number.isFinite(expected) && Math.abs(actual - expected) <= tol) {
+      return undefined;
+    }
+    return `Value at ${path} outside epsilon (${eps}): expected ${expected}, got ${actual}`;
+  }
+
+  if (Array.isArray(actual) && Array.isArray(expected)) {
+    if (actual.length !== expected.length) {
+      return `Array length mismatch at ${path}: expected ${expected.length}, got ${actual.length}`;
+    }
+    for (let i = 0; i < expected.length; i += 1) {
+      const err = compareJsonWithEpsilon(actual[i], expected[i], eps, `${path}[${i}]`);
+      if (err) {
+        return err;
+      }
+    }
+    return undefined;
+  }
+
+  if (
+    actual !== null &&
+    expected !== null &&
+    typeof actual === "object" &&
+    typeof expected === "object" &&
+    !Array.isArray(actual) &&
+    !Array.isArray(expected)
+  ) {
+    const actRec = actual as Record<string, unknown>;
+    const expRec = expected as Record<string, unknown>;
+    const actKeys = Object.keys(actRec).sort();
+    const expKeys = Object.keys(expRec).sort();
+    if (actKeys.length !== expKeys.length || !actKeys.every((k, i) => k === expKeys[i])) {
+      return `Object keys mismatch at ${path}`;
+    }
+    for (const k of expKeys) {
+      const err = compareJsonWithEpsilon(actRec[k], expRec[k], eps, `${path}.${k}`);
+      if (err) {
+        return err;
+      }
+    }
+    return undefined;
+  }
+
+  if (actual === expected) {
+    return undefined;
+  }
+  return `Value mismatch at ${path}: expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)}`;
+}
+
 function canonicalizeJsonUnordered(value: unknown): string {
   if (value === null || typeof value !== "object") {
     return JSON.stringify(value);
@@ -101,14 +176,24 @@ export function compareOutput(
   }
 
   if (mode === "token") {
-    const actTokens = tokenize(actual);
-    const expTokens = tokenize(expected);
+    let actText = actual;
+    let expText = expected;
+    if (options.normalizeJson) {
+      const normAct = normalizeJsonOutput(actual);
+      const normExp = normalizeJsonOutput(expected);
+      if (normAct !== undefined && normExp !== undefined) {
+        actText = normAct;
+        expText = normExp;
+      }
+    }
+    const actTokens = tokenize(actText);
+    const expTokens = tokenize(expText);
     if (actTokens.length === expTokens.length && actTokens.every((tok, idx) => tok === expTokens[idx])) {
       return { passed: true, mode };
     }
     const lineDiff = buildLineDiffSummary(
-      actual.replace(/\r\n/g, "\n").trimEnd(),
-      expected.replace(/\r\n/g, "\n").trimEnd(),
+      actText.replace(/\r\n/g, "\n").trimEnd(),
+      expText.replace(/\r\n/g, "\n").trimEnd(),
       maxLines
     );
     const firstDiffIdx = Math.max(
@@ -128,6 +213,20 @@ export function compareOutput(
 
   if (mode === "float-epsilon") {
     const eps = options.floatEpsilon ?? 1e-6;
+    const expJson = tryParseJson(expected);
+    const actJson = tryParseJson(actual);
+    if (expJson.ok && actJson.ok) {
+      const jsonDiff = compareJsonWithEpsilon(actJson.value, expJson.value, eps, "$");
+      if (!jsonDiff) {
+        return { passed: true, mode };
+      }
+      return {
+        passed: false,
+        mode,
+        diffSummary: jsonDiff
+      };
+    }
+
     const actTokens = tokenize(actual);
     const expTokens = tokenize(expected);
 

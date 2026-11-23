@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process";
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import type { SupportedLanguage, ToolchainProbe } from "../core/contracts";
 
 export type ConcreteLanguage = Exclude<SupportedLanguage, "generic">;
@@ -24,10 +26,65 @@ export type CommandProber = (
 const ALL_LANGUAGES: ConcreteLanguage[] = ["python", "cpp", "c", "rust", "java"];
 
 export function splitCommandSpec(command: string): CommandSpec {
-  const parts = command.trim().split(/\s+/).filter(Boolean);
-  const bin = parts[0] ?? command.trim();
+  const trimmed = command.trim();
+  if (trimmed.startsWith('"')) {
+    const close = trimmed.indexOf('"', 1);
+    if (close !== -1) {
+      const bin = trimmed.slice(1, close);
+      const prefixArgs = trimmed.slice(close + 1).trim().split(/\s+/).filter(Boolean);
+      return { bin, prefixArgs, displayCommand: trimmed };
+    }
+  }
+  if (/\.exe$/i.test(trimmed) || existsSync(trimmed)) {
+    return { bin: trimmed, prefixArgs: [], displayCommand: trimmed };
+  }
+  const parts = trimmed.split(/\s+/).filter(Boolean);
+  const bin = parts[0] ?? trimmed;
   const prefixArgs = parts.slice(1);
-  return { bin, prefixArgs, displayCommand: command.trim() };
+  return { bin, prefixArgs, displayCommand: trimmed };
+}
+
+function collectDefaultWindowsFallbackBins(): string[] {
+  const dirs: string[] = [
+    "C:\\msys64\\ucrt64\\bin",
+    "C:\\msys64\\mingw64\\bin",
+    "C:\\msys64\\clang64\\bin",
+    "C:\\msys64\\mingw32\\bin",
+    "C:\\mingw64\\bin",
+    "C:\\MinGW\\bin",
+    "C:\\WinLibs\\bin",
+    "C:\\Program Files\\LLVM\\bin",
+    "C:\\Program Files (x86)\\RedPanda-Cpp\\MinGW64\\bin",
+    "C:\\Program Files\\RedPanda-Cpp\\MinGW64\\bin",
+    "C:\\RedPanda-Cpp\\MinGW64\\bin",
+    "C:\\RedPanda-Cpp\\mingw32\\bin"
+  ];
+  const userProfile = process.env.USERPROFILE;
+  if (userProfile) {
+    dirs.push(
+      join(userProfile, "scoop", "apps", "mingw", "current", "bin"),
+      join(userProfile, "scoop", "apps", "gcc", "current", "bin"),
+      join(userProfile, "scoop", "shims")
+    );
+  }
+  const localAppData = process.env.LOCALAPPDATA;
+  if (localAppData) {
+    const wingetRoot = join(localAppData, "Microsoft", "WinGet", "Packages");
+    try {
+      for (const entry of readdirSync(wingetRoot)) {
+        if (/winlibs|mingw|llvm/i.test(entry)) {
+          dirs.push(
+            join(wingetRoot, entry, "mingw64", "bin"),
+            join(wingetRoot, entry, "ucrt64", "bin"),
+            join(wingetRoot, entry, "bin")
+          );
+        }
+      }
+    } catch {
+      // Ignore missing WinGet directory
+    }
+  }
+  return dirs;
 }
 
 function getInstallHint(language: ConcreteLanguage, platform: NodeJS.Platform): string {
@@ -142,11 +199,14 @@ export async function probeSingleToolchain(
     platform?: NodeJS.Platform;
     prober?: CommandProber;
     timeoutMs?: number;
+    windowsFallbackDirs?: readonly string[];
+    fileExists?: (path: string) => boolean;
   }
 ): Promise<ToolchainProbe> {
   const platform = options?.platform ?? process.platform;
   const prober = options?.prober ?? defaultCommandProber;
   const timeoutMs = options?.timeoutMs ?? 3000;
+  const checkFile = options?.fileExists ?? existsSync;
   const installHint = getInstallHint(language, platform);
 
   if (language === "python") {
@@ -156,7 +216,7 @@ export async function probeSingleToolchain(
       const spec = splitCommandSpec(candidate);
       const res = await prober(spec.bin, [...spec.prefixArgs, "--version"], timeoutMs);
       const combined = `${res.stdout}\n${res.stderr}`;
-      if (res.ok && /Python\s+\d+\.\d+/i.test(combined)) {
+      if (res.ok && /Python\s+3\.\d+/i.test(combined)) {
         return {
           language,
           available: true,
@@ -183,6 +243,26 @@ export async function probeSingleToolchain(
         };
       }
     }
+    if (platform === "win32") {
+      const fallbackDirs = options?.windowsFallbackDirs ?? collectDefaultWindowsFallbackBins();
+      for (const dir of fallbackDirs) {
+        for (const exe of ["g++.exe", "clang++.exe"]) {
+          const fullPath = join(dir, exe);
+          if (!checkFile(fullPath)) continue;
+          const res = await prober(fullPath, ["--version"], timeoutMs);
+          const combined = `${res.stdout}\n${res.stderr}`;
+          if (res.ok && firstNonEmptyLine(combined)) {
+            return {
+              language,
+              available: true,
+              command: fullPath,
+              version: firstNonEmptyLine(combined),
+              installHint
+            };
+          }
+        }
+      }
+    }
     return { language, available: false, installHint };
   }
 
@@ -198,6 +278,26 @@ export async function probeSingleToolchain(
           version: firstNonEmptyLine(combined),
           installHint
         };
+      }
+    }
+    if (platform === "win32") {
+      const fallbackDirs = options?.windowsFallbackDirs ?? collectDefaultWindowsFallbackBins();
+      for (const dir of fallbackDirs) {
+        for (const exe of ["gcc.exe", "clang.exe"]) {
+          const fullPath = join(dir, exe);
+          if (!checkFile(fullPath)) continue;
+          const res = await prober(fullPath, ["--version"], timeoutMs);
+          const combined = `${res.stdout}\n${res.stderr}`;
+          if (res.ok && firstNonEmptyLine(combined)) {
+            return {
+              language,
+              available: true,
+              command: fullPath,
+              version: firstNonEmptyLine(combined),
+              installHint
+            };
+          }
+        }
       }
     }
     return { language, available: false, installHint };

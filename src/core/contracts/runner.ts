@@ -27,6 +27,7 @@ export interface LocalRunResult {
   compileOk: boolean;
   compileStderr?: string;
   compileTimeMs?: number;
+  skippedReason?: "missing_toolchain" | "unsupported_harness" | "unsupported_language";
   allPassed: boolean;
   originalTotal: number;
   originalPassed: number;

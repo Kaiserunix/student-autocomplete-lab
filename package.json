@@ -155,6 +155,10 @@
       {
         "command": "algoCoach.internal.recordWordAccept",
         "title": "Record Word-by-Word Ghost Text Accept"
+      },
+      {
+        "command": "algoCoach.internal.dismissShortcutWhisper",
+        "title": "Dismiss Shortcut Whisper"
       }
     ],
     "keybindings": [

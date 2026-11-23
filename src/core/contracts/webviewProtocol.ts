@@ -76,6 +76,14 @@ export interface SidebarSearchResults {
   failedSources: ProblemSourceId[];
 }
 
+export interface ToastActionCta {
+  label: string;
+  tab?: "workspace" | "problems" | "coach" | "dossier" | "settings";
+  subKey?: string;
+  subVal?: string;
+  drawerId?: string;
+}
+
 export interface SidebarStateSnapshot {
   flags: FeatureFlags;
   visualPresetApplied: boolean;
@@ -113,6 +121,7 @@ export interface SidebarStateSnapshot {
     level: "info" | "warn" | "error";
     text: string;
     undoEventId?: string;
+    cta?: ToastActionCta;
   };
 }
 
@@ -130,8 +139,24 @@ export type HostToWebviewMessage =
       };
     }
   | { type: "coach/streamDelta"; payload: { requestId: string; delta: string } }
-  | { type: "toast/inline"; payload: { level: "info" | "warn" | "error"; text: string; undoEventId?: string } }
-  | { type: "ui/switchTab"; payload: { tab: "workspace" | "problems" | "coach" | "dossier" | "settings" } };
+  | {
+      type: "toast/inline";
+      payload: {
+        level: "info" | "warn" | "error";
+        text: string;
+        undoEventId?: string;
+        cta?: ToastActionCta;
+      };
+    }
+  | {
+      type: "ui/switchTab";
+      payload: {
+        tab: "workspace" | "problems" | "coach" | "dossier" | "settings";
+        subKey?: string;
+        subVal?: string;
+        drawerId?: string;
+      };
+    };
 
 export type WebviewToHostMessage =
   | { type: "webview/ready" }

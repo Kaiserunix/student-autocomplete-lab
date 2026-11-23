@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { access, mkdir, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import type {
+  DiffMode,
   LocalRunResult,
   RunnerEngine,
   RunnerRequest,
@@ -10,7 +11,7 @@ import type {
   ToolchainProbe
 } from "../core/contracts";
 import { compareOutput } from "./diffChecker";
-import { generateLeetCodeHarness } from "./leetcodeHarness";
+import { generateLeetCodeHarness, normalizeLeetCodeType } from "./leetcodeHarness";
 import {
   DEFAULT_MAX_OUTPUT_BYTES,
   DEFAULT_TIMEOUT_MS,
@@ -57,9 +58,135 @@ async function fileExists(path: string): Promise<boolean> {
   }
 }
 
-function detectJavaClassName(source: string): string {
-  const match = source.match(/\bpublic\s+class\s+([A-Za-z_][A-Za-z0-9_]*)\b/);
-  return match?.[1] ?? "Main";
+function stripJavaCommentsAndStrings(source: string): string {
+  let out = "";
+  let inLine = false;
+  let inBlock = false;
+  let quote: string | null = null;
+  for (let i = 0; i < source.length; i += 1) {
+    const ch = source[i]!;
+    const next = source[i + 1];
+    if (inLine) {
+      if (ch === "\n") {
+        inLine = false;
+        out += "\n";
+      } else {
+        out += " ";
+      }
+      continue;
+    }
+    if (inBlock) {
+      if (ch === "*" && next === "/") {
+        inBlock = false;
+        out += "  ";
+        i += 1;
+      } else {
+        out += ch === "\n" ? "\n" : " ";
+      }
+      continue;
+    }
+    if (quote) {
+      if (ch === "\\") {
+        out += "  ";
+        i += 1;
+        continue;
+      }
+      if (ch === quote) {
+        quote = null;
+      }
+      out += ch === "\n" ? "\n" : " ";
+      continue;
+    }
+    if (ch === "/" && next === "/") {
+      inLine = true;
+      out += "  ";
+      i += 1;
+      continue;
+    }
+    if (ch === "/" && next === "*") {
+      inBlock = true;
+      out += "  ";
+      i += 1;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      out += " ";
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
+export function detectJavaClassName(source: string): string {
+  const cleaned = stripJavaCommentsAndStrings(source);
+  const publicMatch = cleaned.match(
+    /\bpublic\s+(?:(?:final|abstract|strictfp)\s+)*class\s+([A-Za-z_][A-Za-z0-9_]*)\b/
+  );
+  if (publicMatch?.[1]) {
+    return publicMatch[1];
+  }
+
+  // Scan top-level (braceDepth === 0) class declarations, preferring one containing main()
+  const topLevelClasses: Array<{ name: string; body: string }> = [];
+  let depth = 0;
+  let i = 0;
+  while (i < cleaned.length) {
+    const ch = cleaned[i]!;
+    if (ch === "{") {
+      depth += 1;
+      i += 1;
+      continue;
+    }
+    if (ch === "}") {
+      depth = Math.max(0, depth - 1);
+      i += 1;
+      continue;
+    }
+    if (depth === 0 && ch === "c" && !/[A-Za-z0-9_.]/.test(cleaned[i - 1] ?? "")) {
+      const m = cleaned.slice(i).match(/^class\s+([A-Za-z_][A-Za-z0-9_]*)\b/);
+      if (m?.[1]) {
+        const openBrace = cleaned.indexOf("{", i + m[0].length);
+        if (openBrace !== -1) {
+          let b = openBrace + 1;
+          let bodyDepth = 1;
+          while (b < cleaned.length && bodyDepth > 0) {
+            if (cleaned[b] === "{") bodyDepth += 1;
+            else if (cleaned[b] === "}") bodyDepth -= 1;
+            b += 1;
+          }
+          topLevelClasses.push({ name: m[1], body: cleaned.slice(openBrace, b) });
+          i = b;
+          continue;
+        }
+      }
+    }
+    i += 1;
+  }
+
+  const withMain = topLevelClasses.find((c) => /\bstatic\s+void\s+main\s*\(/.test(c.body));
+  if (withMain) {
+    return withMain.name;
+  }
+  const namedMain = topLevelClasses.find((c) => c.name === "Main");
+  if (namedMain) {
+    return namedMain.name;
+  }
+  return topLevelClasses[0]?.name ?? "Main";
+}
+
+function buildToolchainPathEnv(command: string): Record<string, string | undefined> | undefined {
+  if (!command.includes("/") && !command.includes("\\")) {
+    return undefined;
+  }
+  const binDir = dirname(command);
+  if (!binDir || binDir === ".") {
+    return undefined;
+  }
+  const existingPath = process.env.PATH ?? process.env.Path ?? "";
+  const nextPath = existingPath ? `${binDir}${delimiter}${existingPath}` : binDir;
+  return { PATH: nextPath };
 }
 
 function buildSkippedOrCompileErrorCases(
@@ -140,8 +267,7 @@ export class NodeRunnerEngine implements RunnerEngine {
 
   async runSamples(request: RunnerRequest): Promise<LocalRunResult> {
     const nowIso = new Date().toISOString();
-    const isLeetCodeMode =
-      request.problem.ioMode === "function" && Boolean(request.problem.functionMeta);
+    const isLeetCodeMode = request.problem.ioMode === "function";
     const mode: "stdio" | "leetcode_harness" = isLeetCodeMode ? "leetcode_harness" : "stdio";
 
     if (request.language === "generic") {
@@ -157,6 +283,7 @@ export class NodeRunnerEngine implements RunnerEngine {
         codeHash: this.hashContent(request.sourceCode, request.language, [], mode),
         compileOk: false,
         compileStderr: msg,
+        skippedReason: "unsupported_language",
         allPassed: false,
         ...counts,
         cases,
@@ -189,6 +316,7 @@ export class NodeRunnerEngine implements RunnerEngine {
           codeHash: this.hashContent(request.sourceCode, language, [], mode),
           compileOk: false,
           compileStderr: reason,
+          skippedReason: "unsupported_harness",
           allPassed: false,
           ...counts,
           cases,
@@ -205,7 +333,7 @@ export class NodeRunnerEngine implements RunnerEngine {
 
     if (!probe.available || !probe.command) {
       const msg = `Toolchain for ${language} is not available. ${probe.installHint}`;
-      const cases = buildSkippedOrCompileErrorCases(request, "CE", msg);
+      const cases = buildSkippedOrCompileErrorCases(request, "SKIPPED", msg);
       const counts = summarizeCounts(cases);
       return {
         schemaVersion: "local-run/v2",
@@ -216,6 +344,7 @@ export class NodeRunnerEngine implements RunnerEngine {
         codeHash,
         compileOk: false,
         compileStderr: msg,
+        skippedReason: "missing_toolchain",
         allPassed: false,
         ...counts,
         cases,
@@ -259,7 +388,14 @@ export class NodeRunnerEngine implements RunnerEngine {
     }
 
     const timeoutMs = request.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-    const diffMode = request.diffMode ?? "token";
+    const normReturn =
+      mode === "leetcode_harness" && request.problem.functionMeta?.returnType
+        ? normalizeLeetCodeType(request.problem.functionMeta.returnType)
+        : null;
+    const isFloatReturn = normReturn === "double" || normReturn === "double[]";
+    const diffMode: DiffMode = request.diffMode ?? (isFloatReturn ? "float-epsilon" : "token");
+    const floatEpsilon =
+      request.floatEpsilon ?? (diffMode === "float-epsilon" && isFloatReturn ? 1e-5 : undefined);
     const cases: SampleCaseResult[] = [];
 
     for (const sample of request.samples) {
@@ -286,10 +422,17 @@ export class NodeRunnerEngine implements RunnerEngine {
         timeoutMs,
         maxOutputBytes: this.maxOutputBytes,
         injectPythonUtf8: language === "python",
+        ...(prepared.execEnv ? { env: prepared.execEnv } : {}),
         signal: request.signal
       });
 
-      const caseResult = this.evaluateSampleResult(sample, runRes, diffMode, request.floatEpsilon);
+      const caseResult = this.evaluateSampleResult(
+        sample,
+        runRes,
+        diffMode,
+        floatEpsilon,
+        mode === "leetcode_harness"
+      );
       cases.push(caseResult);
     }
 
@@ -339,6 +482,7 @@ export class NodeRunnerEngine implements RunnerEngine {
         execCommand: string;
         execArgs: string[];
         execCwd: string;
+        execEnv?: Record<string, string | undefined>;
         compileTimeMs: number;
       }
     | {
@@ -349,6 +493,7 @@ export class NodeRunnerEngine implements RunnerEngine {
   > {
     const { language, probe, effectiveSource, flags, codeHash, cacheDir, signal } = opts;
     const exeSuffix = process.platform === "win32" ? ".exe" : "";
+    const toolchainEnv = buildToolchainPathEnv(probe.command!);
 
     if (language === "python") {
       const scriptPath = join(cacheDir, `${codeHash}.py`);
@@ -369,12 +514,17 @@ export class NodeRunnerEngine implements RunnerEngine {
       const className = detectJavaClassName(effectiveSource);
       const classDir = join(cacheDir, `java-${codeHash}`);
       const classFile = join(classDir, `${className}.class`);
+      const javaCmd =
+        probe.command!.includes("/") || probe.command!.includes("\\")
+          ? join(dirname(probe.command!), process.platform === "win32" ? "java.exe" : "java")
+          : "java";
       if (await fileExists(classFile)) {
         return {
           ok: true,
-          execCommand: "java",
+          execCommand: javaCmd,
           execArgs: ["-cp", classDir, className],
           execCwd: classDir,
+          ...(toolchainEnv ? { execEnv: toolchainEnv } : {}),
           compileTimeMs: 0
         };
       }
@@ -388,6 +538,7 @@ export class NodeRunnerEngine implements RunnerEngine {
         cwd: classDir,
         timeoutMs: this.compileTimeoutMs,
         maxOutputBytes: this.maxOutputBytes,
+        ...(toolchainEnv ? { env: toolchainEnv } : {}),
         signal
       });
       if (compileRes.exitCode !== 0 || compileRes.spawnError || compileRes.timedOut) {
@@ -403,9 +554,10 @@ export class NodeRunnerEngine implements RunnerEngine {
       }
       return {
         ok: true,
-        execCommand: "java",
+        execCommand: javaCmd,
         execArgs: ["-cp", classDir, className],
         execCwd: classDir,
+        ...(toolchainEnv ? { execEnv: toolchainEnv } : {}),
         compileTimeMs: compileRes.durationMs
       };
     }
@@ -422,14 +574,15 @@ export class NodeRunnerEngine implements RunnerEngine {
         execCommand: binPath,
         execArgs: [],
         execCwd: cacheDir,
+        ...(toolchainEnv ? { execEnv: toolchainEnv } : {}),
         compileTimeMs: 0
       };
     }
 
     await writeFile(srcPath, effectiveSource, "utf8");
     const compileArgs =
-      language === "rust"
-        ? [...flags, srcPath, "-o", binPath]
+      language === "c" && process.platform !== "win32"
+        ? [...flags, srcPath, "-o", binPath, "-lm"]
         : [...flags, srcPath, "-o", binPath];
 
     const compileRes = await this.sandboxRunner({
@@ -438,6 +591,7 @@ export class NodeRunnerEngine implements RunnerEngine {
       cwd: cacheDir,
       timeoutMs: this.compileTimeoutMs,
       maxOutputBytes: this.maxOutputBytes,
+      ...(toolchainEnv ? { env: toolchainEnv } : {}),
       signal
     });
 
@@ -458,6 +612,7 @@ export class NodeRunnerEngine implements RunnerEngine {
       execCommand: binPath,
       execArgs: [],
       execCwd: cacheDir,
+      ...(toolchainEnv ? { execEnv: toolchainEnv } : {}),
       compileTimeMs: compileRes.durationMs
     };
   }
@@ -466,7 +621,8 @@ export class NodeRunnerEngine implements RunnerEngine {
     sample: RunnerRequest["samples"][number],
     runRes: SandboxRunResult,
     diffMode: NonNullable<RunnerRequest["diffMode"]>,
-    floatEpsilon?: number
+    floatEpsilon?: number,
+    normalizeJson = false
   ): SampleCaseResult {
     const base = {
       id: sample.id,
@@ -516,7 +672,8 @@ export class NodeRunnerEngine implements RunnerEngine {
 
     const diff = compareOutput(runRes.stdout, sample.expectedOutput, {
       mode: diffMode,
-      floatEpsilon
+      floatEpsilon,
+      normalizeJson
     });
     if (diff.passed) {
       return { ...base, verdict: "AC" };

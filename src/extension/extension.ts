@@ -6,9 +6,11 @@ import { TriggerSignalTracker } from "../core/autocomplete";
 import { CoachService, FileHintLadderStore, HintLadderMachine } from "../core/coach";
 import { JsonlLearningEventStore, JsonUserOverridesStore } from "../core/learner";
 import {
+  getWarmupProblems,
   isHeaderOrFastIoTemplate,
   ManagedModuleController,
   ShortcutCoach,
+  type ShortcutTipId,
   SoundController,
   StarterVisualPresetManager
 } from "../experience";
@@ -36,7 +38,7 @@ import {
 const AUDIO_MUTED_MEMENTO_KEY = "algoCoach.audio.muted.v1";
 
 /**
- * Authoritative list of all 18 VS Code commands declared in `package.json`.
+ * Authoritative list of all 20 VS Code commands declared in `package.json`.
  */
 export const EXTENSION_COMMANDS = [
   "algoCoach.openSidebar",
@@ -57,7 +59,8 @@ export const EXTENSION_COMMANDS = [
   "algoCoach.configureAiKeys",
   "algoCoach.runHealthCheck",
   "algoCoach.internal.selectPlaceholder",
-  "algoCoach.internal.recordWordAccept"
+  "algoCoach.internal.recordWordAccept",
+  "algoCoach.internal.dismissShortcutWhisper"
 ] as const;
 
 let activeManagedModules: ManagedModuleController | undefined;
@@ -139,7 +142,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     memento: mementoAdapter,
     resolveProblemKeyByStem: (stem) => {
       const normalizedStem = stem.toLowerCase();
-      for (const prob of cachedProblemKeys()) {
+      const candidates = new Set<string>([
+        ...(sidebarController?.getKnownProblemKeys() ?? []),
+        ...cachedProblemKeys(),
+        ...getWarmupProblems().map((p) => p.problemKey)
+      ]);
+      for (const prob of candidates) {
         if (sanitizeProblemKeyForFile(prob).toLowerCase() === normalizedStem) {
           return prob;
         }
@@ -253,38 +261,87 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       )
   });
 
-  managedModules.register({
+  interface BridgeModuleHandle extends vscode.Disposable {
+    syncPort(nextPort: number): void;
+  }
+
+  managedModules.register<BridgeModuleHandle>({
     id: "localhostBridge",
     isEnabled: () => (configAdapter.get<number>(AI_CONFIG_KEYS.bridgePort, 27121) ?? 27121) > 0,
     create: () => {
-      const preferredPort = configAdapter.get<number>(AI_CONFIG_KEYS.bridgePort, 27121) ?? 27121;
-      const bridge = new LocalhostBridge({
-        preferredPort,
-        verdictToken: bridgeVerdictToken,
-        onProblem: async (doc) => {
-          await sidebarController.handleBridgeProblem(doc);
-          knownProblemKeys = (await problemRepository.listCachedProblems()).map((p) => p.problemKey);
-        },
-        onVerdict: async (verdict) => {
-          await sidebarController.handleBridgeVerdict(verdict);
-        }
-      });
+      let currentPort = configAdapter.get<number>(AI_CONFIG_KEYS.bridgePort, 27121) ?? 27121;
+      let activeBridge: LocalhostBridge | undefined;
+      let disposed = false;
 
-      void bridge
-        .start()
-        .then((port) => {
-          sidebarController.setBridgeStatus({ listening: true, port });
-        })
-        .catch((err) => {
-          const msg = err instanceof Error ? err.message : String(err);
-          sidebarController.setBridgeStatus({ listening: false, lastError: msg });
-        });
+      const launchBridge = (preferredPort: number): void => {
+        const previous = activeBridge;
+        activeBridge = undefined;
+        const startNext = () => {
+          if (disposed) {
+            return;
+          }
+          const bridge = new LocalhostBridge({
+            preferredPort,
+            verdictToken: bridgeVerdictToken,
+            onProblem: async (doc) => {
+              await sidebarController.handleBridgeProblem(doc);
+              knownProblemKeys = (await problemRepository.listCachedProblems()).map(
+                (p) => p.problemKey
+              );
+            },
+            onVerdict: async (verdict) => {
+              await sidebarController.handleBridgeVerdict(verdict);
+            }
+          });
+          activeBridge = bridge;
+          void bridge
+            .start()
+            .then((port) => {
+              if (disposed || activeBridge !== bridge) {
+                void bridge.stop();
+                return;
+              }
+              sidebarController.setBridgeStatus({ listening: true, port });
+            })
+            .catch((err) => {
+              if (disposed || activeBridge !== bridge) {
+                return;
+              }
+              const msg = err instanceof Error ? err.message : String(err);
+              sidebarController.setBridgeStatus({ listening: false, lastError: msg });
+            });
+        };
 
-      return {
-        dispose: () => {
-          void bridge.stop();
+        if (previous) {
+          void previous.stop().finally(startNext);
+        } else {
+          startNext();
         }
       };
+
+      launchBridge(currentPort);
+
+      return {
+        syncPort: (nextPort: number) => {
+          if (nextPort !== currentPort) {
+            currentPort = nextPort;
+            launchBridge(nextPort);
+          }
+        },
+        dispose: () => {
+          disposed = true;
+          const prev = activeBridge;
+          activeBridge = undefined;
+          if (prev) {
+            void prev.stop();
+          }
+          sidebarController.setBridgeStatus({ listening: false });
+        }
+      };
+    },
+    onUpdate: (handle) => {
+      const nextPort = configAdapter.get<number>(AI_CONFIG_KEYS.bridgePort, 27121) ?? 27121;
+      handle.syncPort(nextPort);
     }
   });
 
@@ -472,7 +529,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
 
   // -------------------------------------------------------------------------
-  // Register ALL 18 package.json commands (100% real execution, zero stubs)
+  // Register ALL 20 package.json commands (100% real execution, zero stubs)
   // -------------------------------------------------------------------------
 
   const registerCommand = (id: (typeof EXTENSION_COMMANDS)[number], handler: (...args: any[]) => unknown) => {
@@ -559,8 +616,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   registerCommand("algoCoach.checkToolchain", async () => {
-    await sidebarController.checkToolchains();
     await vscode.commands.executeCommand("algoCoach.sidebar.focus");
+    await sidebarController.checkToolchains(true);
   });
 
   registerCommand("algoCoach.copyAndOpenSubmit", async () => {
@@ -579,6 +636,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   });
 
   registerCommand("algoCoach.triggerGhostText", async () => {
+    if (!modelRouter.isRoleReady("fim")) {
+      const isEn = sidebarController.getFlags().uiLanguage === "en-US";
+      sidebarController.postToast(
+        "warn",
+        isEn
+          ? "Configure your FIM autocomplete API key or local endpoint in Settings first."
+          : "请先在「设置 -> AI 与环境」中配置 FIM 补全 API Key 或本地模型地址。",
+        undefined,
+        {
+          label: isEn ? "Open AI Settings" : "去配置 AI",
+          tab: "settings",
+          subKey: "sub.settings",
+          subVal: "env"
+        }
+      );
+    }
     await vscode.commands.executeCommand("editor.action.inlineSuggest.trigger");
   });
 
@@ -683,6 +756,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   registerCommand("algoCoach.internal.recordWordAccept", (acceptedText?: string) => {
     inlineProvider.handleRecordWordAccept(acceptedText);
+  });
+
+  registerCommand("algoCoach.internal.dismissShortcutWhisper", (tipId?: ShortcutTipId) => {
+    if (tipId) {
+      managedModules.getInstance<ShortcutCoach>("shortcutCoach")?.dismissTip(tipId);
+    }
+    statusBar.hideShortcutWhisper();
   });
 }
 

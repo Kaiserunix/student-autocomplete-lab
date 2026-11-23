@@ -574,47 +574,135 @@ function selectRelevantConfusablePairs(topPatternIds: Set<string>): ConfusablePa
   return CONFUSABLE_PATTERN_PAIRS.slice(0, 2);
 }
 
-function extractMaxConstraintExponent(text: string): { maxN: number; exponent: number } | undefined {
-  let best: { maxN: number; exponent: number } | undefined;
+function parseConstraintUpperValue(expr: string): number | undefined {
+  const trimmed = expr.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const sciRe =
+    /^(?:(\d+(?:\.\d+)?)\s*(?:\*|×|\\times)?\s*)?(?:10\s*\^\s*\{?(\d+)\}?|1e(\d+)|(\d+)e(\d+))/i;
+  const sciMatch = sciRe.exec(trimmed);
+  if (sciMatch) {
+    if (sciMatch[2]) {
+      const coeff = sciMatch[1] ? Number(sciMatch[1]) : 1;
+      return coeff * Math.pow(10, Number(sciMatch[2]));
+    }
+    if (sciMatch[3]) {
+      return Math.pow(10, Number(sciMatch[3]));
+    }
+    if (sciMatch[4] && sciMatch[5]) {
+      return Number(sciMatch[4]) * Math.pow(10, Number(sciMatch[5]));
+    }
+  }
+  const intMatch = /^(\d[\d,_]*)/.exec(trimmed);
+  if (intMatch?.[1]) {
+    const num = Number(intMatch[1].replace(/[,_]/g, ""));
+    if (Number.isFinite(num) && num > 0) {
+      return num;
+    }
+  }
+  return undefined;
+}
 
-  const update = (value: number): void => {
+function isModuloSurrounding(text: string, index: number): boolean {
+  const surrounding = text.slice(Math.max(0, index - 16), index + 28);
+  return /mod|取模|\+\s*7|998244353/i.test(surrounding);
+}
+
+function extractMaxConstraintExponent(text: string): { maxN: number; exponent: number } | undefined {
+  let tier1Best: { maxN: number; exponent: number } | undefined;
+  let tier2Best: { maxN: number; exponent: number } | undefined;
+
+  const update = (target: "tier1" | "tier2", value: number): void => {
     if (!Number.isFinite(value) || value <= 0) {
       return;
     }
     const exp = Math.log10(value);
-    if (!best || value > best.maxN) {
-      best = { maxN: value, exponent: exp };
+    if (target === "tier1") {
+      if (!tier1Best || value > tier1Best.maxN) {
+        tier1Best = { maxN: value, exponent: exp };
+      }
+    } else if (!tier2Best || value > tier2Best.maxN) {
+      tier2Best = { maxN: value, exponent: exp };
     }
   };
 
-  // Match patterns like 10^5, 10^{6}, 1e5, 2 * 10^5, 5*10^4
-  const sciRe = /(?:(\d+(?:\.\d+)?)\s*(?:\*|×|\\times)?\s*)?(?:10\s*\^\s*\{?(\d+)\}?|1e(\d+)|(\d+)e(\d+))/gi;
-  for (const match of text.matchAll(sciRe)) {
-    // Skip common modulo constants like 10^9 + 7 when judging input size N if paired with "mod"
-    const surrounding = text.slice(Math.max(0, (match.index ?? 0) - 16), (match.index ?? 0) + 24);
-    if (/mod|取模|\+\s*7|998244353/i.test(surrounding)) {
+  const sciPower = "(?:10\\s*\\^\\s*\\{?\\d+\\}?|\\d+e\\d+|1e\\d+)";
+  const upperExpr = `(?:\\d+(?:\\.\\d+)?\\s*(?:\\*|×|\\\\times)\\s*${sciPower}|${sciPower}|\\d[\\d,_]*(?!\\s*[\\^eE]))`;
+
+  // Tier 1a: dimension variable constraints like "1 <= n, q <= 2 * 10^5", "nums.length <= 10^4", "n <= 3000"
+  const dimClauseRe = new RegExp(
+    `([^\\n;]{0,40}?)\\s*(?:<=|≤|<|\\\\le|\\\\leq)\\s*(${upperExpr})`,
+    "gi"
+  );
+  const dimVarRe =
+    /(?:\b(?:n|m|N|M|T|q|Q|V|E|len|length)\b|\.length\b|len\([^)]+\)|长度|节点(?:数)?|边数|行数|列数|询问(?:次)?数|组数)/;
+  const indexedValueRe = /\[\s*[a-zA-Z0-9_]+\s*\]|_[ijk]\b|\|[^|\n]+\|/;
+
+  for (const match of text.matchAll(dimClauseRe)) {
+    const rawLhs = (match[1] ?? "").split(/<=|≤|<|\\le|\\leq/).pop()?.trim() ?? "";
+    const rhs = match[2] ?? "";
+    const matchIndex = match.index ?? 0;
+    if (isModuloSurrounding(text, matchIndex) || /^\s*-/.test(rhs)) {
+      continue;
+    }
+    if (dimVarRe.test(rawLhs) && !indexedValueRe.test(rawLhs)) {
+      const value = parseConstraintUpperValue(rhs);
+      if (value !== undefined) {
+        update("tier1", value);
+      }
+    }
+  }
+
+  // Tier 1b: prose descriptions like "length 10^5", "长度 n 为 10^5", "size up to 10^5"
+  const dimProseRe = new RegExp(
+    `(?:size|length|长度|节点数?|边数|点数)[^.\\n;]{0,20}?(?:<=|≤|<|=|为|of|up to|达|:)\\s*(${upperExpr})`,
+    "gi"
+  );
+  for (const match of text.matchAll(dimProseRe)) {
+    if (isModuloSurrounding(text, match.index ?? 0)) {
+      continue;
+    }
+    const value = parseConstraintUpperValue(match[1] ?? "");
+    if (value !== undefined) {
+      update("tier1", value);
+    }
+  }
+
+  if (tier1Best) {
+    return tier1Best;
+  }
+
+  // Tier 2 fallback (only when no dimension var was found): strip negative lower bounds and indexed element bounds first
+  const sanitizedForTier2 = text
+    .replace(/-\s*(?:\d+(?:\.\d+)?\s*(?:\*|×|\\times)?\s*)?(?:10\s*\^\s*\{?\d+\}?|\d[\d,_e]*)\s*(?:<=|≤|<|\\le|\\leq)[^\n;]*/gi, " ")
+    .replace(/[^,\n;]*(?:\[\s*[a-zA-Z0-9_]+\s*\]|\w+_[ijk]\b|\|\s*[a-zA-Z_]+\s*\|)[^\n;]*/g, " ");
+
+  const sciRe =
+    /(?:(\d+(?:\.\d+)?)\s*(?:\*|×|\\times)?\s*)?(?:10\s*\^\s*\{?(\d+)\}?|1e(\d+)|(\d+)e(\d+))/gi;
+  for (const match of sanitizedForTier2.matchAll(sciRe)) {
+    if (isModuloSurrounding(sanitizedForTier2, match.index ?? 0)) {
       continue;
     }
     if (match[2]) {
       const coeff = match[1] ? Number(match[1]) : 1;
-      update(coeff * Math.pow(10, Number(match[2])));
+      update("tier2", coeff * Math.pow(10, Number(match[2])));
     } else if (match[3]) {
-      update(Math.pow(10, Number(match[3])));
+      update("tier2", Math.pow(10, Number(match[3])));
     } else if (match[4] && match[5]) {
-      update(Number(match[4]) * Math.pow(10, Number(match[5])));
+      update("tier2", Number(match[4]) * Math.pow(10, Number(match[5])));
     }
   }
 
-  // Match explicit bounds like n <= 100000, N <= 20, 1 <= nums.length <= 5000
-  const boundRe =
-    /(?:\b[nmNM]\b|length|len\([^)]+\)|数组长度|节点数)\s*(?:<=|≤|<|\\le|\\leq)\s*(\d[\d,_]*)/g;
-  for (const match of text.matchAll(boundRe)) {
+  const scalarBoundRe =
+    /(?:\b[a-zA-Z_]\w*\b)\s*(?:<=|≤|<|\\le|\\leq)\s*(\d[\d,_]*)/g;
+  for (const match of sanitizedForTier2.matchAll(scalarBoundRe)) {
     const raw = (match[1] ?? "").replace(/[,_]/g, "");
     const num = Number(raw);
     if (Number.isFinite(num) && num > 0) {
-      update(num);
+      update("tier2", num);
     }
   }
 
-  return best;
+  return tier2Best;
 }

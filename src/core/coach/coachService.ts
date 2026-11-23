@@ -222,10 +222,13 @@ export class CoachService {
           projectedLearnerContextBlock: projection.formattedPromptBlock
         });
 
-        const completion = onStreamDelta
+        const streamAdapter = onStreamDelta
+          ? createCoachJsonStreamAdapter(onStreamDelta)
+          : undefined;
+        const completion = streamAdapter
           ? await this.modelRouter.streamChat(
               { messages, temperature: strictness === "strict" ? 0.1 : 0.25, maxTokens: 900 },
-              onStreamDelta
+              (delta) => streamAdapter.push(delta)
             )
           : await this.modelRouter.completeChat({
               messages,
@@ -233,6 +236,7 @@ export class CoachService {
               maxTokens: 900,
               jsonMode: chatRoute?.provider !== "anthropic"
             });
+        streamAdapter?.flush();
 
         rawPayload = parseModelResponseToPayload({
           rawText: completion.text,
@@ -595,7 +599,11 @@ function buildDeterministicOfflinePayload(params: {
     };
   }
 
-  // Deterministic L1-L5 Socratic Hint / Follow-up (offline mode)
+  if (params.action === "followUp") {
+    return buildOfflineFollowUpPayload(params, topCandidate);
+  }
+
+  // Deterministic L1-L5 Socratic Hint (offline mode)
   const level = params.hintLevel;
   const levelSpec = HINT_LEVEL_SPECS[level];
   const tonePrefix = buildTonePrefix(params.strictness, isEn);
@@ -687,4 +695,343 @@ function buildTonePrefix(strictness: CoachStrictness, isEn: boolean): string {
     return isEn ? "Take it one small step at a time. " : "稳住节奏，我们一步步拆解。";
   }
   return "";
+}
+
+function buildOfflineFollowUpPayload(
+  params: {
+    action: CoachAction;
+    hintLevel: HintLevel;
+    strictness: CoachStrictness;
+    stuckCategory?: StuckCategory;
+    problem: ProblemDocument;
+    studentCode: string;
+    studentMessage?: string;
+    patternMap: PatternMapAnalysis;
+    dryRun: DryRunPromptResult;
+    conceptTags: string[];
+    uiLanguage: "zh-CN" | "en-US";
+    audit: CoachResponsePayload["audit"];
+  },
+  topCandidate: PatternMapAnalysis["candidates"][number] | undefined
+): CoachResponsePayload {
+  const isEn = params.uiLanguage === "en-US";
+  const code = params.studentCode.trim();
+  const nonEmptyLines = code
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0 && !l.startsWith("#") && !l.startsWith("//"));
+  const question = (params.studentMessage ?? "").trim();
+
+  const hasNestedLoops = /(?:for|while)\b[\s\S]{1,180}?(?:for|while)\b/.test(code);
+  const hasBinaryMid = /\b(?:mid|left|right)\b/.test(code) || />>\s*1|\/\/\s*2/.test(code);
+  const hasSort = /\.sort\s*\(|std::sort\s*\(|sorted\s*\(/.test(code);
+  const onlyTodo =
+    nonEmptyLines.length <= 4 &&
+    (/TODO|pass\s*$|\.\.\.\s*$/m.test(code) || nonEmptyLines.every((l) => /^def |^class |^int |^return/.test(l)));
+
+  const observationsEn: string[] = [];
+  const observationsZh: string[] = [];
+
+  if (onlyTodo || nonEmptyLines.length === 0) {
+    observationsEn.push(
+      "Your editor currently contains only the starter skeleton, so start by confirming the brute-force or brute-force bottleneck on a tiny sample."
+    );
+    observationsZh.push("当前编辑器仍主要是初始框架代码，建议先用最小样例明确输入/输出与朴素解的瓶颈。");
+  } else {
+    observationsEn.push(`Detected ~${nonEmptyLines.length} active code line(s) for "${params.problem.title}".`);
+    observationsZh.push(`已读取你围绕「${params.problem.title}」编写的约 ${nonEmptyLines.length} 行有效代码。`);
+  }
+
+  if (hasNestedLoops) {
+    observationsEn.push(
+      `There appear to be nested loops; check whether quadratic work violates ${params.patternMap.scaleBudget.targetComplexity}.`
+    );
+    observationsZh.push(
+      `代码中存在多层嵌套循环，请对照目标复杂度 ${params.patternMap.scaleBudget.targetComplexity} 核对内层扫描是否可消去。`
+    );
+  }
+  if (hasBinaryMid) {
+    observationsEn.push("Binary-search bounds detected: verify open/closed interval alignment, overflow-safe mid, and loop exit state.");
+    observationsZh.push("检测到二分查找指针：重点核对开闭区间不变量、`mid` 取法与循环退出时的边界条件。");
+  }
+  if (hasSort && !hasBinaryMid) {
+    observationsEn.push("Sorting is present: verify whether index order or duplicate elements still matter after sorting.");
+    observationsZh.push("检测到排序调用：请确认排序后是否需要保留原始下标，以及重复元素如何去重或计数。");
+  }
+  if (params.dryRun.hasFailureEvidence) {
+    observationsEn.push(
+      isEn
+        ? `Latest local run evidence: ${params.dryRun.divergenceSummaryEn}`
+        : params.dryRun.divergenceSummaryEn
+    );
+    observationsZh.push(`结合最近一次本地运行报错：${params.dryRun.divergenceSummaryZh}`);
+  }
+  if (/complex|复杂度|tle|超时/i.test(question)) {
+    observationsEn.push(params.patternMap.scaleBudget.explanationEn);
+    observationsZh.push(params.patternMap.scaleBudget.explanationZh);
+  }
+
+  const notice = isEn
+    ? "[Offline Structural Check — Configure a Chat API key or local endpoint in Settings for live conversational Q&A]"
+    : "【离线结构化分析：当前未配置在线 Chat 模型，以下基于题面约束、本地运行记录与代码结构给出追问】";
+  const qEcho = question
+    ? isEn
+      ? `Regarding your question ("${question.slice(0, 90)}"): `
+      : `针对你的问题「${question.slice(0, 60)}」：`
+    : "";
+
+  const guidance = isEn
+    ? `${notice}\n${qEcho}${observationsEn.join(" ")}`
+    : `${notice}\n${qEcho}${observationsZh.join(" ")}`;
+
+  const guidingQuestion = params.dryRun.hasFailureEvidence
+    ? isEn
+      ? params.dryRun.questionEn
+      : params.dryRun.questionZh
+    : params.hintLevel >= 3 && topCandidate
+      ? isEn
+        ? topCandidate.decisionQuestionEn
+        : topCandidate.decisionQuestionZh
+      : isEn
+        ? "Which variable or invariant in your current lines changes first when moving from brute force to the tighter constraint?"
+        : "对照当前代码，如果把数据规模拉满，哪一步循环或状态更新最先变成瓶颈？";
+
+  return {
+    action: params.action,
+    hintLevel: params.hintLevel,
+    strictness: params.strictness,
+    stuckCategory: params.stuckCategory,
+    headline: isEn ? `Offline Follow-Up Check (L${params.hintLevel})` : `离线追问核查（L${params.hintLevel}）`,
+    guidance,
+    guidingQuestion,
+    ...(params.dryRun.hasFailureEvidence && params.dryRun.verdict !== "CE"
+      ? {
+          dryRunPrompt: {
+            minimalInput: params.dryRun.minimalInput,
+            question: isEn ? params.dryRun.questionEn : params.dryRun.questionZh
+          }
+        }
+      : {}),
+    misconceptionIds: params.dryRun.suggestedMisconceptionIds,
+    conceptTags: params.conceptTags,
+    spoilerSafe: true,
+    violations: [],
+    audit: params.audit
+  };
+}
+
+/**
+ * Incrementally extracts readable string values ("headline", "guidance", "guidingQuestion")
+ * when an online model streams raw JSON, so users never watch raw JSON punctuation stream.
+ * Falls back cleanly to passthrough for plain markdown/text responses.
+ */
+function createCoachJsonStreamAdapter(emit: (delta: string) => void): {
+  push: (chunk: string) => void;
+  flush: () => void;
+} {
+  const STREAMABLE_KEYS = new Set(["headline", "guidance", "guidingQuestion"]);
+  let mode: "detecting" | "passthrough" | "json" = "detecting";
+  let detectBuf = "";
+  let emittedAnyReadable = false;
+  let emittedSections = 0;
+
+  let inString = false;
+  let escaped = false;
+  let unicodeLeft = 0;
+  let unicodeBuf = "";
+  let expectKeyOrClose = false;
+  let expectColon = false;
+  let pendingKey: string | undefined;
+  let currentKey: string | undefined;
+  let activeField: string | undefined;
+  let currentStringBuf = "";
+  let depth = 0;
+  let lastNonWs = "";
+
+  const emitFieldDelta = (text: string): void => {
+    if (!text) {
+      return;
+    }
+    emittedAnyReadable = true;
+    emit(text);
+  };
+
+  const processJsonChar = (ch: string): void => {
+    if (inString) {
+      if (unicodeLeft > 0) {
+        unicodeBuf += ch;
+        unicodeLeft -= 1;
+        if (unicodeLeft === 0) {
+          const code = Number.parseInt(unicodeBuf, 16);
+          const decoded = Number.isFinite(code) ? String.fromCharCode(code) : "";
+          if (activeField) {
+            emitFieldDelta(decoded);
+          } else {
+            currentStringBuf += decoded;
+          }
+          unicodeBuf = "";
+        }
+        return;
+      }
+      if (escaped) {
+        escaped = false;
+        let decoded = ch;
+        if (ch === "n") decoded = "\n";
+        else if (ch === "r") decoded = "\r";
+        else if (ch === "t") decoded = "\t";
+        else if (ch === "u") {
+          unicodeLeft = 4;
+          unicodeBuf = "";
+          return;
+        }
+        if (activeField) {
+          emitFieldDelta(decoded);
+        } else {
+          currentStringBuf += decoded;
+        }
+        return;
+      }
+      if (ch === "\\") {
+        escaped = true;
+        return;
+      }
+      if (ch === '"') {
+        inString = false;
+        if (expectKeyOrClose) {
+          pendingKey = currentStringBuf;
+          expectKeyOrClose = false;
+          expectColon = true;
+        } else if (activeField) {
+          activeField = undefined;
+          currentKey = undefined;
+        } else {
+          currentKey = undefined;
+        }
+        currentStringBuf = "";
+        lastNonWs = '"';
+        return;
+      }
+      if (activeField) {
+        emitFieldDelta(ch);
+      } else {
+        currentStringBuf += ch;
+      }
+      return;
+    }
+
+    if (/\s/.test(ch)) {
+      return;
+    }
+    if (ch === "{") {
+      depth += 1;
+      expectKeyOrClose = depth === 1;
+      expectColon = false;
+      pendingKey = undefined;
+      lastNonWs = ch;
+      return;
+    }
+    if (ch === "}") {
+      if (depth > 0) {
+        depth -= 1;
+      }
+      expectKeyOrClose = false;
+      expectColon = false;
+      currentKey = undefined;
+      lastNonWs = ch;
+      return;
+    }
+    if (depth === 1 && ch === ",") {
+      expectKeyOrClose = true;
+      expectColon = false;
+      currentKey = undefined;
+      lastNonWs = ch;
+      return;
+    }
+    if (depth === 1 && expectColon && ch === ":") {
+      expectColon = false;
+      currentKey = pendingKey;
+      pendingKey = undefined;
+      lastNonWs = ch;
+      return;
+    }
+    if (ch === '"') {
+      inString = true;
+      currentStringBuf = "";
+      if (depth === 1 && (expectKeyOrClose || lastNonWs === "{")) {
+        expectKeyOrClose = true;
+      } else if (depth === 1 && currentKey && STREAMABLE_KEYS.has(currentKey)) {
+        activeField = currentKey;
+        if (emittedSections > 0) {
+          emitFieldDelta("\n\n");
+        }
+        emittedSections += 1;
+      }
+      return;
+    }
+    lastNonWs = ch;
+  };
+
+  return {
+    push: (chunk: string) => {
+      if (!chunk) {
+        return;
+      }
+      if (mode === "passthrough") {
+        emit(chunk);
+        return;
+      }
+      if (mode === "detecting") {
+        detectBuf += chunk;
+        const trimmedStart = detectBuf.trimStart();
+        if (!trimmedStart) {
+          return;
+        }
+        if (trimmedStart.startsWith("{") || /^```(?:json)?/i.test(trimmedStart)) {
+          mode = "json";
+          const startIdx = detectBuf.indexOf("{");
+          if (startIdx >= 0) {
+            const slice = detectBuf.slice(startIdx);
+            detectBuf = "";
+            for (const ch of slice) {
+              processJsonChar(ch);
+            }
+          }
+          return;
+        }
+        if (trimmedStart.length >= 4 || !"`{".includes(trimmedStart[0] ?? "")) {
+          mode = "passthrough";
+          const buf = detectBuf;
+          detectBuf = "";
+          emit(buf);
+        }
+        return;
+      }
+
+      if (detectBuf) {
+        const idx = (detectBuf + chunk).indexOf("{");
+        if (idx >= 0) {
+          const combined = (detectBuf + chunk).slice(idx);
+          detectBuf = "";
+          for (const ch of combined) {
+            processJsonChar(ch);
+          }
+        } else {
+          detectBuf += chunk;
+        }
+        return;
+      }
+      for (const ch of chunk) {
+        processJsonChar(ch);
+      }
+    },
+    flush: () => {
+      if (mode === "detecting" && detectBuf) {
+        emit(detectBuf);
+        detectBuf = "";
+      } else if (mode === "json" && !emittedAnyReadable && detectBuf) {
+        emit(detectBuf);
+        detectBuf = "";
+      }
+    }
+  };
 }

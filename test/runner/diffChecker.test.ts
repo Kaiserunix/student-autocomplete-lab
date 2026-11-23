@@ -55,4 +55,23 @@ describe("diffChecker", () => {
     expect(invalid.passed).toBe(false);
     expect(invalid.diffSummary).toContain("not valid JSON");
   });
+
+  it("normalizes spaced JSON outputs in function mode and handles float-epsilon JSON arrays", () => {
+    expect(
+      compareOutput("[[], [1]]\n", "[[],[1]]", { mode: "token", normalizeJson: true }).passed
+    ).toBe(true);
+
+    expect(
+      compareOutput("1.000001\n", "1.0", { mode: "float-epsilon", floatEpsilon: 1e-5 }).passed
+    ).toBe(true);
+
+    expect(
+      compareOutput("[2.000004, 3.500000]", "[2.0,3.5]", { mode: "float-epsilon", floatEpsilon: 1e-5 })
+        .passed
+    ).toBe(true);
+
+    expect(
+      compareOutput("[2.001, 3.5]", "[2.0,3.5]", { mode: "float-epsilon", floatEpsilon: 1e-5 }).passed
+    ).toBe(false);
+  });
 });

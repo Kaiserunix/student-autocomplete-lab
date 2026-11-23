@@ -698,7 +698,11 @@ export class StylishRankEngine {
       return this.buildTransition(prev, []);
     }
 
-    const isFastBlindAccept = isSubstantial && elapsedMs < BLIND_TAB_FAST_THRESHOLD_MS;
+    const hasInteractivePlaceholder = /\/\*\s*[^*]+?\s*\*\/|__[^_]+__|<[^>\n]+>/.test(input.text);
+    const isFastBlindAccept =
+      isSubstantial &&
+      elapsedMs < BLIND_TAB_FAST_THRESHOLD_MS &&
+      !(lineCount === 1 && hasInteractivePlaceholder);
 
     let isDrifting = false;
     this.recentUneditedFullAcceptTimestamps = this.recentUneditedFullAcceptTimestamps.filter(
@@ -837,6 +841,10 @@ export class StylishRankEngine {
   recordLocalRun(result: LocalRunResult, options?: LocalRunInputOptions): StylishRankTransition {
     const nowMs = options?.nowMs ?? this.now();
     const prev = this.getState();
+    if (result.skippedReason) {
+      this.lastEventSummary = `Local run skipped (${result.skippedReason}; no rank penalty)`;
+      return this.buildTransition(prev, []);
+    }
     this.touchActivity(nowMs);
     this.hasRunYet = true;
 

@@ -784,6 +784,92 @@ describe("SidebarController HTML CSP security, StatusBarController & host messag
     await sidebar.handleMessage({ type: "problem/clearSearch" });
     expect(lastSyncedState().searchResults).toBeUndefined();
 
+    // 18. StatusBar whisperItem wires dismissShortcutWhisper command with tipId
+    statusBar.showShortcutWhisper({
+      tipId: "run-samples",
+      channel: "statusBar",
+      durationMs: 4000,
+      shortcutLabel: "Ctrl+Alt+R",
+      text: "Try Ctrl+Alt+R",
+      tooltip: "Click to dismiss",
+      shownAtMs: 0
+    });
+    const whisperItem = mockState.harness!.statusBarItems.find(
+      (i) => i.name === "Algo Coach Shortcut Whisper"
+    );
+    expect(whisperItem?.command).toEqual({
+      command: "algoCoach.internal.dismissShortcutWhisper",
+      title: "Dismiss Shortcut Whisper",
+      arguments: ["run-samples"]
+    });
+
+    // 19. Skipped local run (missing_toolchain) avoids failedRuns rank penalty & includes Settings CTA
+    await sidebar.handleMessage({
+      type: "problem/select",
+      payload: { problemKey: "warmup:stdio-sum", openFile: true, language: "rust" }
+    });
+    const rustDoc = createMockTextDocument({
+      fsPath: join(tempDir, "practice", "warmup_stdio-sum.rs"),
+      languageId: "rust",
+      content: "fn main() {}\n"
+    });
+    mockState.harness!.setActiveTextEditor(createMockTextEditor(rustDoc));
+    const skippedRes: LocalRunResult = {
+      ...mockRunResult,
+      problemKey: "warmup:stdio-sum",
+      language: "rust",
+      compileOk: false,
+      allPassed: false,
+      skippedReason: "missing_toolchain",
+      compileStderr: "Install rustc",
+      cases: [
+        {
+          id: "orig-1",
+          isOriginal: true,
+          verdict: "SKIPPED",
+          durationMs: 0,
+          input: "",
+          expected: "",
+          actual: "",
+          stderr: "Install rustc"
+        }
+      ]
+    };
+    vi.mocked(runnerEngine.runSamples).mockResolvedValueOnce(skippedRes);
+    const failedBeforeSkip =
+      sidebar.getStylishRankEngine("warmup:stdio-sum")?.getState().failedRuns ?? 0;
+    await sidebar.handleMessage({ type: "runner/runSamples" });
+    const failedAfterSkip =
+      sidebar.getStylishRankEngine("warmup:stdio-sum")?.getState().failedRuns ?? 0;
+    expect(failedAfterSkip).toBe(failedBeforeSkip);
+    expect(lastSyncedState().statusBanner?.cta?.drawerId).toBe("settings-toolchain");
+
+    // 20. Adding custom sample clears stale lastRun
+    expect(lastSyncedState().lastRun).toBeDefined();
+    await sidebar.handleMessage({
+      type: "problem/addSample",
+      payload: { problemKey: "warmup:stdio-sum", input: "1\n2 3\n", expectedOutput: "5\n" }
+    });
+    expect(lastSyncedState().lastRun).toBeUndefined();
+
+    // 21. Mismatched active editor file warns cleanly without invoking runnerEngine
+    const otherDoc = createMockTextDocument({
+      fsPath: join(tempDir, "practice", "warmup_two-sum.cpp"),
+      languageId: "cpp",
+      content: "int x;"
+    });
+    workspaceFiles.bindDocumentToProblem(otherDoc.uri as unknown as import("vscode").Uri, "warmup:two-sum", "cpp");
+    mockState.harness!.setActiveTextEditor(createMockTextEditor(otherDoc));
+    // Now switch sidebar problem without opening its file so editor & activeProblem diverge
+    await sidebar.handleMessage({
+      type: "problem/select",
+      payload: { problemKey: "warmup:stdio-sum", openFile: false, language: "cpp" }
+    });
+    const callsBeforeMismatch = vi.mocked(runnerEngine.runSamples).mock.calls.length;
+    await sidebar.handleMessage({ type: "runner/runSamples" });
+    expect(vi.mocked(runnerEngine.runSamples).mock.calls.length).toBe(callsBeforeMismatch);
+    expect(lastSyncedState().statusBanner?.level).toBe("warn");
+
     sidebar.dispose();
     workspaceFiles.dispose();
     statusBar.dispose();

@@ -83,6 +83,31 @@ describe("lexicalZoneClassifier (zero-WASM 4-zone scanner)", () => {
           suffix: ""
         }).zone
       ).toBe("boilerplate");
+
+      // Parameterless Python stdio solve() entrypoint and TODO starter lines must stay Green, not Red
+      expect(
+        classifyLexicalZone({
+          language: "python",
+          prefix: "def solve() -> None:\n    ",
+          suffix: ""
+        }).zone
+      ).toBe("boilerplate");
+
+      expect(
+        classifyLexicalZone({
+          language: "python",
+          prefix: "def helper(a):\n    # TODO: fill logic\n    ",
+          suffix: ""
+        }).zone
+      ).toBe("neutral");
+
+      expect(
+        classifyLexicalZone({
+          language: "cpp",
+          prefix: "vector<int> dist = ",
+          suffix: ""
+        }).zone
+      ).toBe("api_syntax");
     });
   });
 

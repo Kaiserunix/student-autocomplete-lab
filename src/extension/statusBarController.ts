@@ -55,6 +55,7 @@ export class StatusBarController implements vscode.Disposable {
 
     this.whisperItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     this.whisperItem.name = "Algo Coach Shortcut Whisper";
+    this.whisperItem.command = "algoCoach.internal.dismissShortcutWhisper";
   }
 
   updatePreset(flags: FeatureFlags): void {
@@ -107,6 +108,11 @@ export class StatusBarController implements vscode.Disposable {
     this.clearWhisperTimer();
     this.whisperItem.text = `$(lightbulb) ${hint.text}`;
     this.whisperItem.tooltip = hint.tooltip;
+    this.whisperItem.command = {
+      command: "algoCoach.internal.dismissShortcutWhisper",
+      title: "Dismiss Shortcut Whisper",
+      arguments: [hint.tipId]
+    };
     this.whisperItem.show();
 
     const durationMs = hint.durationMs > 0 ? hint.durationMs : SHORTCUT_HINT_DURATION_MS;

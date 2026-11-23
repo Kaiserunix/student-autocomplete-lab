@@ -129,14 +129,15 @@ describe("adaptiveTriggerPolicy", () => {
     }
   });
 
-  it("activates fast typing (> 4 keys/s) and backspace burst (> 5) circuit breakers", () => {
+  it("elevates debounce on fast typing (> 7 keys/s) and hard-pauses backspace burst (> 5)", () => {
     const fastFlow = evaluateAdaptiveTrigger({
       mode: "adaptive",
       triggerKind: "automatic",
       zoneResult: GREEN_API,
-      signals: { keysPerSecond: 5 }
+      signals: { keysPerSecond: 8 }
     });
-    expect(fastFlow.shouldTrigger).toBe(false);
+    expect(fastFlow.shouldTrigger).toBe(true);
+    expect(fastFlow.reason).toBe("elevated-fast_typing_flow");
     expect(fastFlow.activeBreakers).toContain("fast_typing_flow");
     expect(fastFlow.debounceMs).toBeGreaterThan(500);
 
@@ -144,9 +145,10 @@ describe("adaptiveTriggerPolicy", () => {
       mode: "adaptive",
       triggerKind: "automatic",
       zoneResult: GREEN_API,
-      signals: { keysPerSecond: 4 }
+      signals: { keysPerSecond: 5 }
     });
     expect(normalPace.shouldTrigger).toBe(true);
+    expect(normalPace.activeBreakers).toEqual([]);
 
     const backspaceBurst = evaluateAdaptiveTrigger({
       mode: "adaptive",

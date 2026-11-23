@@ -167,5 +167,24 @@ describe("inlineCompletionCore end-to-end pipeline", () => {
     expect(errored.status).toBe("transport-error");
     expect(errored.errorMessage).not.toContain("sk-secret1234567890");
     expect(errored.errorMessage).toContain("[REDACTED_KEY]");
+
+    // Stop sequences omit single "\n" so leading-newline completions survive and trim cleanly
+    const leadingNewline = await runInlineCompletionPipeline({
+      mode: "adaptive",
+      triggerKind: "automatic",
+      context: {
+        language: "cpp",
+        prefix: "void helper(int n) {\n    int scale = ",
+        suffix: "\n}"
+      },
+      transport: async (req) => {
+        if (req.renderer === "deepseek-fim") {
+          expect(req.payload.stop).not.toContain("\n");
+        }
+        return "\n    n * 2;";
+      }
+    });
+    expect(leadingNewline.status).toBe("accepted");
+    expect(leadingNewline.suggestion).toBe("n * 2;");
   });
 });

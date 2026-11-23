@@ -50,6 +50,30 @@ export function buildDryRunPrompt(input: BuildDryRunInput): DryRunPromptResult {
     };
   }
 
+  if (run.skippedReason) {
+    return {
+      hasFailureEvidence: false,
+      stuckCategory: "implementation",
+      minimalInput: "(local run skipped before compile/execution)",
+      divergenceSummaryZh:
+        run.skippedReason === "missing_toolchain"
+          ? "本地运行环境尚未就绪（缺少编译器或运行器），暂无可追踪的运行期输出对比。"
+          : run.skippedReason === "unsupported_harness"
+            ? "当前函数模式题目缺少自动运行所需的签名元数据，暂无可追踪的样例执行轨迹。"
+            : "当前文件类型暂不支持本地样例运行，请先切换为受支持语言或手推边界样例。",
+      divergenceSummaryEn:
+        run.skippedReason === "missing_toolchain"
+          ? "Local execution was skipped because no compiler/runtime toolchain was detected; dry-run an edge case manually or configure the toolchain."
+          : run.skippedReason === "unsupported_harness"
+            ? "Local execution was skipped because function-mode signature metadata is incomplete; dry-run your logic on a 3-element sample."
+            : "Local execution was skipped for this file type; dry-run a minimal boundary sample manually.",
+      traceTableColumns: baseColumns,
+      questionZh: `在本地运行就绪前，请先拿一组最小输入按 [${baseColumns.join(" | ")}] 逐行手推：哪一步边界最容易出错？`,
+      questionEn: `Before running locally, trace a minimal sample across [${baseColumns.join(" | ")}]: where is an edge-case mismatch most likely?`,
+      suggestedMisconceptionIds: []
+    };
+  }
+
   // Case 1: Compilation error
   if (!run.compileOk) {
     const stderrExcerpt = truncateText((run.compileStderr ?? "").trim(), MAX_STDERR_PREVIEW_CHARS);

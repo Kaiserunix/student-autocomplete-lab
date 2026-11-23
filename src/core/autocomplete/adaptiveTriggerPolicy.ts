@@ -49,7 +49,7 @@ export interface TriggerDecision {
 }
 
 export const TRIGGER_THRESHOLDS = {
-  FAST_TYPING_KEYS_PER_SEC: 4,
+  FAST_TYPING_KEYS_PER_SEC: 7,
   BACKSPACE_BURST_COUNT: 5,
   FAILURE_COOLDOWN_MS: 6_000,
   DRIFTING_WINDOW_MS: 180_000,
@@ -170,7 +170,7 @@ export function evaluateAdaptiveTrigger(
   ) {
     activeBreakers.push("fast_typing_flow");
     penaltyDelayMs += standardPenalty;
-    hardPause = true;
+    statusHint = "Fast typing flow: completion debounce elevated.";
   }
 
   if (

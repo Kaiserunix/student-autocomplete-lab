@@ -418,15 +418,25 @@ export function evaluateAutocompleteOutput(
     });
   }
 
-  // Strip echoed current-line prefix
+  // Strip leading empty newlines emitted before indentation, then strip echoed current-line prefix
+  const trimmedLeadingEmptyLines = withoutControlLines.replace(/^(?:[ \t]*\n)+/, "");
+  const hadLeadingNewline = trimmedLeadingEmptyLines !== withoutControlLines;
   const derivedLinePrefix =
     input.currentLinePrefix ??
     (input.prefix !== undefined
       ? input.prefix.slice(input.prefix.lastIndexOf("\n") + 1)
       : undefined);
 
+  const normalizedControlOutput =
+    hadLeadingNewline &&
+    derivedLinePrefix !== undefined &&
+    derivedLinePrefix.trim().length > 0 &&
+    /\s$/.test(derivedLinePrefix)
+      ? trimmedLeadingEmptyLines.replace(/^[ \t]+/, "")
+      : trimmedLeadingEmptyLines;
+
   const prefixStep = stripEchoedPrefixFromText(
-    withoutControlLines,
+    normalizedControlOutput,
     derivedLinePrefix
   );
   const strippedEchoedPrefix = prefixStep.stripped;

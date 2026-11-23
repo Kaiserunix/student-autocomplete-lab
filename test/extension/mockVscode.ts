@@ -151,7 +151,7 @@ export interface MockStatusBarItem {
   name?: string;
   text: string;
   tooltip?: string;
-  command?: string;
+  command?: string | { command: string; title: string; arguments?: unknown[] };
   visible: boolean;
   disposed: boolean;
   show: () => void;

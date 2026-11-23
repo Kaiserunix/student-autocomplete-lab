@@ -286,8 +286,26 @@ else:
       cacheDir
     });
     expect(missingToolRes.compileOk).toBe(false);
+    expect(missingToolRes.skippedReason).toBe("missing_toolchain");
     expect(missingToolRes.compileStderr).toContain("Install rust compiler");
-    expect(missingToolRes.cases[0]?.verdict).toBe("CE");
+    expect(missingToolRes.cases[0]?.verdict).toBe("SKIPPED");
+
+    const missingMetaProblem: ProblemDocument = {
+      ...makeStdioProblem(),
+      problemKey: "lc-global:no-meta",
+      source: "leetcode-global",
+      sourceId: "no-meta",
+      ioMode: "function"
+    };
+    const missingMetaRes = await engine.runSamples({
+      problem: missingMetaProblem,
+      language: "python",
+      sourceCode: "class Solution:\n    pass\n",
+      samples: [{ id: "s1", input: "", expectedOutput: "", isOriginal: true }],
+      cacheDir
+    });
+    expect(missingMetaRes.skippedReason).toBe("unsupported_harness");
+    expect(missingMetaRes.cases[0]?.verdict).toBe("SKIPPED");
 
     const designProblem: ProblemDocument = {
       ...makeStdioProblem(),
@@ -311,7 +329,49 @@ else:
     });
     expect(designRes.mode).toBe("leetcode_harness");
     expect(designRes.compileOk).toBe(false);
+    expect(designRes.skippedReason).toBe("unsupported_harness");
     expect(designRes.compileStderr).toContain("Class-design");
     expect(designRes.cases[0]?.verdict).toBe("SKIPPED");
+  });
+
+  it("detectJavaClassName strips comments and supports non-public classes and package-less files", async () => {
+    const { detectJavaClassName } = await import("../../src/runner/nodeRunnerEngine");
+    const src = [
+      "/* public class FakeCommentClass {} */",
+      '// class AlsoComment {',
+      "class Solution {",
+      "    public static void main(String[] args) {}",
+      "}"
+    ].join("\n");
+    expect(detectJavaClassName(src)).toBe("Solution");
+  });
+
+  it("probeToolchains checks Python 3.x and Windows fallback directories safely", async () => {
+    const { probeSingleToolchain } = await import("../../src/runner/toolchains");
+    const py2Only = await probeSingleToolchain("python", {
+      platform: "win32",
+      prober: async (cmd) => {
+        if (cmd === "python") {
+          return { ok: true, stdout: "Python 2.7.18", stderr: "" };
+        }
+        return { ok: true, stdout: "Python 3.12.2", stderr: "" };
+      }
+    });
+    expect(py2Only.available).toBe(true);
+    expect(py2Only.command).toBe("py -3");
+
+    const fallbackCpp = await probeSingleToolchain("cpp", {
+      platform: "win32",
+      windowsFallbackDirs: ["C:\\msys64\\ucrt64\\bin"],
+      fileExists: (p) => p.toLowerCase().includes("ucrt64\\bin\\g++.exe"),
+      prober: async (cmd) => {
+        if (cmd.toLowerCase().includes("ucrt64")) {
+          return { ok: true, stdout: "g++.exe (Rev1) 14.2.0", stderr: "" };
+        }
+        return { ok: false, stdout: "", stderr: "not found" };
+      }
+    });
+    expect(fallbackCpp.available).toBe(true);
+    expect(fallbackCpp.command).toContain("ucrt64");
   });
 });

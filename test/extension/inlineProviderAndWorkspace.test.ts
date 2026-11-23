@@ -261,6 +261,24 @@ describe("AlgoCoachInlineCompletionProvider & WorkspaceFileController", () => {
     expect(await controller2.deleteCustomSample(warmup1.problemKey, added.id)).toBe(true);
     expect(controller2.getCustomSamples(warmup1.problemKey)).toHaveLength(0);
 
+    // Language switch on SAME problem creates distinct file and does NOT stay stuck on .py
+    const warmup1Cpp = await controller.openOrCreatePracticeFile(warmup1, "cpp");
+    expect(warmup1Cpp.filePath).toBe(join(tempDir, "practice", "warmup_stdio-sum.cpp"));
+    const warmup1PyReopen = await controller.openOrCreatePracticeFile(warmup1, "python");
+    expect(warmup1PyReopen.filePath).toBe(join(tempDir, "practice", "warmup_stdio-sum.py"));
+
+    // Active markdown README (generic) must NOT clobber active context or lose active code file
+    const readmeDoc = createMockTextDocument({
+      fsPath: join(tempDir, "README.md"),
+      languageId: "markdown",
+      content: "# Notes"
+    });
+    const prevCount = activeEvents.length;
+    mockState.harness!.setActiveTextEditor(createMockTextEditor(readmeDoc));
+    expect(activeEvents.length).toBe(prevCount);
+    expect(controller.getActiveCodeSnapshot()?.language).toBe("python");
+    expect(controller.getActiveCodeSnapshot()?.problemKey).toBe("warmup:stdio-sum");
+
     controller.dispose();
     controller2.dispose();
   });

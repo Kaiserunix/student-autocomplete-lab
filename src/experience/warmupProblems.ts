@@ -1,4 +1,4 @@
-import type { ProblemDocument } from "../core/contracts";
+import type { ProblemDocument, SupportedLanguage } from "../core/contracts";
 
 export const WARMUP_PROBLEM_KEYS = [
   "warmup:stdio-sum",
@@ -95,6 +95,37 @@ const TWO_SUM_CPP_SNIPPET = [
   "};"
 ].join("\n");
 
+const TWO_SUM_JAVA_SNIPPET = [
+  "class Solution {",
+  "    public int[] twoSum(int[] nums, int target) {",
+  "        // NOTE: Local Function-Harness supports Python & C++ directly.",
+  "        return new int[0];",
+  "    }",
+  "}"
+].join("\n");
+
+const TWO_SUM_C_SNIPPET = [
+  "#include <stdlib.h>",
+  "",
+  "/**",
+  " * Note: The returned array must be malloced, assume caller calls free().",
+  " * Local Function-Harness runs Python & C++ directly.",
+  " */",
+  "int* twoSum(int* nums, int numsSize, int target, int* returnSize) {",
+  "    *returnSize = 0;",
+  "    return NULL;",
+  "}"
+].join("\n");
+
+const TWO_SUM_RUST_SNIPPET = [
+  "impl Solution {",
+  "    // Note: Local Function-Harness supports Python & C++ directly.",
+  "    pub fn two_sum(nums: Vec<i32>, target: i32) -> Vec<i32> {",
+  "        vec![]",
+  "    }",
+  "}"
+].join("\n");
+
 const TWO_SUM_PROBLEM: ProblemDocument = {
   schemaVersion: "problem-doc/v2",
   problemKey: "warmup:two-sum",
@@ -156,7 +187,10 @@ const TWO_SUM_PROBLEM: ProblemDocument = {
     codeSnippets: {
       python: TWO_SUM_PYTHON_SNIPPET,
       python3: TWO_SUM_PYTHON_SNIPPET,
-      cpp: TWO_SUM_CPP_SNIPPET
+      cpp: TWO_SUM_CPP_SNIPPET,
+      java: TWO_SUM_JAVA_SNIPPET,
+      c: TWO_SUM_C_SNIPPET,
+      rust: TWO_SUM_RUST_SNIPPET
     }
   },
   constraints: {
@@ -261,7 +295,100 @@ const WARMUP_BY_KEY = new Map<string, ProblemDocument>(
   WARMUP_PROBLEMS.map((doc) => [doc.problemKey, doc])
 );
 
-const STDIO_STARTER_CODE: Record<WarmupProblemKey, Record<"python" | "cpp", string>> = {
+const WARMUP_EN_OVERRIDES: Record<
+  WarmupProblemKey,
+  {
+    title: string;
+    statementMarkdown: string;
+    sampleExplanations: readonly string[];
+  }
+> = {
+  "warmup:stdio-sum": {
+    title: "Multi-Case A+B & 64-bit Overflow Check",
+    statementMarkdown: [
+      "# Multi-Case A+B & 64-bit Overflow Check",
+      "",
+      "## Problem Statement",
+      "Given `T` test cases, each containing two integers `a` and `b`, print `a + b` for each test case in order.",
+      "",
+      "Use this warmup problem to practice standard input/output (stdio), running local samples (`Ctrl+Alt+R` / `Cmd+Alt+R`), and catching 32-bit integer overflow bugs.",
+      "",
+      "## Input Format",
+      "- The first line contains a positive integer `T` (`1 <= T <= 10^5`).",
+      "- Each of the next `T` lines contains two space-separated integers `a` and `b` (`-10^12 <= a, b <= 10^12`).",
+      "",
+      "## Output Format",
+      "- Print `T` lines; the `i`-th line should be `a + b` for the `i`-th test case.",
+      "",
+      "## Hints",
+      "- `a` and `b` exceed signed 32-bit integer limits (`2^31 - 1`), so use 64-bit integers (`long long` in C/C++, `i64` in Rust, `long` in Java)."
+    ].join("\n"),
+    sampleExplanations: [
+      "Standard positive values, cancelling negatives, and 3-digit addition.",
+      "Zeroes and large negative 64-bit boundary values (32-bit int overflows).",
+      "Positive 64-bit upper bound and large subtraction."
+    ]
+  },
+  "warmup:two-sum": {
+    title: "Two Sum (Function Harness)",
+    statementMarkdown: [
+      "# Two Sum",
+      "",
+      "## Problem Statement",
+      "Given an array of integers `nums` and an integer `target`, return indices (0-based) of the two numbers such that they add up to `target`.",
+      "",
+      "You may assume that each input would have **exactly one solution**, and you may not use the same element twice. You can return the answer in any order.",
+      "",
+      "Use this warmup problem to experience LeetCode-style Function-Harness evaluation locally without writing a manual `main` wrapper.",
+      "",
+      "## Constraints",
+      "- `2 <= nums.length <= 10^4`",
+      "- `-10^9 <= nums[i] <= 10^9`",
+      "- `-10^9 <= target <= 10^9`",
+      "- Only one valid answer exists.",
+      "",
+      "## Hint",
+      "- Nested loops take `O(n^2)`. Think about how a hash map can achieve `O(n)` in a single pass without pairing an index with itself."
+    ].join("\n"),
+    sampleExplanations: [
+      "nums[0] + nums[1] == 9, so return [0, 1].",
+      "nums[0] == 3 cannot pair with itself for 6; correct indices are [1, 2].",
+      "Duplicate values at distinct indices return [0, 1]."
+    ]
+  },
+  "warmup:binary-search-first": {
+    title: "Binary Search: First Occurrence in Sorted Array",
+    statementMarkdown: [
+      "# First Occurrence in Sorted Array",
+      "",
+      "## Problem Statement",
+      "Given a **non-decreasing** integer array `a[0..n-1]` (which may contain duplicates) and `q` queries, for each query `target`, output the **0-based index of its first occurrence** in `a`, or `-1` if `target` is absent.",
+      "",
+      "This warmup highlights classic binary-search boundary pitfalls (duplicate shrinking direction, loop termination, overflow-safe `mid`, and missing elements) paired with local WA diffs and L1-L5 Socratic dry-runs.",
+      "",
+      "## Input Format",
+      "- The first line contains two integers `n` and `q` (`1 <= n, q <= 2 * 10^5`).",
+      "- The second line contains `n` non-decreasing integers `a_0, a_1, ..., a_{n-1}` (`-10^9 <= a_i <= 10^9`).",
+      "- The third line contains `q` query integers `target_1, ..., target_q` (`-10^9 <= target_j <= 10^9`).",
+      "",
+      "## Output Format",
+      "- Print one line containing `q` space-separated answers.",
+      "",
+      "## Complexity Target",
+      "- `O(log n)` per query, `O((n + q) log n)` total."
+    ].join("\n"),
+    sampleExplanations: [
+      "Duplicate 2 starts at index 1, 8 at 5, missing 3 yields -1, leading 1 is at 0.",
+      "Single-element edge case: below, equal, and above target.",
+      "All-equal array must converge cleanly to index 0, not middle index 2.",
+      "Extreme negative/positive 32-bit boundary coordinates."
+    ]
+  }
+};
+
+type WarmupStarterLang = "python" | "cpp" | "c" | "rust" | "java";
+
+const STDIO_STARTER_CODE: Record<WarmupProblemKey, Record<WarmupStarterLang, string>> = {
   "warmup:stdio-sum": {
     python: [
       "import sys",
@@ -289,11 +416,56 @@ const STDIO_STARTER_CODE: Record<WarmupProblemKey, Record<"python" | "cpp", stri
       "    return 0;",
       "}",
       ""
+    ].join("\n"),
+    c: [
+      "#include <stdio.h>",
+      "",
+      "int main(void) {",
+      "    int t;",
+      '    if (scanf("%d", &t) != 1) return 0;',
+      "    // TODO: read T pairs (long long a, b) and print a + b",
+      "    return 0;",
+      "}",
+      ""
+    ].join("\n"),
+    rust: [
+      "use std::io::{self, Read};",
+      "",
+      "fn main() {",
+      "    let mut input = String::new();",
+      "    let _ = io::stdin().read_to_string(&mut input);",
+      "    let mut it = input.split_whitespace();",
+      "    let t: usize = match it.next() {",
+      "        Some(v) => v.parse().unwrap_or(0),",
+      "        None => return,",
+      "    };",
+      "    // TODO: read t pairs (i64 a, b) and print a + b",
+      "    let _ = t;",
+      "}",
+      ""
+    ].join("\n"),
+    java: [
+      "import java.io.*;",
+      "import java.util.*;",
+      "",
+      "public class Main {",
+      "    public static void main(String[] args) throws Exception {",
+      "        Scanner sc = new Scanner(System.in);",
+      "        if (!sc.hasNextInt()) return;",
+      "        int t = sc.nextInt();",
+      "        // TODO: read t pairs (long a, b) and print a + b",
+      "        sc.close();",
+      "    }",
+      "}",
+      ""
     ].join("\n")
   },
   "warmup:two-sum": {
     python: TWO_SUM_PYTHON_SNIPPET + "\n",
-    cpp: TWO_SUM_CPP_SNIPPET + "\n"
+    cpp: TWO_SUM_CPP_SNIPPET + "\n",
+    c: TWO_SUM_C_SNIPPET + "\n",
+    rust: TWO_SUM_RUST_SNIPPET + "\n",
+    java: TWO_SUM_JAVA_SNIPPET + "\n"
   },
   "warmup:binary-search-first": {
     python: [
@@ -343,17 +515,127 @@ const STDIO_STARTER_CODE: Record<WarmupProblemKey, Record<"python" | "cpp", stri
       "    return 0;",
       "}",
       ""
+    ].join("\n"),
+    c: [
+      "#include <stdio.h>",
+      "#include <stdlib.h>",
+      "",
+      "int firstOccurrence(const long long* a, int n, long long target) {",
+      "    // TODO: implement O(log n) binary search for first occurrence",
+      "    return -1;",
+      "}",
+      "",
+      "int main(void) {",
+      "    int n, q;",
+      '    if (scanf("%d %d", &n, &q) != 2) return 0;',
+      "    long long* a = (long long*)malloc((size_t)n * sizeof(long long));",
+      '    for (int i = 0; i < n; ++i) scanf("%lld", &a[i]);',
+      "    for (int i = 0; i < q; ++i) {",
+      "        long long target;",
+      '        scanf("%lld", &target);',
+      '        printf("%s%d", i > 0 ? " " : "", firstOccurrence(a, n, target));',
+      "    }",
+      '    printf("\\n");',
+      "    free(a);",
+      "    return 0;",
+      "}",
+      ""
+    ].join("\n"),
+    rust: [
+      "use std::io::{self, Read};",
+      "",
+      "fn first_occurrence(a: &[i64], target: i64) -> isize {",
+      "    // TODO: implement O(log n) binary search for first occurrence",
+      "    let _ = (a, target);",
+      "    -1",
+      "}",
+      "",
+      "fn main() {",
+      "    let mut input = String::new();",
+      "    let _ = io::stdin().read_to_string(&mut input);",
+      "    let mut it = input.split_whitespace();",
+      "    let n: usize = match it.next().and_then(|s| s.parse().ok()) {",
+      "        Some(v) => v,",
+      "        None => return,",
+      "    };",
+      "    let q: usize = it.next().and_then(|s| s.parse().ok()).unwrap_or(0);",
+      "    let a: Vec<i64> = (0..n).filter_map(|_| it.next()?.parse().ok()).collect();",
+      "    let mut out = Vec::with_capacity(q);",
+      "    for _ in 0..q {",
+      "        if let Some(t) = it.next().and_then(|s| s.parse::<i64>().ok()) {",
+      "            out.push(first_occurrence(&a, t).to_string());",
+      "        }",
+      "    }",
+      '    println!("{}", out.join(" "));',
+      "}",
+      ""
+    ].join("\n"),
+    java: [
+      "import java.io.*;",
+      "import java.util.*;",
+      "",
+      "public class Main {",
+      "    static int firstOccurrence(long[] a, long target) {",
+      "        // TODO: implement O(log n) binary search for first occurrence",
+      "        return -1;",
+      "    }",
+      "",
+      "    public static void main(String[] args) throws Exception {",
+      "        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));",
+      "        String first = br.readLine();",
+      "        if (first == null || first.trim().isEmpty()) return;",
+      '        StringTokenizer st = new StringTokenizer(first);',
+      "        int n = Integer.parseInt(st.nextToken());",
+      "        int q = Integer.parseInt(st.nextToken());",
+      "        long[] a = new long[n];",
+      "        for (int i = 0; i < n; i++) {",
+      "            while (!st.hasMoreTokens()) st = new StringTokenizer(br.readLine());",
+      "            a[i] = Long.parseLong(st.nextToken());",
+      "        }",
+      "        StringBuilder sb = new StringBuilder();",
+      "        for (int i = 0; i < q; i++) {",
+      "            while (!st.hasMoreTokens()) st = new StringTokenizer(br.readLine());",
+      "            long target = Long.parseLong(st.nextToken());",
+      "            if (i > 0) sb.append(' ');",
+      "            sb.append(firstOccurrence(a, target));",
+      "        }",
+      "        System.out.println(sb);",
+      "    }",
+      "}",
+      ""
     ].join("\n")
   }
 };
 
-export function getWarmupProblems(): ProblemDocument[] {
-  return WARMUP_PROBLEMS.map((doc) => structuredClone(doc));
+function localizeWarmupDoc(
+  doc: ProblemDocument,
+  uiLanguage: "zh-CN" | "en-US" = "zh-CN"
+): ProblemDocument {
+  const cloned = structuredClone(doc);
+  if (uiLanguage !== "en-US" || !isWarmupProblemKey(cloned.problemKey)) {
+    return cloned;
+  }
+  const en = WARMUP_EN_OVERRIDES[cloned.problemKey];
+  cloned.locale = "en-US";
+  cloned.title = en.title;
+  cloned.statementMarkdown = en.statementMarkdown;
+  cloned.samples = cloned.samples.map((sample, index) => ({
+    ...sample,
+    ...(en.sampleExplanations[index] ? { explanation: en.sampleExplanations[index] } : {})
+  }));
+  return cloned;
 }
 
-export function getWarmupProblemByKey(problemKey: string): ProblemDocument | undefined {
+export function getWarmupProblems(uiLanguage: "zh-CN" | "en-US" = "zh-CN"): ProblemDocument[] {
+  return WARMUP_PROBLEMS.map((doc) => localizeWarmupDoc(doc, uiLanguage));
+}
+
+export function getWarmupProblemByKey(
+  problemKey: string,
+  uiLanguage: "zh-CN" | "en-US" = "zh-CN"
+): ProblemDocument | undefined {
   const found = WARMUP_BY_KEY.get(problemKey);
-  return found ? structuredClone(found) : undefined;
+  return found ? localizeWarmupDoc(found, uiLanguage) : undefined;
 }
 
 export function isWarmupProblemKey(problemKey: string): problemKey is WarmupProblemKey {
@@ -362,10 +644,11 @@ export function isWarmupProblemKey(problemKey: string): problemKey is WarmupProb
 
 export function getWarmupStarterCode(
   problemKey: string,
-  language: "python" | "cpp"
+  language: SupportedLanguage
 ): string | undefined {
   if (!isWarmupProblemKey(problemKey)) {
     return undefined;
   }
-  return STDIO_STARTER_CODE[problemKey][language];
+  const table = STDIO_STARTER_CODE[problemKey] as Partial<Record<SupportedLanguage, string>>;
+  return table[language];
 }

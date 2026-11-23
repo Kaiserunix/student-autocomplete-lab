@@ -79,4 +79,25 @@ describe("warmupProblems (3 built-in offline sandbox problems)", () => {
     expect(isWarmupProblemKey("luogu:P1001")).toBe(false);
     expect(getWarmupStarterCode("luogu:P1001", "python")).toBeUndefined();
   });
+
+  it("supports en-US statement localization and c/rust/java starters with zero Unicode Emoji", () => {
+    const enProblems = getWarmupProblems("en-US");
+    expect(enProblems).toHaveLength(3);
+    for (const doc of enProblems) {
+      expect(doc.locale).toBe("en-US");
+      expect(EMOJI_RE.test(doc.title)).toBe(false);
+      expect(EMOJI_RE.test(doc.statementMarkdown ?? "")).toBe(false);
+      expect(doc.statementMarkdown).toContain("## Problem Statement");
+    }
+    const enSum = getWarmupProblemByKey("warmup:stdio-sum", "en-US");
+    expect(enSum?.title).toContain("Multi-Case A+B");
+
+    for (const key of WARMUP_PROBLEM_KEYS) {
+      for (const lang of ["c", "rust", "java"] as const) {
+        const starter = getWarmupStarterCode(key, lang);
+        expect(starter, `missing ${lang} starter for ${key}`).toBeTruthy();
+        expect(EMOJI_RE.test(starter!)).toBe(false);
+      }
+    }
+  });
 });

@@ -136,6 +136,17 @@ describe("30-second Pattern Mapper engine", () => {
     expect(inferScaleComplexityBudget("1 <= n <= 3000, count ways mod 10^9 + 7").targetComplexity).toBe("O(n^2)");
     expect(inferScaleComplexityBudget("n <= 2 * 10^5, sorted array").targetComplexity).toBe("O(n log n) or O(n)");
     expect(inferScaleComplexityBudget("1 <= X <= 10^12").targetComplexity).toContain("O(log n)");
+    // Element value ranges (-10^9 <= nums[i] <= 10^9, -10^12 <= a, b <= 10^12) must not overshadow n/T
+    expect(
+      inferScaleComplexityBudget("2 <= nums.length <= 10^4\n-10^9 <= nums[i] <= 10^9\n-10^9 <= target <= 10^9")
+        .targetComplexity
+    ).toBe("O(n log n) or O(n)");
+    expect(
+      inferScaleComplexityBudget("1 <= T <= 10^5\n-10^12 <= a, b <= 10^12").targetComplexity
+    ).toBe("O(n log n) or O(n)");
+    expect(
+      inferScaleComplexityBudget("1 <= n, q <= 2 * 10^5\n-10^9 <= a_i <= 10^9").targetComplexity
+    ).toBe("O(n log n) or O(n)");
   });
 
   it("identifies candidate patterns, builds decision tree, and surfaces confusable disambiguation pairs", () => {
@@ -298,5 +309,16 @@ describe("WA / RE / TLE / CE Dry-Run Builder", () => {
     });
     expect(ceDry.verdict).toBe("CE");
     expect(ceDry.divergenceSummaryEn).toContain("was not declared");
+
+    const skippedDry = buildDryRunPrompt({
+      runResult: baseRun({
+        compileOk: false,
+        skippedReason: "missing_toolchain",
+        compileStderr: "No g++ installed"
+      }),
+      studentCode: "int main() {}"
+    });
+    expect(skippedDry.hasFailureEvidence).toBe(false);
+    expect(skippedDry.verdict).toBeUndefined();
   });
 });

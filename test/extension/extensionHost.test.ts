@@ -55,7 +55,7 @@ describe("Extension Host activation, commands & SecretKeyStore", () => {
 
     expect(registeredCommands).toEqual(declaredCommands);
     expect([...EXTENSION_COMMANDS].sort()).toEqual(declaredCommands);
-    expect(registeredCommands).toHaveLength(19);
+    expect(registeredCommands).toHaveLength(20);
 
     // Sidebar provider must be registered with retainContextWhenHidden: true
     const sidebarReg = mockState.harness!.webviewProviders.get("algoCoach.sidebar");
@@ -183,6 +183,22 @@ describe("Extension Host activation, commands & SecretKeyStore", () => {
     for (const file of files) {
       const content = await readFile(join(extDir, file), "utf8");
       expect(emojiRe.test(content), `Found Unicode Emoji in src/extension/${file}`).toBe(false);
+    }
+  });
+
+  it("dismisses shortcut whisper safely via algoCoach.internal.dismissShortcutWhisper", async () => {
+    mockState.harness!.globalConfig.set("algoCoach.oj.bridgePort", 0);
+    const context = createMockExtensionContext(tempDir, resolve("."));
+    await activate(context as unknown as import("vscode").ExtensionContext);
+
+    const dismissHandler = mockState.harness!.registeredCommands.get(
+      "algoCoach.internal.dismissShortcutWhisper"
+    );
+    expect(dismissHandler).toBeDefined();
+    await dismissHandler!("run-samples");
+
+    for (const sub of context.subscriptions) {
+      sub.dispose();
     }
   });
 });

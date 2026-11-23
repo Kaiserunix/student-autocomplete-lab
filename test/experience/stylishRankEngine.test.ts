@@ -856,4 +856,34 @@ describe("StylishRankEngine (Neon #16 DMC Stylish Rank Contract)", () => {
     expect(postRunPaste.penaltyTriggered).toBe("paste_cap");
     expect(postRunPaste.state.pasteCeiling).toBe("C");
   });
+
+  it("exempts single-line placeholder accepts from fast Blind Tab penalty and skips skippedReason runs", () => {
+    const engine = new StylishRankEngine({
+      problemKey: "p-exempt-skip",
+      originalSamples: BASE_ORIGINAL_SAMPLES,
+      now: () => 0
+    });
+
+    const placeholderAccept = engine.recordGhostTextAccept({
+      text: "if (/* 条件 */) return ans;",
+      shownAtMs: 1_000,
+      acceptedAtMs: 1_200,
+      mode: "full"
+    });
+    expect(placeholderAccept.penaltyTriggered).toBeUndefined();
+    expect(placeholderAccept.state.blindTabCount).toBe(0);
+
+    const skippedRes = engine.recordLocalRun(
+      makeRunResult({
+        compileOk: false,
+        allPassed: false,
+        skippedReason: "missing_toolchain",
+        cases: []
+      }),
+      { nowMs: 2_000 }
+    );
+    expect(skippedRes.state.failedRuns).toBe(0);
+    expect(skippedRes.state.score).toBe(0);
+    expect(skippedRes.penaltyTriggered).toBeUndefined();
+  });
 });

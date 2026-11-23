@@ -189,4 +189,80 @@ class Solution:
     expect(cpp.driverSource).toContain("as_treenode");
     expect(cpp.driverSource).toContain("sol.invertTree(arg_0)");
   });
+
+  it("strips __main__, hoists from __future__, and parses var=val inputs in Python", async () => {
+    const h = generateLeetCodeHarness({
+      meta: {
+        entryName: "twoSum",
+        params: [
+          { name: "nums", type: "integer[]" },
+          { name: "target", type: "integer" }
+        ],
+        returnType: "integer[]",
+        codeSnippets: {}
+      },
+      language: "python",
+      studentSource: [
+        "from __future__ import annotations",
+        "class Solution:",
+        "    def twoSum(self, nums: List[int], target: int) -> List[int]:",
+        "        seen: dict[int, int] = {}",
+        "        for i, v in enumerate(nums):",
+        "            if target - v in seen:",
+        "                return [seen[target - v], i]",
+        "            seen[v] = i",
+        "        return []",
+        "",
+        'if __name__ == "__main__":',
+        "    raise RuntimeError('student main must be stripped')"
+      ].join("\n")
+    });
+
+    expect(h.supported).toBe(true);
+    expect(h.driverSource!.indexOf("from __future__ import annotations")).toBeLessThan(
+      h.driverSource!.indexOf("import json")
+    );
+    expect(h.driverSource).not.toContain("student main must be stripped");
+
+    expect(await runPythonDriver(h.driverSource!, "nums = [2, 7, 11, 15]\ntarget = 9\n")).toBe(
+      "[0,1]"
+    );
+    expect(await runPythonDriver(h.driverSource!, "nums = [3, 2, 4], target = 6\n")).toBe(
+      "[1,2]"
+    );
+  });
+
+  it("hardens C++ harness against student main(), #define int long long, \\uXXXX, and var=val inputs", () => {
+    const cpp = generateLeetCodeHarness({
+      meta: {
+        entryName: "twoSum",
+        params: [
+          { name: "nums", type: "integer[]" },
+          { name: "target", type: "integer" }
+        ],
+        returnType: "integer[]",
+        codeSnippets: {}
+      },
+      language: "cpp",
+      studentSource: [
+        "#include <vector>",
+        "#define int long long",
+        "using namespace std;",
+        "class Solution {",
+        "public:",
+        "    vector<int> twoSum(vector<int>& nums, int target) { return {0, 1}; }",
+        "};",
+        "int main() {",
+        "    return 99;",
+        "}"
+      ].join("\n")
+    });
+    expect(cpp.supported).toBe(true);
+    expect(cpp.driverSource).not.toContain("return 99;");
+    expect(cpp.driverSource).toContain("#ifdef int");
+    expect(cpp.driverSource).toContain("#define AC_STUDENT_INT_REDEFINED 1");
+    expect(cpp.driverSource).toContain("parseHex4");
+    expect(cpp.driverSource).toContain("appendUtf8");
+    expect(cpp.driverSource).toContain("parse_var_assignments");
+  });
 });

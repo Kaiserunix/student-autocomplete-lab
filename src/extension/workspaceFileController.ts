@@ -45,6 +45,7 @@ export interface WorkspaceFileControllerOptions {
 interface PersistedFileBindings {
   uriToProblemKey: Record<string, string>;
   problemKeyToFilePath: Record<string, string>;
+  problemLangToFilePath?: Record<string, string>;
 }
 
 export function sanitizeProblemKeyForFile(problemKey: string): string {
@@ -87,6 +88,7 @@ export class WorkspaceFileController implements vscode.Disposable {
 
   private readonly uriToProblemKey = new Map<string, string>();
   private readonly problemKeyToFilePath = new Map<string, string>();
+  private readonly problemLangToFilePath = new Map<string, string>();
   private customSamplesByProblem: Record<string, ProblemSample[]> = {};
   private lastCodeEditor: vscode.TextEditor | undefined;
   private lastPreferredLanguage: SupportedLanguage;
@@ -104,12 +106,12 @@ export class WorkspaceFileController implements vscode.Disposable {
 
     const activeEditor = vscode.window.activeTextEditor;
     if (activeEditor && isTrackableCodeDocument(activeEditor.document)) {
-      this.lastCodeEditor = activeEditor;
       const detectedLang = mapVscodeLanguageId(
         activeEditor.document.languageId,
         activeEditor.document.uri.fsPath
       );
       if (detectedLang !== "generic") {
+        this.lastCodeEditor = activeEditor;
         this.lastPreferredLanguage = detectedLang;
       }
     }
@@ -150,12 +152,21 @@ export class WorkspaceFileController implements vscode.Disposable {
     return this.lastPreferredLanguage;
   }
 
-  bindDocumentToProblem(uri: vscode.Uri, problemKey: string): void {
+  bindDocumentToProblem(
+    uri: vscode.Uri,
+    problemKey: string,
+    language?: SupportedLanguage
+  ): void {
     const uriKey = normalizeUriKey(uri.toString());
     const pathKey = normalizeUriKey(uri.fsPath);
     this.uriToProblemKey.set(uriKey, problemKey);
     this.uriToProblemKey.set(pathKey, problemKey);
     this.problemKeyToFilePath.set(problemKey, uri.fsPath);
+    const resolvedLang =
+      language && language !== "generic" ? language : mapVscodeLanguageId("", uri.fsPath);
+    if (resolvedLang !== "generic") {
+      this.problemLangToFilePath.set(`${problemKey}::${resolvedLang}`, uri.fsPath);
+    }
     this.persistBindings();
   }
 
@@ -181,7 +192,10 @@ export class WorkspaceFileController implements vscode.Disposable {
     return undefined;
   }
 
-  getFilePathForProblem(problemKey: string): string | undefined {
+  getFilePathForProblem(problemKey: string, language?: SupportedLanguage): string | undefined {
+    if (language && language !== "generic") {
+      return this.problemLangToFilePath.get(`${problemKey}::${language}`);
+    }
     return this.problemKeyToFilePath.get(problemKey);
   }
 
@@ -193,21 +207,37 @@ export class WorkspaceFileController implements vscode.Disposable {
     problem: ProblemDocument,
     requestedLanguage?: SupportedLanguage
   ): Promise<{ filePath: string; language: SupportedLanguage; created: boolean }> {
-    const language =
-      requestedLanguage && requestedLanguage !== "generic"
-        ? requestedLanguage
-        : this.getPreferredLanguage();
-    this.lastPreferredLanguage = language;
-
+    const explicitLang =
+      requestedLanguage && requestedLanguage !== "generic" ? requestedLanguage : undefined;
     const existingMapped = this.problemKeyToFilePath.get(problem.problemKey);
-    const ext = EXT_BY_LANGUAGE[language];
-    const safeKey = sanitizeProblemKeyForFile(problem.problemKey);
-    const defaultPath = join(this.getPracticeBaseDir(), `${safeKey}.${ext}`);
+    let language: SupportedLanguage;
+    let targetPath: string;
 
-    const targetPath =
-      !requestedLanguage && existingMapped && (await fileExists(existingMapped))
-        ? existingMapped
-        : defaultPath;
+    if (!explicitLang && !this.getActiveCodeEditor() && existingMapped && (await fileExists(existingMapped))) {
+      const existingLang = mapVscodeLanguageId("", existingMapped);
+      language = existingLang !== "generic" ? existingLang : this.getPreferredLanguage();
+      targetPath = existingMapped;
+    } else {
+      language = explicitLang ?? this.getPreferredLanguage();
+      const langMapped = this.problemLangToFilePath.get(`${problem.problemKey}::${language}`);
+      const ext = EXT_BY_LANGUAGE[language];
+      const safeKey = sanitizeProblemKeyForFile(problem.problemKey);
+      const defaultPath = join(this.getPracticeBaseDir(), `${safeKey}.${ext}`);
+
+      if (langMapped && (await fileExists(langMapped))) {
+        targetPath = langMapped;
+      } else if (
+        existingMapped &&
+        mapVscodeLanguageId("", existingMapped) === language &&
+        (await fileExists(existingMapped))
+      ) {
+        targetPath = existingMapped;
+      } else {
+        targetPath = defaultPath;
+      }
+    }
+
+    this.lastPreferredLanguage = language;
 
     let created = false;
     if (!(await fileExists(targetPath))) {
@@ -218,7 +248,7 @@ export class WorkspaceFileController implements vscode.Disposable {
     }
 
     const fileUri = vscode.Uri.file(targetPath);
-    this.bindDocumentToProblem(fileUri, problem.problemKey);
+    this.bindDocumentToProblem(fileUri, problem.problemKey, language);
 
     const doc = await vscode.workspace.openTextDocument(fileUri);
     const editor = await vscode.window.showTextDocument(doc, {
@@ -241,7 +271,12 @@ export class WorkspaceFileController implements vscode.Disposable {
 
   getActiveCodeEditor(): vscode.TextEditor | undefined {
     const current = vscode.window.activeTextEditor;
-    if (current && !current.document.isClosed && isTrackableCodeDocument(current.document)) {
+    if (
+      current &&
+      !current.document.isClosed &&
+      isTrackableCodeDocument(current.document) &&
+      mapVscodeLanguageId(current.document.languageId, current.document.uri.fsPath) !== "generic"
+    ) {
       this.lastCodeEditor = current;
       return current;
     }
@@ -367,7 +402,7 @@ export class WorkspaceFileController implements vscode.Disposable {
   }
 
   private buildStarterContent(problem: ProblemDocument, language: SupportedLanguage): string {
-    if (isWarmupProblemKey(problem.problemKey) && (language === "python" || language === "cpp")) {
+    if (isWarmupProblemKey(problem.problemKey) && language !== "generic") {
       const warmupCode = getWarmupStarterCode(problem.problemKey, language);
       if (warmupCode) {
         return warmupCode;
@@ -380,11 +415,12 @@ export class WorkspaceFileController implements vscode.Disposable {
     if (!editor || !isTrackableCodeDocument(editor.document)) {
       return;
     }
-    this.lastCodeEditor = editor;
     const language = mapVscodeLanguageId(editor.document.languageId, editor.document.uri.fsPath);
-    if (language !== "generic") {
-      this.lastPreferredLanguage = language;
+    if (language === "generic") {
+      return;
     }
+    this.lastCodeEditor = editor;
+    this.lastPreferredLanguage = language;
     const problemKey = this.getProblemKeyForDocument(editor.document);
     this.onActiveContextChanged?.({
       problemKey,
@@ -410,6 +446,17 @@ export class WorkspaceFileController implements vscode.Disposable {
       for (const [k, v] of Object.entries(raw.problemKeyToFilePath)) {
         if (typeof v === "string" && v.trim()) {
           this.problemKeyToFilePath.set(k, v);
+          const inferredLang = mapVscodeLanguageId("", v);
+          if (inferredLang !== "generic") {
+            this.problemLangToFilePath.set(`${k}::${inferredLang}`, v);
+          }
+        }
+      }
+    }
+    if (raw.problemLangToFilePath && typeof raw.problemLangToFilePath === "object") {
+      for (const [k, v] of Object.entries(raw.problemLangToFilePath)) {
+        if (typeof v === "string" && v.trim()) {
+          this.problemLangToFilePath.set(k, v);
         }
       }
     }
@@ -418,14 +465,15 @@ export class WorkspaceFileController implements vscode.Disposable {
   private persistBindings(): void {
     const payload: PersistedFileBindings = {
       uriToProblemKey: Object.fromEntries(this.uriToProblemKey.entries()),
-      problemKeyToFilePath: Object.fromEntries(this.problemKeyToFilePath.entries())
+      problemKeyToFilePath: Object.fromEntries(this.problemKeyToFilePath.entries()),
+      problemLangToFilePath: Object.fromEntries(this.problemLangToFilePath.entries())
     };
     void this.memento.update(FILE_BINDINGS_MEMENTO_KEY, payload);
   }
 
   private async saveCustomSamples(): Promise<void> {
     await mkdir(dirname(this.customSamplesPath), { recursive: true });
-    const tmpPath = `${this.customSamplesPath}.${process.pid}.${Date.now()}.tmp`;
+    const tmpPath = `${this.customSamplesPath}.${process.pid}.${Date.now()}.${randomBytes(4).toString("hex")}.tmp`;
     await writeFile(tmpPath, `${JSON.stringify(this.customSamplesByProblem, null, 2)}\n`, "utf8");
     await rename(tmpPath, this.customSamplesPath);
   }

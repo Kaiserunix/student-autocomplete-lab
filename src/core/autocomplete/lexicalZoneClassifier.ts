@@ -102,7 +102,13 @@ function detectFunctionDeclName(
   const trimmed = code.trim();
   if (!trimmed) return undefined;
   if (language === "python") {
-    return trimmed.match(/^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/)?.[1];
+    const pyFn = trimmed.match(/^(?:async\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/);
+    if (!pyFn) return undefined;
+    const name = pyFn[1];
+    if (name === "solve" && (pyFn[2]?.trim() ?? "") === "") {
+      return "main";
+    }
+    return name;
   }
   if (language === "rust") {
     return trimmed.match(
@@ -167,7 +173,9 @@ function scanPrefix(prefix: string, language: SupportedLanguage): ScanSnapshot {
     const indent = rawLine.length - rawLine.trimStart().length;
     const trimmedCode = lineCode.trim();
     const isBlank = rawLine.trim().length === 0;
+    const isStarterTodo = /^\s*(?:#|\/\/|\/\*)\s*TODO(?:\s*:|\s|$)/i.test(rawLine);
     const isNaturalComment =
+      !isStarterTodo &&
       trimmedCode.length === 0 &&
       (isNaturalCommentText(rawLine, language) ||
         (hadComment && !NON_NATURAL_RE.test(rawLine)));
@@ -416,7 +424,12 @@ export function classifyLexicalZone(input: LexicalZoneInput): LexicalZoneResult 
     return makeResult("algo_core", "control-flow-condition");
   }
 
-  if (trimmedStmt.length > 0 && STATE_ASSIGN_RE.test(stmt)) {
+  if (
+    trimmedStmt.length > 0 &&
+    !CONTAINER_DECL_RE.test(stmt) &&
+    !MEMBER_ACCESS_RE.test(stmt) &&
+    STATE_ASSIGN_RE.test(stmt)
+  ) {
     return makeResult("algo_core", "state-variable-assignment");
   }
 
