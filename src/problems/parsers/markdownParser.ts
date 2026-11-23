@@ -554,6 +554,56 @@ export function parseMarkdownProblem(
   };
 }
 
+export function mergeRichSamples(
+  primary: ProblemSample[],
+  secondary: ProblemSample[]
+): ProblemSample[] {
+  if (secondary.length === 0) {
+    return primary;
+  }
+  if (primary.length === 0) {
+    return secondary;
+  }
+
+  const byInput = new Map<string, string>();
+  for (const sample of secondary) {
+    if (sample.expectedOutput !== undefined) {
+      const key = sample.input.replace(/\r\n/g, "\n").trim();
+      if (!byInput.has(key)) {
+        byInput.set(key, sample.expectedOutput);
+      }
+    }
+  }
+
+  const enriched = primary.map((sample, idx) => {
+    if (sample.expectedOutput !== undefined) {
+      return sample;
+    }
+    const key = sample.input.replace(/\r\n/g, "\n").trim();
+    const matched = byInput.get(key);
+    if (matched !== undefined) {
+      return { ...sample, expectedOutput: matched };
+    }
+    if (primary.length === secondary.length && secondary[idx]?.expectedOutput !== undefined) {
+      return { ...sample, expectedOutput: secondary[idx]!.expectedOutput };
+    }
+    return sample;
+  });
+
+  const countOutputs = (list: ProblemSample[]): number =>
+    list.filter((s) => s.expectedOutput !== undefined && s.expectedOutput.length > 0).length;
+
+  const enrichedCount = countOutputs(enriched);
+  const secondaryCount = countOutputs(secondary);
+  if (secondaryCount > enrichedCount) {
+    return secondary;
+  }
+  if (secondaryCount === enrichedCount && secondaryCount > 0 && secondary.length > enriched.length) {
+    return secondary;
+  }
+  return enriched;
+}
+
 /**
  * Merges a clipboard/Markdown statement into an existing problem document
  * (typically an L2 Competitive Companion `samples_only` document or CF `metadata_only` document),
@@ -579,9 +629,7 @@ export function mergeProblemDocuments(
   const suppStmt = supplement.statementMarkdown?.trim() ?? "";
   const statementMarkdown = suppStmt.length > baseStmt.length ? suppStmt : baseStmt || undefined;
 
-  // Prefer base samples when already present (e.g. accurate Competitive Companion samples),
-  // otherwise adopt supplement samples.
-  const samples = base.samples.length > 0 ? base.samples : supplement.samples;
+  const samples = mergeRichSamples(base.samples, supplement.samples);
 
   const mergedTags = [...new Set([...base.rawTags, ...supplement.rawTags])];
   const mergedConstraints =
@@ -602,6 +650,8 @@ export function mergeProblemDocuments(
         ? "samples_only"
         : "metadata_only";
 
+  const functionMeta = base.functionMeta ?? supplement.functionMeta;
+
   return {
     ...base,
     title,
@@ -609,6 +659,7 @@ export function mergeProblemDocuments(
     completeness,
     ...(statementMarkdown ? { statementMarkdown } : {}),
     samples,
+    ...(functionMeta ? { functionMeta } : {}),
     ...(mergedConstraints ? { constraints: mergedConstraints } : {}),
     difficulty: base.difficulty ?? supplement.difficulty,
     rawTags: mergedTags,

@@ -315,6 +315,106 @@ describe("ProblemRepository & templateGenerator", () => {
       expect(tpl.mode).toBe("stdio");
       expect(tpl.content).not.toContain("SECRET_STATEMENT_DO_NOT_LEAK_INTO_CODE");
     }
-    expect(generateStarterTemplate(stdioDoc, "java").filename).toBe("Main.java");
+    const javaStdioTpl = generateStarterTemplate(stdioDoc, "java");
+    expect(javaStdioTpl.filename).toBe("Main.java");
+    expect(javaStdioTpl.content).toContain("class Main {");
+    expect(javaStdioTpl.content).not.toContain("public class Main");
+  });
+
+  it("handles messy NFKC/full-width/spaced Omnibar inputs, preserves CN slug case in cache, and keeps richer Companion samples", async () => {
+    const repo = new ProblemRepository();
+
+    // Spaced & full-width messy inputs across all 6 OJs
+    expect(repo.resolveInput("CF 1900 A")).toMatchObject({
+      adapter: expect.objectContaining({ id: "codeforces" }),
+      sourceId: "1900A"
+    });
+    expect(repo.resolveInput("ＣＦ１９００Ａ")).toMatchObject({
+      adapter: expect.objectContaining({ id: "codeforces" }),
+      sourceId: "1900A"
+    });
+    expect(repo.resolveInput("https://codeforces.com/problemset/problem/1900/A/en")?.sourceId).toBe("1900A");
+    expect(repo.resolveInput("https://mirror.codeforces.com/contest/1900/problem/A")?.sourceId).toBe("1900A");
+
+    expect(repo.resolveInput("ABC350 A")?.sourceId).toBe("abc350/abc350_a");
+    expect(repo.resolveInput("abc 350 a")?.sourceId).toBe("abc350/abc350_a");
+
+    expect(repo.resolveInput("LC  1")?.sourceId).toBe("#1");
+    expect(repo.resolveInput("LC #1")?.sourceId).toBe("#1");
+    expect(repo.resolveInput("力扣 #1")?.sourceId).toBe("#1");
+    expect(repo.resolveInput("＃１")?.sourceId).toBe("#1");
+    expect(repo.resolveInput("ＬＣ　１")?.sourceId).toBe("#1");
+    expect(repo.resolveInput("ｌｃ：ｔｗｏ－ｓｕｍ")?.sourceId).toBe("two-sum");
+    expect(repo.resolveInput("面试题 01.01")?.sourceId).toBe("#面试题 01.01");
+    expect(repo.resolveInput("剑指 Offer 03")?.sourceId).toBe("#剑指 Offer 03");
+    expect(
+      repo.resolveInput("https://leetcode.cn/contest/weekly-contest-400/problems/two-sum/")?.sourceId
+    ).toBe("two-sum");
+
+    expect(repo.resolveInput("P 1001")?.sourceId).toBe("P1001");
+    expect(repo.resolveInput("Ｐ１００１")?.sourceId).toBe("P1001");
+    expect(repo.resolveInput("NC 14362")?.sourceId).toBe("acm-14362");
+    expect(repo.resolveInput("https://www.luogu.com.cn/problem/list")).toBeNull();
+
+    // Mixed-case CN slug cache hit + preserving Companion expectedOutput on re-import
+    const mockFetch = vi.fn<typeof fetch>().mockImplementation(async (_url, init) => {
+      const body = JSON.parse(String(init?.body ?? "{}")) as { variables?: { titleSlug?: string } };
+      const slug = body.variables?.titleSlug ?? "";
+      if (slug === "1fGaJU") {
+        return new Response(
+          JSON.stringify({
+            data: {
+              question: {
+                title: "3Sum",
+                translatedTitle: "三数之和",
+                titleSlug: "1fGaJU",
+                translatedContent: "<p>找出所有和为 0 的三元组。</p><p><strong>输出：</strong>[[-1,0,1]]</p>",
+                isPaidOnly: false,
+                difficulty: "Medium",
+                exampleTestcaseList: ["[-1,0,1,2,-1,-4]"]
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          data: {
+            question: {
+              title: "LRU Cache",
+              translatedTitle: "LRU 缓存",
+              titleSlug: "lru-cache",
+              translatedContent: "<p>请你设计并实现一个满足 LRU 缓存约束的数据结构。</p>",
+              isPaidOnly: false,
+              difficulty: "Medium",
+              exampleTestcaseList: ['["LRUCache","get"]\n[[2],[1]]']
+            }
+          }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    });
+
+    const repo2 = new ProblemRepository({ fetchImpl: mockFetch });
+    const first = await repo2.importProblem("https://leetcode.cn/problems/1fGaJU/");
+    const second = await repo2.importProblem("https://leetcode.cn/problems/1fGaJU/");
+    expect(first.problemKey).toBe("lc-cn:1fGaJU");
+    expect(second.problemKey).toBe("lc-cn:1fGaJU");
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+
+    // Seed Companion sample with expectedOutput, then re-import full statement lacking output
+    await repo2.ingestFromBridge(
+      normalizeCompetitiveCompanionPayload({
+        name: "LRU Cache",
+        url: "https://leetcode.cn/problems/lru-cache/",
+        tests: [{ input: '["LRUCache","get"]\n[[2],[1]]', output: "[null,-1]" }]
+      })
+    );
+    const reimported = await repo2.importProblem("https://leetcode.cn/problems/lru-cache/", {
+      forceRefresh: true
+    });
+    expect(reimported.completeness).toBe("full");
+    expect(reimported.samples[0]?.expectedOutput).toBe("[null,-1]");
   });
 });

@@ -6,7 +6,7 @@ import {
   type ProblemSearchQuery,
   type ProblemSourceAdapter
 } from "../../core/contracts";
-import { decodeHtmlEntities, htmlToMarkdown, stripHtmlTags } from "./htmlUtils";
+import { decodeHtmlEntities, htmlToMarkdown, normalizeRefInput, stripHtmlTags } from "./htmlUtils";
 import {
   DEFAULT_HTTP_TIMEOUT_MS,
   DEFAULT_USER_AGENT,
@@ -110,7 +110,13 @@ export interface ParsedAtCoderTaskHtml {
   constraints?: { timeLimitMs?: number; memoryLimitMb?: number };
 }
 
-export function parseAtCoderTaskHtml(html: string, fallbackTitle: string): ParsedAtCoderTaskHtml {
+export function parseAtCoderTaskHtml(
+  html: string,
+  fallbackTitle: string,
+  options?: { preferLang?: "en" | "ja" }
+): ParsedAtCoderTaskHtml {
+  const hasJaChars = (txt: string): boolean => /[\u3040-\u30ff\u4e00-\u9fff]/.test(txt);
+
   const titleMatch =
     html.match(/<span\b[^>]*class=["'][^"']*\bh2\b[^"']*["'][^>]*>([\s\S]*?)<\/span>/i) ??
     html.match(/<title>([\s\S]*?)<\/title>/i);
@@ -126,7 +132,7 @@ export function parseAtCoderTaskHtml(html: string, fallbackTitle: string): Parse
   if (!statementContainer) {
     return {
       title,
-      locale: "en-US",
+      locale: hasJaChars(title) ? "ja-JP" : "en-US",
       statementMarkdown: "",
       samples: [],
       ...(timeLimitMs !== undefined || memoryLimitMb !== undefined
@@ -142,35 +148,59 @@ export function parseAtCoderTaskHtml(html: string, fallbackTitle: string): Parse
 
   const enSection = extractBalancedSpanByClass(statementContainer, "lang-en");
   const jaSection = extractBalancedSpanByClass(statementContainer, "lang-ja");
-  const chosenHtml = enSection ?? jaSection ?? statementContainer;
-  const locale: "en-US" | "ja-JP" = enSection ? "en-US" : jaSection ? "ja-JP" : "en-US";
+  const chosenHtml =
+    options?.preferLang === "ja"
+      ? (jaSection ?? enSection ?? statementContainer)
+      : (enSection ?? jaSection ?? statementContainer);
 
-  // Extract Sample Input N / Sample Output N pairs from <section><h3>...</h3><pre>...</pre></section>
+  let locale: "en-US" | "ja-JP";
+  if (chosenHtml === jaSection) {
+    locale = "ja-JP";
+  } else if (chosenHtml === enSection) {
+    locale = "en-US";
+  } else {
+    locale = hasJaChars(`${title}\n${stripHtmlTags(chosenHtml)}`) ? "ja-JP" : "en-US";
+  }
+
+  // Extract Sample Input N / Sample Output N pairs supporting both modern <section><h3><pre>
+  // and legacy <div class="part"><h3></h3><section><pre></pre></section></div> layouts.
   const sampleInputs = new Map<string, string>();
   const sampleOutputs = new Map<string, string>();
-  const sectionRe = /<section[^>]*>([\s\S]*?)<\/section>/gi;
-  let secMatch: RegExpExecArray | null;
-  while ((secMatch = sectionRe.exec(chosenHtml)) !== null) {
-    const body = secMatch[1] ?? "";
-    const headingMatch = body.match(/<h3[^>]*>([\s\S]*?)<\/h3>/i);
-    const preMatch = body.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
-    if (!headingMatch?.[1] || !preMatch?.[1]) {
+  const headingMatches: Array<{ heading: string; start: number; end: number }> = [];
+  const h3Re = /<h3[^>]*>([\s\S]*?)<\/h3>/gi;
+  let h3Match: RegExpExecArray | null;
+  while ((h3Match = h3Re.exec(chosenHtml)) !== null) {
+    headingMatches.push({
+      heading: stripHtmlTags(h3Match[1] ?? "").trim(),
+      start: h3Match.index,
+      end: h3Match.index + h3Match[0].length
+    });
+  }
+
+  for (let i = 0; i < headingMatches.length; i += 1) {
+    const current = headingMatches[i]!;
+    const inMatch = current.heading.match(/^(?:Sample Input|入力例)\s*(\d+)/i);
+    const outMatch = current.heading.match(/^(?:Sample Output|出力例)\s*(\d+)/i);
+    if (!inMatch?.[1] && !outMatch?.[1]) {
       continue;
     }
-    const heading = stripHtmlTags(headingMatch[1]).trim();
+
+    const sliceEnd = headingMatches[i + 1]?.start ?? chosenHtml.length;
+    const slice = chosenHtml.slice(current.end, sliceEnd);
+    const preMatch = slice.match(/<pre[^>]*>([\s\S]*?)<\/pre>/i);
+    if (!preMatch?.[1]) {
+      continue;
+    }
+
     const preValue = decodeHtmlEntities(
       preMatch[1].replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "")
     )
       .replace(/\r\n/g, "\n")
       .replace(/^\n+|\n+$/g, "");
 
-    const inMatch = heading.match(/^(?:Sample Input|入力例)\s*(\d+)/i);
     if (inMatch?.[1]) {
       sampleInputs.set(inMatch[1], preValue);
-      continue;
-    }
-    const outMatch = heading.match(/^(?:Sample Output|出力例)\s*(\d+)/i);
-    if (outMatch?.[1]) {
+    } else if (outMatch?.[1]) {
       sampleOutputs.set(outMatch[1], preValue);
     }
   }
@@ -241,7 +271,7 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
 
   canHandleUrl(url: string): boolean {
     try {
-      const parsed = new URL(url.trim());
+      const parsed = new URL(normalizeRefInput(url));
       if (parsed.hostname.toLowerCase() !== "atcoder.jp") {
         return false;
       }
@@ -252,7 +282,7 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
   }
 
   resolveRef(input: string): { sourceId: string; canonicalUrl?: string } | null {
-    const trimmed = input.trim();
+    const trimmed = normalizeRefInput(input);
     if (!trimmed) {
       return null;
     }
@@ -274,21 +304,23 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
       };
     }
 
-    const prefixed = trimmed.match(/^(?:atcoder|at):([a-z0-9_-]+)(?:\/([a-z0-9_-]+))?$/i);
+    const prefixed = trimmed.match(/^(?:atcoder|at)\s*:\s*(.+)$/i);
     if (prefixed?.[1]) {
-      if (prefixed[2]) {
-        const contestId = prefixed[1].toLowerCase();
-        const taskId = prefixed[2].toLowerCase();
+      const body = prefixed[1].trim();
+      const slashPair = body.match(/^([a-z0-9_-]+)\/([a-z0-9_-]+)$/i);
+      if (slashPair?.[1] && slashPair?.[2]) {
+        const contestId = slashPair[1].toLowerCase();
+        const taskId = slashPair[2].toLowerCase();
         return {
           sourceId: `${contestId}/${taskId}`,
           canonicalUrl: `https://atcoder.jp/contests/${contestId}/tasks/${taskId}`
         };
       }
-      return this.resolveTaskToken(prefixed[1], true);
+      return this.resolveTaskToken(body, true);
     }
 
     // Luogu-style AtCoder prefix, e.g. `AT_abc350_c`, `AT_practice2_a`
-    const atUnderscore = trimmed.match(/^AT_([a-z0-9_-]+)$/i);
+    const atUnderscore = trimmed.match(/^AT_([a-z0-9_ -]+)$/i);
     if (atUnderscore?.[1]) {
       return this.resolveTaskToken(atUnderscore[1], true);
     }
@@ -308,7 +340,7 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
       };
     }
 
-    const lower = token.trim().toLowerCase();
+    const lower = normalizeRefInput(token).toLowerCase();
     // If Kenkoooo index is already cached in memory, resolve exact contest_id immediately
     if (this.cachedProblems) {
       const hit = this.cachedProblems.find((p) => p.id.toLowerCase() === lower);
@@ -333,27 +365,77 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
   }
 
   private inferContestAndTask(token: string): { contestId: string; taskId: string } | null {
-    const lower = token.trim().toLowerCase();
+    const lower = normalizeRefInput(token).toLowerCase();
 
-    // Standard task screen names like abc300_a, arc160_b, agc050_a, dp_a, typical90_a, abc350-c
+    // Standard task screen names like abc300_a, abc 350 a, ABC350 A, edpc_a -> dp/dp_a, abc233_ex -> abc233_h
     const withSep = lower.match(
-      /^((?:abc|arc|agc|ahc)\d{1,4}|typical90|dp|edpc|tdpc)[_/-]([a-z0-9]+)$/
+      /^((?:abc|arc|agc|ahc)\s*\d{1,4}|typical90|dp|edpc|tdpc)(?:\s+|[_/-])(ex|[a-z0-9]+)$/
     );
     if (withSep?.[1] && withSep?.[2]) {
-      const contestId = withSep[1].replace(/_/g, "-");
-      const taskId = `${withSep[1]}_${withSep[2]}`;
+      const rawContest = withSep[1].replace(/\s+/g, "").replace(/_/g, "-");
+      const contestId = rawContest === "edpc" ? "dp" : rawContest;
+      const suffix =
+        withSep[2] === "ex" && /^(?:abc|arc|agc|ahc)\d+$/.test(contestId) ? "h" : withSep[2];
+      const taskId = `${contestId}_${suffix}`;
       return { contestId, taskId };
     }
 
-    // No-underscore shorthand: `abc350c`, `ABC350C`, `arc160b`, `agc050a`, `ahc030a`, `abc350ex`
-    const compact = lower.match(/^((?:abc|arc|agc|ahc)\d{1,4})(ex|[a-h])$/);
+    // No-underscore shorthand: `abc350c`, `ABC350C`, `abc 350c`, `abc233ex` -> `abc233_h`
+    const compact = lower.match(/^((?:abc|arc|agc|ahc)\s*\d{1,4})\s*(ex|[a-h])$/);
     if (compact?.[1] && compact?.[2]) {
-      const contestId = compact[1];
-      const taskId = `${compact[1]}_${compact[2]}`;
+      const contestId = compact[1].replace(/\s+/g, "");
+      const suffix = compact[2] === "ex" ? "h" : compact[2];
+      const taskId = `${contestId}_${suffix}`;
       return { contestId, taskId };
     }
 
     return null;
+  }
+
+  private findKenkooooTaskEntry(
+    problems: KenkooooProblem[],
+    contestId: string,
+    taskId: string
+  ): KenkooooProblem | undefined {
+    const lowerTask = taskId.toLowerCase();
+    const exact = problems.find((p) => p.id.toLowerCase() === lowerTask);
+    if (exact) {
+      return exact;
+    }
+
+    const lowerContest = contestId.toLowerCase();
+    const prefix = `${lowerContest}_`;
+    const inferredSuffix = lowerTask.startsWith(prefix) ? lowerTask.slice(prefix.length) : "";
+    if (!inferredSuffix) {
+      return undefined;
+    }
+
+    return problems.find((p) => {
+      if (p.contest_id.toLowerCase() !== lowerContest) {
+        return false;
+      }
+      const pIdx = p.problem_index?.trim().toLowerCase();
+      if (pIdx && (pIdx === inferredSuffix || (inferredSuffix === "h" && pIdx === "ex"))) {
+        return true;
+      }
+      const pTitle = (p.title ?? p.name ?? "").trim().toLowerCase();
+      return pTitle.startsWith(`${inferredSuffix} `) || pTitle.startsWith(`${inferredSuffix}.`);
+    });
+  }
+
+  private extractPreferLang(ref: string): "en" | "ja" | undefined {
+    const normalized = normalizeRefInput(ref);
+    if (!/^https?:\/\//i.test(normalized)) {
+      return undefined;
+    }
+    try {
+      const lang = new URL(normalized).searchParams.get("lang")?.trim().toLowerCase();
+      if (lang === "ja" || lang === "ja-jp") return "ja";
+      if (lang === "en" || lang === "en-us") return "en";
+    } catch {
+      return undefined;
+    }
+    return undefined;
   }
 
   async fetchProblem(
@@ -375,6 +457,13 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
       const parts = resolved.sourceId.split("/");
       contestId = parts[0] ?? "";
       taskId = parts[1] ?? "";
+      if (this.cachedProblems && contestId && taskId) {
+        const hit = this.findKenkooooTaskEntry(this.cachedProblems, contestId, taskId);
+        if (hit) {
+          contestId = hit.contest_id;
+          taskId = hit.id;
+        }
+      }
     } else {
       // Lazy Kenkoooo problems.json lookup for non-standard task IDs (e.g. practice2_a, tessoku_book_a)
       const problems = await this.loadProblems(opts?.signal);
@@ -394,27 +483,49 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
       throw new ProblemAdapterError("NOT_FOUND", "atcoder", `Malformed AtCoder task ref: "${ref}".`);
     }
 
-    const url = `https://atcoder.jp/contests/${encodeURIComponent(contestId)}/tasks/${encodeURIComponent(taskId)}`;
-    let response: Response;
-    try {
-      response = await fetchWithTimeout(
-        this.fetchImpl,
-        url,
-        {
-          headers: {
-            "user-agent": this.userAgent,
-            accept: "text/html,application/xhtml+xml"
+    const fetchTaskHtml = async (cId: string, tId: string): Promise<{ url: string; response: Response }> => {
+      const taskUrl = `https://atcoder.jp/contests/${encodeURIComponent(cId)}/tasks/${encodeURIComponent(tId)}`;
+      try {
+        const res = await fetchWithTimeout(
+          this.fetchImpl,
+          taskUrl,
+          {
+            headers: {
+              "user-agent": this.userAgent,
+              accept: "text/html,application/xhtml+xml"
+            },
+            signal: opts?.signal
           },
-          signal: opts?.signal
-        },
-        this.timeoutMs
-      );
-    } catch (error) {
-      throw new ProblemAdapterError(
-        "NETWORK_ERROR",
-        "atcoder",
-        `Network error fetching AtCoder task ${taskId}: ${error instanceof Error ? error.message : String(error)}`
-      );
+          this.timeoutMs
+        );
+        return { url: taskUrl, response: res };
+      } catch (error) {
+        throw new ProblemAdapterError(
+          "NETWORK_ERROR",
+          "atcoder",
+          `Network error fetching AtCoder task ${tId}: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
+    };
+
+    let { url, response } = await fetchTaskHtml(contestId, taskId);
+
+    // Legacy/shared tasks (e.g. abc042c -> arc058_a) return 404 for inferred ID; fall back to Kenkoooo problems.json
+    if (response.status === 404) {
+      try {
+        const problems = await this.loadProblems(opts?.signal);
+        const fallbackEntry = this.findKenkooooTaskEntry(problems, contestId, taskId);
+        if (
+          fallbackEntry &&
+          (fallbackEntry.contest_id !== contestId || fallbackEntry.id !== taskId)
+        ) {
+          contestId = fallbackEntry.contest_id;
+          taskId = fallbackEntry.id;
+          ({ url, response } = await fetchTaskHtml(contestId, taskId));
+        }
+      } catch {
+        // Keep original 404 response if Kenkoooo index is unavailable
+      }
     }
 
     if (!response.ok) {
@@ -437,7 +548,8 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
       );
     }
 
-    const parsed = parseAtCoderTaskHtml(html, taskId);
+    const preferLang = this.extractPreferLang(ref);
+    const parsed = parseAtCoderTaskHtml(html, taskId, preferLang ? { preferLang } : undefined);
     if (!parsed.statementMarkdown) {
       throw new ProblemAdapterError(
         "SCHEMA_DRIFT",

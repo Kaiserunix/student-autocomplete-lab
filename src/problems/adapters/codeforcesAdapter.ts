@@ -5,6 +5,7 @@ import {
   type ProblemSearchQuery,
   type ProblemSourceAdapter
 } from "../../core/contracts";
+import { normalizeRefInput } from "./htmlUtils";
 import {
   DEFAULT_HTTP_TIMEOUT_MS,
   DEFAULT_USER_AGENT,
@@ -67,7 +68,7 @@ export interface ParsedCfRef {
 }
 
 export function parseCodeforcesRef(input: string): ParsedCfRef | null {
-  const trimmed = input.trim();
+  const trimmed = normalizeRefInput(input);
   if (!trimmed) {
     return null;
   }
@@ -80,10 +81,15 @@ export function parseCodeforcesRef(input: string): ParsedCfRef | null {
       return null;
     }
     const host = parsed.hostname.toLowerCase();
-    if (host !== "codeforces.com" && host !== "www.codeforces.com" && host !== "m.codeforces.com") {
+    if (
+      host !== "codeforces.com" &&
+      host !== "www.codeforces.com" &&
+      host !== "m.codeforces.com" &&
+      host !== "mirror.codeforces.com"
+    ) {
       return null;
     }
-    const contestMatch = parsed.pathname.match(/^\/contest\/(\d+)\/problem\/([A-Za-z0-9]+)\/?$/i);
+    const contestMatch = parsed.pathname.match(/^\/contest\/(\d+)\/problem\/([A-Za-z0-9]+)(?:\/.*)?$/i);
     if (contestMatch?.[1] && contestMatch?.[2]) {
       const contestId = Number.parseInt(contestMatch[1], 10);
       const index = contestMatch[2].toUpperCase();
@@ -95,7 +101,7 @@ export function parseCodeforcesRef(input: string): ParsedCfRef | null {
         canonicalUrl: `https://codeforces.com/contest/${contestId}/problem/${index}`
       };
     }
-    const problemsetMatch = parsed.pathname.match(/^\/problemset\/problem\/(\d+)\/([A-Za-z0-9]+)\/?$/i);
+    const problemsetMatch = parsed.pathname.match(/^\/problemset\/problem\/(\d+)\/([A-Za-z0-9]+)(?:\/.*)?$/i);
     if (problemsetMatch?.[1] && problemsetMatch?.[2]) {
       const contestId = Number.parseInt(problemsetMatch[1], 10);
       const index = problemsetMatch[2].toUpperCase();
@@ -107,7 +113,7 @@ export function parseCodeforcesRef(input: string): ParsedCfRef | null {
         canonicalUrl: `https://codeforces.com/contest/${contestId}/problem/${index}`
       };
     }
-    const gymMatch = parsed.pathname.match(/^\/gym\/(\d+)\/problem\/([A-Za-z0-9]+)\/?$/i);
+    const gymMatch = parsed.pathname.match(/^\/gym\/(\d+)\/problem\/([A-Za-z0-9]+)(?:\/.*)?$/i);
     if (gymMatch?.[1] && gymMatch?.[2]) {
       const contestId = Number.parseInt(gymMatch[1], 10);
       const index = gymMatch[2].toUpperCase();
@@ -123,9 +129,9 @@ export function parseCodeforcesRef(input: string): ParsedCfRef | null {
   }
 
   // Strip optional prefix: `codeforces:`, `cf:`, `cf-`, `cf `, or bare `CF` before digits/gym
-  const stripped = trimmed.replace(/^(?:codeforces:|cf[:\s-]?)/i, "").trim();
+  const stripped = trimmed.replace(/^(?:codeforces\s*:|cf\s*[:\s-]?)/i, "").trim();
 
-  const gymDirect = stripped.match(/^gym:(\d+)[/-]?([A-Za-z][A-Za-z0-9]?)$/i);
+  const gymDirect = stripped.match(/^gym\s*:\s*(\d+)\s*[/-]?\s*([A-Za-z][A-Za-z0-9]?)$/i);
   if (gymDirect?.[1] && gymDirect?.[2]) {
     const contestId = Number.parseInt(gymDirect[1], 10);
     const index = gymDirect[2].toUpperCase();
@@ -138,7 +144,7 @@ export function parseCodeforcesRef(input: string): ParsedCfRef | null {
     };
   }
 
-  const direct = stripped.match(/^(\d{1,5})[/-]?([A-Za-z][A-Za-z0-9]?)$/);
+  const direct = stripped.match(/^(\d{1,5})\s*[/-]?\s*([A-Za-z][A-Za-z0-9]?)$/);
   if (direct?.[1] && direct?.[2]) {
     const contestId = Number.parseInt(direct[1], 10);
     const index = direct[2].toUpperCase();
@@ -191,7 +197,8 @@ export class CodeforcesAdapter implements ProblemSourceAdapter {
   }
 
   canHandleUrl(url: string): boolean {
-    return parseCodeforcesRef(url) !== null && /^https?:\/\//i.test(url.trim());
+    const normalized = normalizeRefInput(url);
+    return parseCodeforcesRef(normalized) !== null && /^https?:\/\//i.test(normalized);
   }
 
   resolveRef(input: string): { sourceId: string; canonicalUrl?: string } | null {
@@ -238,25 +245,45 @@ export class CodeforcesAdapter implements ProblemSourceAdapter {
       };
     }
 
-    const problems = await this.loadProblemset(opts?.forceRefresh ?? false, opts?.signal);
-    const found = problems.find(
+    let problems: CfApiProblem[] | undefined;
+    let loadError: unknown;
+    try {
+      problems = await this.loadProblemset(opts?.forceRefresh ?? false, opts?.signal);
+    } catch (error) {
+      if (this.statementMirror !== "luogu-public") {
+        throw error;
+      }
+      loadError = error;
+    }
+
+    const found = problems?.find(
       (p) => p.contestId === parsed.contestId && p.index?.toUpperCase() === parsed.index
     );
 
-    if (!found) {
-      throw new ProblemAdapterError(
-        "NOT_FOUND",
-        "codeforces",
-        `Codeforces problem ${parsed.sourceId} was not found in official problemset.problems API.`
-      );
+    if (found) {
+      const baseDoc = this.toMetadataDocument(found);
+      if (this.statementMirror !== "luogu-public") {
+        return baseDoc;
+      }
+      return this.enrichWithLuoguPublicMirror(baseDoc, parsed.contestId, parsed.index, opts?.signal);
     }
 
-    const baseDoc = this.toMetadataDocument(found);
-    if (this.statementMirror !== "luogu-public") {
-      return baseDoc;
+    if (this.statementMirror === "luogu-public") {
+      const fallbackDoc = await this.buildDocFromLuoguPublicMirrorOnly(parsed, opts?.signal);
+      if (fallbackDoc) {
+        return fallbackDoc;
+      }
     }
 
-    return this.enrichWithLuoguPublicMirror(baseDoc, parsed.contestId, parsed.index, opts?.signal);
+    if (loadError) {
+      throw loadError;
+    }
+
+    throw new ProblemAdapterError(
+      "NOT_FOUND",
+      "codeforces",
+      `Codeforces problem ${parsed.sourceId} was not found in official problemset.problems API.`
+    );
   }
 
   async search(
@@ -364,6 +391,50 @@ export class CodeforcesAdapter implements ProblemSourceAdapter {
     } catch {
       // Gracefully fall back to official metadata_only if mirror is absent, rate-limited, or offline
       return baseDoc;
+    }
+  }
+
+  private async buildDocFromLuoguPublicMirrorOnly(
+    parsed: ParsedCfRef,
+    signal?: AbortSignal
+  ): Promise<ProblemDocument | null> {
+    try {
+      const mirror = await fetchLuoguRemoteProblem(`CF${parsed.contestId}${parsed.index}`, {
+        fetchImpl: this.fetchImpl,
+        userAgent: this.userAgent,
+        timeoutMs: this.timeoutMs,
+        signal,
+        preferLocale: "en"
+      });
+
+      const hasStatement = mirror.statementMarkdown.trim().length > 0;
+      const hasSamples = mirror.samples.length > 0;
+      if (!hasStatement && !hasSamples && !mirror.constraints) {
+        return null;
+      }
+
+      const completeness = hasStatement ? "full" : hasSamples ? "samples_only" : "metadata_only";
+      return {
+        schemaVersion: "problem-doc/v2",
+        problemKey: `cf:${parsed.sourceId}`,
+        source: "codeforces",
+        sourceId: parsed.sourceId,
+        canonicalUrl: parsed.canonicalUrl,
+        title: mirror.title || `Codeforces ${parsed.sourceId}`,
+        locale: hasStatement ? mirror.locale : "en-US",
+        completeness,
+        ioMode: "stdio",
+        ...(hasStatement ? { statementMarkdown: mirror.statementMarkdown } : {}),
+        samples: mirror.samples,
+        ...(mirror.constraints ? { constraints: mirror.constraints } : {}),
+        rawTags: [],
+        provenance: {
+          ingestChannel: "builtin-adapter",
+          fetchedAt: new Date().toISOString()
+        }
+      };
+    } catch {
+      return null;
     }
   }
 

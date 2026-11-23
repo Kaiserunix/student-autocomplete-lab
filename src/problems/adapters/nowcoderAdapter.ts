@@ -5,7 +5,7 @@ import {
   type ProblemSample,
   type ProblemSourceAdapter
 } from "../../core/contracts";
-import { decodeHtmlEntities, htmlToMarkdown, stripHtmlTags } from "./htmlUtils";
+import { decodeHtmlEntities, htmlToMarkdown, normalizeRefInput, stripHtmlTags } from "./htmlUtils";
 import {
   DEFAULT_HTTP_TIMEOUT_MS,
   DEFAULT_USER_AGENT,
@@ -91,7 +91,8 @@ function extractBalancedDivsByClass(html: string, className: string): string[] {
 }
 
 function extractBalancedHiddenSsrDiv(html: string): string | undefined {
-  const openRe = /<div\b[^>]*\bstyle=["'][^"']*display\s*:\s*none[^"']*["'][^>]*>/gi;
+  const openRe =
+    /<div\b[^>]*\bstyle=["'][^"']*(?:display\s*:\s*none|(?:top|left)\s*:\s*-\d{4,}px)[^"']*["'][^>]*>/gi;
   const tagRe = /<\/?div\b[^>]*>/gi;
 
   let openMatch: RegExpExecArray | null;
@@ -276,8 +277,8 @@ function parseConstraintsFromText(
   let memoryLimitMb: number | undefined;
 
   const timeMatch =
-    text.match(/时间限制[^。\n]*?C\/C\+\+\s*([\d.]+)\s*(秒|s|ms|毫秒)/i) ??
-    text.match(/(?:时间限制|Time\s*Limit)\s*[:：]?\s*(?:C\/C\+\+\s*)?([\d.]+)\s*(秒|s|ms|毫秒)/i);
+    text.match(/时间限制[^。\n]*?C\/C\+\+(?:\/[^\s\d:：]+)*\s*([\d.]+)\s*(秒|s|ms|毫秒)/i) ??
+    text.match(/(?:时间限制|Time\s*Limit)\s*[:：]?\s*(?:C\/C\+\+(?:\/[^\s\d:：]+)*\s*)?([\d.]+)\s*(秒|s|ms|毫秒)/i);
   if (timeMatch?.[1] && timeMatch?.[2]) {
     const val = Number.parseFloat(timeMatch[1]);
     const unit = timeMatch[2].toLowerCase();
@@ -287,9 +288,9 @@ function parseConstraintsFromText(
   }
 
   const memMatch =
-    text.match(/(?:空间限制|内存限制)[^。\n]*?C\/C\+\+\s*([\d.]+)\s*(MiB|MB|KiB|KB|M|K)\b/i) ??
+    text.match(/(?:空间限制|内存限制)[^。\n]*?C\/C\+\+(?:\/[^\s\d:：]+)*\s*([\d.]+)\s*(MiB|MB|KiB|KB|M|K)\b/i) ??
     text.match(
-      /(?:空间限制|内存限制|Memory\s*Limit)\s*[:：]?\s*(?:C\/C\+\+\s*)?([\d.]+)\s*(MiB|MB|KiB|KB|M|K)\b/i
+      /(?:空间限制|内存限制|Memory\s*Limit)\s*[:：]?\s*(?:C\/C\+\+(?:\/[^\s\d:：]+)*\s*)?([\d.]+)\s*(MiB|MB|KiB|KB|M|K)\b/i
     );
   if (memMatch?.[1] && memMatch?.[2]) {
     const val = Number.parseFloat(memMatch[1]);
@@ -432,7 +433,11 @@ export function parseNowCoderHtml(html: string, fallbackTitle: string): ParsedNo
   const intrText = intrBlocks.map((b) => stripHtmlTags(b)).join("\n");
   const parsedConstraints =
     parseConstraintsFromText(intrText) ??
-    parseConstraintsFromText(stripHtmlTags(html.slice(0, 12_000)));
+    parseConstraintsFromText(
+      stripHtmlTags(
+        html.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "").slice(0, 30_000)
+      )
+    );
   const timeLimitMs = parsedConstraints?.timeLimitMs ?? pageInfo.timeLimitMs;
   const memoryLimitMb = parsedConstraints?.memoryLimitMb ?? pageInfo.memoryLimitMb;
   const constraints =
@@ -530,7 +535,7 @@ export class NowCoderAdapter implements ProblemSourceAdapter {
 
   canHandleUrl(url: string): boolean {
     try {
-      const parsed = new URL(url.trim());
+      const parsed = new URL(normalizeRefInput(url));
       const host = parsed.hostname.toLowerCase();
       if (host !== "ac.nowcoder.com" && host !== "www.nowcoder.com" && host !== "nowcoder.com") {
         return false;
@@ -547,7 +552,7 @@ export class NowCoderAdapter implements ProblemSourceAdapter {
   }
 
   resolveRef(input: string): { sourceId: string; canonicalUrl?: string } | null {
-    const trimmed = input.trim();
+    const trimmed = normalizeRefInput(input);
     if (!trimmed) {
       return null;
     }
@@ -586,8 +591,8 @@ export class NowCoderAdapter implements ProblemSourceAdapter {
       return null;
     }
 
-    // Bare `NC14362`, `nc14362`, `NC-14362`
-    const bareNc = trimmed.match(/^nc-?(\d+)$/i);
+    // Bare `NC14362`, `nc14362`, `NC-14362`, `NC 14362`
+    const bareNc = trimmed.match(/^nc(?:\s*-\s*|\s+)?(\d+)$/i);
     if (bareNc?.[1]) {
       return {
         sourceId: `acm-${bareNc[1]}`,
@@ -595,7 +600,7 @@ export class NowCoderAdapter implements ProblemSourceAdapter {
       };
     }
 
-    const prefix = trimmed.match(/^(?:nowcoder|nc):(.+)$/i);
+    const prefix = trimmed.match(/^(?:nowcoder|nc)\s*:\s*(.+)$/i);
     if (prefix?.[1]) {
       const body = prefix[1].trim();
       const acmNum = body.match(/^(?:acm-?)?(\d+)$/i);
@@ -684,6 +689,13 @@ export class NowCoderAdapter implements ProblemSourceAdapter {
 
     const parsed = parseNowCoderHtml(html, resolved.sourceId);
     if (!parsed.statementMarkdown && parsed.samples.length === 0) {
+      if (/试题不存在|题目不存在|该题不存在|问题不存在/i.test(html)) {
+        throw new ProblemAdapterError(
+          "NOT_FOUND",
+          "nowcoder",
+          `NowCoder problem (${url}) was not found (试题不存在 / 题目不存在).`
+        );
+      }
       if (
         /passport\.nowcoder|\/login\b|请先登录|用户登录|立即登录|比赛尚未开始|无权访问|需要密码|nc-login/i.test(
           html

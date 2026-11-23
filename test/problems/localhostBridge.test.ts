@@ -293,4 +293,123 @@ describe("LocalhostBridge", () => {
     expect(ccPush.status).toBe(200);
     expect(bridge.getReceivedProblems()).toHaveLength(1);
   });
+
+  it("prevents false AC on negative Chinese phrases and secures POST / against CSRF while emitting PNA headers", async () => {
+    // P0-1: negative Chinese phrases & pass rate must never produce AC
+    expect(normalizeBridgeVerdictText("未通过")).toBeUndefined();
+    expect(normalizeBridgeVerdictText("部分通过")).toBeUndefined();
+    expect(normalizeBridgeVerdictText("不通过")).toBeUndefined();
+    expect(normalizeBridgeVerdictText("全部未通过")).toBeUndefined();
+    expect(normalizeBridgeVerdictText("通过率")).toBeUndefined();
+    expect(normalizeBridgeVerdictText("通过率 52.3%")).toBeUndefined();
+    expect(normalizeBridgeVerdictText("未通过：解答错误")).toBe("WA");
+    expect(normalizeBridgeVerdictText("已通过")).toBe("AC");
+
+    // DedupKey alignment & canonical prefixes & mixed-case CN slug preservation
+    expect(
+      normalizeBridgeVerdictPayload({
+        platform: "codeforces",
+        sourceId: "1900A",
+        submissionId: "777",
+        verdict: "OK"
+      })
+    ).toMatchObject({
+      dedupKey: "cf-sub-777",
+      event: { problemKey: "cf:1900A", verdict: "AC" }
+    });
+    expect(
+      normalizeBridgeVerdictPayload({
+        platform: "leetcode-cn",
+        problemUrl: "https://leetcode.cn/problems/1fGaJU/",
+        submissionId: "888",
+        verdict: "通过"
+      })
+    ).toMatchObject({
+      dedupKey: "lccn-sub-888",
+      sourceId: "1fGaJU",
+      event: { problemKey: "lc-cn:1fGaJU", verdict: "AC" }
+    });
+    expect(
+      normalizeBridgeVerdictPayload({
+        platform: "leetcode-global",
+        sourceId: "two-sum",
+        submissionId: "999",
+        verdict: "Accepted"
+      })
+    ).toMatchObject({
+      dedupKey: "lc-sub-999",
+      event: { problemKey: "lc-global:two-sum", verdict: "AC" }
+    });
+    expect(
+      normalizeBridgeVerdictPayload({
+        platform: "atcoder",
+        sourceId: "tessoku_book_a",
+        submissionId: "1010",
+        verdict: "AC"
+      })
+    ).toMatchObject({
+      dedupKey: "ac-sub-1010",
+      event: { problemKey: "atcoder:tessoku_book_a", verdict: "AC" }
+    });
+
+    const bridge = new LocalhostBridge({ preferredPort: 0, verdictToken: "tok-1" });
+    const port = await bridge.start();
+    activeClosers.push(() => bridge.stop());
+
+    // CSRF defense on POST /: reject untrusted Origin and non-JSON Content-Type when Origin present
+    const evilCsrf = await fetch(`http://127.0.0.1:${port}/`, {
+      method: "POST",
+      headers: { Origin: "https://evil-attacker.example", "content-type": "text/plain" },
+      body: JSON.stringify({ name: "Attack" })
+    });
+    expect(evilCsrf.status).toBe(403);
+
+    const nonJsonWithOrigin = await fetch(`http://127.0.0.1:${port}/`, {
+      method: "POST",
+      headers: { Origin: "https://codeforces.com", "content-type": "text/plain" },
+      body: JSON.stringify({ name: "A. Watermelon" })
+    });
+    expect(nonJsonWithOrigin.status).toBe(415);
+    expect(bridge.getReceivedProblems()).toHaveLength(0);
+
+    const extPush = await fetch(`http://127.0.0.1:${port}/`, {
+      method: "POST",
+      headers: { Origin: "chrome-extension://abcdefghijklmnop", "content-type": "application/json" },
+      body: JSON.stringify({ name: "A. Watermelon", url: "https://codeforces.com/contest/4/problem/A" })
+    });
+    expect(extPush.status).toBe(200);
+    expect(bridge.getReceivedProblems()).toHaveLength(1);
+
+    // PNA header on OPTIONS /verdict only when Origin is allowlisted and requested
+    const pnaMobileCf = await fetch(`http://127.0.0.1:${port}/verdict`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://m.codeforces.com",
+        "Access-Control-Request-Private-Network": "true"
+      }
+    });
+    expect(pnaMobileCf.status).toBe(204);
+    expect(pnaMobileCf.headers.get("access-control-allow-origin")).toBe("https://m.codeforces.com");
+    expect(pnaMobileCf.headers.get("access-control-allow-private-network")).toBe("true");
+
+    const pnaNowCoderApex = await fetch(`http://127.0.0.1:${port}/verdict`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://nowcoder.com",
+        "Access-Control-Request-Private-Network": "true"
+      }
+    });
+    expect(pnaNowCoderApex.status).toBe(204);
+    expect(pnaNowCoderApex.headers.get("access-control-allow-private-network")).toBe("true");
+
+    const pnaEvil = await fetch(`http://127.0.0.1:${port}/verdict`, {
+      method: "OPTIONS",
+      headers: {
+        Origin: "https://evil.example",
+        "Access-Control-Request-Private-Network": "true"
+      }
+    });
+    expect(pnaEvil.status).toBe(403);
+    expect(pnaEvil.headers.get("access-control-allow-private-network")).toBeNull();
+  });
 });

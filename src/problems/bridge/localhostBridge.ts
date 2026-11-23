@@ -129,6 +129,57 @@ export function isAllowedVerdictCorsOrigin(origin: string | undefined): boolean 
   return VERDICT_OJ_HOSTS.has(parsed.hostname.toLowerCase());
 }
 
+function isAllowedBridgeOrigin(origin: string): boolean {
+  if (isAllowedVerdictCorsOrigin(origin)) {
+    return true;
+  }
+  const trimmed = origin.trim();
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return false;
+  }
+  if (
+    (parsed.protocol !== "http:" && parsed.protocol !== "https:") ||
+    parsed.username ||
+    parsed.password ||
+    parsed.origin !== trimmed
+  ) {
+    return false;
+  }
+  const host = parsed.hostname.toLowerCase();
+  return host === "127.0.0.1" || host === "localhost" || host === "[::1]";
+}
+
+function canonicalKeyPrefixForPlatform(platform: ProblemSourceId): string {
+  switch (platform) {
+    case "codeforces":
+      return "cf";
+    case "leetcode-cn":
+      return "lc-cn";
+    case "leetcode-global":
+      return "lc-global";
+    default:
+      return platform;
+  }
+}
+
+function buildBridgeVerdictDedupKey(platform: ProblemSourceId, submissionId: string): string {
+  switch (platform) {
+    case "codeforces":
+      return `cf-sub-${submissionId}`;
+    case "leetcode-cn":
+      return `lccn-sub-${submissionId}`;
+    case "leetcode-global":
+      return `lc-sub-${submissionId}`;
+    case "atcoder":
+      return `ac-sub-${submissionId}`;
+    default:
+      return `bridge-${platform}-${submissionId}`;
+  }
+}
+
 /**
  * Normalizes human-readable OJ verdict labels sent by the companion userscript
  * into `OfficialVerdictStatus`. Returns `undefined` for blank or pending states.
@@ -138,7 +189,7 @@ export function normalizeBridgeVerdictText(rawVerdict: unknown): OfficialVerdict
     return undefined;
   }
   const trimmed = rawVerdict.trim();
-  if (!trimmed) {
+  if (!trimmed || trimmed.includes("通过率")) {
     return undefined;
   }
   const upper = trimmed.toUpperCase();
@@ -155,12 +206,14 @@ export function normalizeBridgeVerdictText(rawVerdict: unknown): OfficialVerdict
     return undefined;
   }
 
+  const hasNegativePass = /(?:未|不|部分|未能|没有|尚未)通过/.test(trimmed);
   if (
-    upper === "AC" ||
-    upper === "OK" ||
-    upper === "ACCEPTED" ||
-    trimmed.includes("通过") ||
-    trimmed.includes("答案正确")
+    !hasNegativePass &&
+    (upper === "AC" ||
+      upper === "OK" ||
+      upper === "ACCEPTED" ||
+      trimmed.includes("通过") ||
+      trimmed.includes("答案正确"))
   ) {
     return "AC";
   }
@@ -252,13 +305,19 @@ export function normalizeBridgeVerdictPayload(raw: unknown): NormalizedBridgeVer
     return null;
   }
   const platform: ProblemSourceId = platformCandidate;
+  const canonicalPrefix = canonicalKeyPrefixForPlatform(platform);
 
-  const explicitProblemKey =
-    typeof item.problemKey === "string" &&
-    item.problemKey.trim().startsWith(`${platform}:`) &&
-    !/\s/.test(item.problemKey.trim())
-      ? item.problemKey.trim()
-      : undefined;
+  let explicitProblemKey: string | undefined;
+  if (typeof item.problemKey === "string") {
+    const trimmedKey = item.problemKey.trim();
+    if (trimmedKey && !/\s/.test(trimmedKey)) {
+      if (trimmedKey.startsWith(`${canonicalPrefix}:`)) {
+        explicitProblemKey = trimmedKey;
+      } else if (trimmedKey.startsWith(`${platform}:`)) {
+        explicitProblemKey = `${canonicalPrefix}:${trimmedKey.slice(platform.length + 1)}`;
+      }
+    }
+  }
 
   const rawSourceId =
     typeof item.sourceId === "string" && item.sourceId.trim() && !/\s/.test(item.sourceId.trim())
@@ -268,14 +327,25 @@ export function normalizeBridgeVerdictPayload(raw: unknown): NormalizedBridgeVer
   const inferredSourceId =
     inferred && inferred.source === platform && inferred.sourceId ? inferred.sourceId : undefined;
   const keyDerivedSourceId = explicitProblemKey
-    ? explicitProblemKey.slice(platform.length + 1)
+    ? explicitProblemKey.slice(canonicalPrefix.length + 1)
     : undefined;
-  const sourceId = rawSourceId ?? inferredSourceId ?? keyDerivedSourceId;
+  const rawOrInferredSourceId = rawSourceId ?? inferredSourceId ?? keyDerivedSourceId;
+
+  let normalizedSourceId = rawOrInferredSourceId;
+  if (normalizedSourceId && platform === "codeforces") {
+    const cfRef = parseCodeforcesRef(normalizedSourceId);
+    if (cfRef) {
+      normalizedSourceId = cfRef.sourceId;
+    }
+  } else if (normalizedSourceId && platform === "luogu") {
+    normalizedSourceId = normalizeLuoguPid(normalizedSourceId);
+  }
+  const sourceId = normalizedSourceId;
 
   const problemKey =
     explicitProblemKey ??
     (inferred && inferred.source === platform ? inferred.problemKey : undefined) ??
-    (sourceId ? `${platform}:${sourceId}` : undefined);
+    (sourceId ? `${canonicalPrefix}:${sourceId}` : undefined);
 
   if (!problemKey) {
     return null;
@@ -320,7 +390,9 @@ export function normalizeBridgeVerdictPayload(raw: unknown): NormalizedBridgeVer
       timestamp
     },
     ...(sourceId ? { sourceId } : {}),
-    ...(submissionId ? { submissionId, dedupKey: `bridge-${platform}-${submissionId}` } : {})
+    ...(submissionId
+      ? { submissionId, dedupKey: buildBridgeVerdictDedupKey(platform, submissionId) }
+      : {})
   };
 }
 
@@ -434,10 +506,10 @@ function inferProblemIdentityFromUrl(
 
       // LeetCode Global / CN
       if (host === "leetcode.com" || host === "www.leetcode.com" || host === "leetcode.cn" || host === "www.leetcode.cn") {
-        const lcMatch = parsed.pathname.match(/^\/problems\/([a-z0-9-]+)/i);
+        const lcMatch = parsed.pathname.match(/^\/(?:contest\/[a-z0-9-]+\/)?problems\/([A-Za-z0-9-]+)/i);
         if (lcMatch?.[1]) {
-          const slug = lcMatch[1].toLowerCase();
           const isCn = host.endsWith("leetcode.cn");
+          const slug = isCn ? lcMatch[1] : lcMatch[1].toLowerCase();
           return {
             source: isCn ? "leetcode-cn" : "leetcode-global",
             sourceId: slug,
@@ -664,8 +736,12 @@ export class LocalhostBridge {
     });
   }
 
-  private applyVerdictCorsHeaders(res: ServerResponse, origin: string | undefined): boolean {
-    if (!origin) {
+  private applyVerdictCorsHeaders(
+    res: ServerResponse,
+    origin: string | undefined,
+    requestPrivateNetwork = false
+  ): boolean {
+    if (origin === undefined) {
       return true;
     }
     if (!isAllowedVerdictCorsOrigin(origin)) {
@@ -675,11 +751,14 @@ export class LocalhostBridge {
     res.setHeader("vary", "Origin");
     res.setHeader("access-control-allow-methods", "POST, OPTIONS");
     res.setHeader("access-control-allow-headers", "content-type, x-algo-coach-token");
+    if (requestPrivateNetwork) {
+      res.setHeader("access-control-allow-private-network", "true");
+    }
     return true;
   }
 
   private async handleVerdictPost(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const rawOrigin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
+    const rawOrigin = Array.isArray(req.headers.origin) ? req.headers.origin[0] : req.headers.origin;
     if (!this.applyVerdictCorsHeaders(res, rawOrigin)) {
       this.sendJson(res, 403, { ok: false, error: "Forbidden: untrusted Origin for /verdict." });
       return;
@@ -735,11 +814,29 @@ export class LocalhostBridge {
 
     const pathname = (req.url ?? "/").split("?")[0] || "/";
 
-    if (req.method === "OPTIONS" && pathname === "/verdict") {
-      const rawOrigin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
-      if (!this.applyVerdictCorsHeaders(res, rawOrigin)) {
-        this.sendJson(res, 403, { ok: false, error: "Forbidden: untrusted Origin." });
-        return;
+    if (req.method === "OPTIONS" && (pathname === "/verdict" || pathname === "/")) {
+      const rawOrigin = Array.isArray(req.headers.origin) ? req.headers.origin[0] : req.headers.origin;
+      const reqPnaHeader = Array.isArray(req.headers["access-control-request-private-network"])
+        ? req.headers["access-control-request-private-network"][0]
+        : req.headers["access-control-request-private-network"];
+      const reqPna = String(reqPnaHeader ?? "").trim().toLowerCase() === "true";
+      if (pathname === "/verdict") {
+        if (!this.applyVerdictCorsHeaders(res, rawOrigin, reqPna)) {
+          this.sendJson(res, 403, { ok: false, error: "Forbidden: untrusted Origin." });
+          return;
+        }
+      } else if (rawOrigin !== undefined) {
+        if (!isAllowedBridgeOrigin(rawOrigin)) {
+          this.sendJson(res, 403, { ok: false, error: "Forbidden: untrusted Origin." });
+          return;
+        }
+        res.setHeader("access-control-allow-origin", rawOrigin);
+        res.setHeader("vary", "Origin");
+        res.setHeader("access-control-allow-methods", "POST, OPTIONS");
+        res.setHeader("access-control-allow-headers", "content-type, x-algo-coach-token");
+        if (reqPna) {
+          res.setHeader("access-control-allow-private-network", "true");
+        }
       }
       res.writeHead(204);
       res.end();
@@ -769,6 +866,26 @@ export class LocalhostBridge {
     if (pathname !== "/") {
       this.sendJson(res, 404, { ok: false, error: "Not Found." });
       return;
+    }
+
+    const rawOrigin = Array.isArray(req.headers.origin) ? req.headers.origin[0] : req.headers.origin;
+    if (rawOrigin !== undefined) {
+      if (!isAllowedBridgeOrigin(rawOrigin)) {
+        this.sendJson(res, 403, { ok: false, error: "Forbidden: untrusted Origin." });
+        return;
+      }
+      const rawContentType = Array.isArray(req.headers["content-type"])
+        ? req.headers["content-type"][0]
+        : req.headers["content-type"];
+      if (!rawContentType || !/^\s*application\/(?:[a-z0-9.+-]+\+)?json\b/i.test(rawContentType)) {
+        this.sendJson(res, 415, {
+          ok: false,
+          error: "Unsupported Media Type: expected application/json when Origin header is present."
+        });
+        return;
+      }
+      res.setHeader("access-control-allow-origin", rawOrigin);
+      res.setHeader("vary", "Origin");
     }
 
     if (this.pairingToken) {

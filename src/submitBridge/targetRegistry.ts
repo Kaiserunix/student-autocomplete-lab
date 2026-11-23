@@ -25,9 +25,9 @@ export const PLATFORM_HTTPS_HOST_WHITELIST: Record<
   "leetcode-global": ["leetcode.com", "www.leetcode.com"],
   "leetcode-cn": ["leetcode.cn", "www.leetcode.cn"],
   luogu: ["www.luogu.com.cn", "luogu.com.cn"],
-  codeforces: ["codeforces.com", "www.codeforces.com"],
+  codeforces: ["codeforces.com", "www.codeforces.com", "m.codeforces.com"],
   atcoder: ["atcoder.jp"],
-  nowcoder: ["ac.nowcoder.com", "www.nowcoder.com"]
+  nowcoder: ["ac.nowcoder.com", "www.nowcoder.com", "nowcoder.com"]
 };
 
 const ALL_ALLOWED_HOSTS = new Set<string>(
@@ -83,8 +83,8 @@ export function resolveSubmitTarget(problem: ProblemDocument): SubmitTarget | nu
     }
 
     case "leetcode-cn": {
-      const slug = problem.sourceId.trim().toLowerCase();
-      if (!/^[a-z0-9-]+$/.test(slug)) return null;
+      const slug = problem.sourceId.trim();
+      if (!/^[A-Za-z0-9-]+$/.test(slug)) return null;
       const submitUrl = `https://leetcode.cn/problems/${slug}/`;
       return {
         platform: "leetcode-cn",
@@ -141,9 +141,9 @@ export function resolveSubmitTarget(problem: ProblemDocument): SubmitTarget | nu
           contestId = parts[0];
           taskId = parts[1];
         } else {
-          const inferred = problem.sourceId.toLowerCase().match(/^([a-z0-9-]+?)_[a-z0-9]+$/);
+          const inferred = problem.sourceId.toLowerCase().match(/^([a-z0-9_-]+)_([a-z0-9]+)$/);
           if (inferred?.[1]) {
-            contestId = inferred[1];
+            contestId = inferred[1].replace(/_/g, "-");
             taskId = problem.sourceId.toLowerCase();
           }
         }

@@ -210,10 +210,11 @@ function buildPublicApiEvent(input: {
 
 export function extractLeetCodeSlug(problem: ProblemDocument): string {
   const urlMatch = problem.canonicalUrl?.match(
-    /^https:\/\/(?:www\.)?leetcode\.(?:cn|com)\/problems\/([a-z0-9-]+)/i
+    /^https:\/\/(?:www\.)?leetcode\.(?:cn|com)\/(?:contest\/[a-z0-9-]+\/)?problems\/([A-Za-z0-9-]+)/i
   );
-  const candidate = (urlMatch?.[1] ?? problem.sourceId).trim().toLowerCase();
-  if (!/^[a-z0-9-]+$/.test(candidate)) {
+  const rawCandidate = (urlMatch?.[1] ?? problem.sourceId).trim();
+  const candidate = problem.source === "leetcode-cn" ? rawCandidate : rawCandidate.toLowerCase();
+  if (!/^[A-Za-z0-9-]+$/.test(candidate)) {
     throw new Error("Unable to resolve LeetCode problem slug for verdict sync.");
   }
   return candidate;
@@ -239,10 +240,10 @@ export function extractAtCoderTask(problem: ProblemDocument): {
     return { contestId: slashParts[0], taskId: slashParts[1] };
   }
 
-  const inferred = rawId.match(/^([a-z0-9-]+?)_[a-z0-9]+$/);
+  const inferred = rawId.match(/^([a-z0-9_-]+)_([a-z0-9]+)$/);
   if (/^[a-z0-9_-]+$/.test(rawId)) {
     return {
-      ...(inferred?.[1] ? { contestId: inferred[1] } : {}),
+      ...(inferred?.[1] ? { contestId: inferred[1].replace(/_/g, "-") } : {}),
       taskId: rawId
     };
   }
@@ -311,8 +312,8 @@ export async function fetchLatestLeetCodeCnVerdict(
   deps: PublicVerdictFetchDependencies = {}
 ): Promise<PublicVerdictFetchResult> {
   const handle = validateHandle(options.handle, "LeetCode CN");
-  const titleSlug = options.titleSlug.trim().toLowerCase();
-  if (!/^[a-z0-9-]+$/.test(titleSlug)) {
+  const titleSlug = options.titleSlug.trim();
+  if (!/^[A-Za-z0-9-]+$/.test(titleSlug)) {
     throw new Error("Invalid LeetCode CN titleSlug.");
   }
 
@@ -371,9 +372,9 @@ export async function fetchLatestLeetCodeCnVerdict(
         ? (item.question as Record<string, unknown>)
         : undefined;
     const rowSlug =
-      typeof question?.titleSlug === "string" ? question.titleSlug.trim().toLowerCase() : "";
+      typeof question?.titleSlug === "string" ? question.titleSlug.trim() : "";
 
-    if (!id || submitTime === undefined || rowSlug !== titleSlug) continue;
+    if (!id || submitTime === undefined || rowSlug.toLowerCase() !== titleSlug.toLowerCase()) continue;
     if (submitTime < options.submittedAfterSeconds - 5) continue;
 
     if (!latest || submitTime > latest.submitTime) {
@@ -395,7 +396,7 @@ export async function fetchLatestLeetCodeCnVerdict(
     submissionId: latest.id,
     dedupKey: `lccn-sub-${latest.id}`,
     event: buildPublicApiEvent({
-      problemKey: options.problemKey ?? `leetcode-cn:${titleSlug}`,
+      problemKey: options.problemKey ?? `lc-cn:${titleSlug}`,
       platform: "leetcode-cn",
       verdict,
       submissionUrl: `https://leetcode.cn/problems/${titleSlug}/submissions/`,
@@ -540,7 +541,7 @@ export async function fetchLatestLeetCodeGlobalVerdict(
     submissionId: latest.id,
     dedupKey: `lc-sub-${latest.id}`,
     event: buildPublicApiEvent({
-      problemKey: options.problemKey ?? `leetcode-global:${titleSlug}`,
+      problemKey: options.problemKey ?? `lc-global:${titleSlug}`,
       platform: "leetcode-global",
       verdict,
       submissionUrl: `https://leetcode.com/submissions/detail/${encodeURIComponent(latest.id)}/`,

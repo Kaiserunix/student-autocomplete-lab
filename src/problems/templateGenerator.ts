@@ -132,7 +132,7 @@ function generateStdioBody(language: SupportedLanguage): string {
         "import java.io.*;",
         "import java.util.*;",
         "",
-        "public class Main {",
+        "class Main {",
         "    public static void main(String[] args) throws Exception {",
         "        BufferedReader br = new BufferedReader(new InputStreamReader(System.in));",
         "        // TODO: implement solution",

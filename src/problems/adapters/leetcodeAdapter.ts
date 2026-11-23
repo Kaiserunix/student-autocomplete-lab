@@ -11,7 +11,7 @@ import {
   curatedEntryToMetadataDocument,
   getCuratedSheet
 } from "../sheets/curatedSheets";
-import { htmlToMarkdown } from "./htmlUtils";
+import { htmlToMarkdown, normalizeRefInput } from "./htmlUtils";
 import {
   DEFAULT_HTTP_TIMEOUT_MS,
   DEFAULT_USER_AGENT,
@@ -218,7 +218,7 @@ function tierToDifficultyFilter(minTier?: number, maxTier?: number): string | un
 }
 
 function normalizeFrontendIdKey(raw: string): string {
-  const compact = raw.trim().replace(/\s+/g, " ").toUpperCase();
+  const compact = normalizeRefInput(raw).toUpperCase();
   if (/^\d+$/.test(compact)) {
     return String(Number.parseInt(compact, 10));
   }
@@ -226,20 +226,42 @@ function normalizeFrontendIdKey(raw: string): string {
   if (series?.[1] && series?.[2]) {
     return `${series[1]} ${series[2]}`;
   }
+  const mianshi = compact.match(/^面试题\s*(\d+(?:\.\d+)?)$/);
+  if (mianshi?.[1]) {
+    return `面试题 ${mianshi[1]}`;
+  }
+  const offer = compact.match(
+    /^剑指\s*OFFER\s*([IVX]+\s+)?(\d+(?:\s*[-–]\s*(?:I{1,3}|[12]))?)$/
+  );
+  if (offer?.[2]) {
+    const roman = offer[1] ? `${offer[1].trim()} ` : "";
+    const numPart = offer[2].replace(/\s*[-–]\s*/g, "- ").trim();
+    return `剑指 OFFER ${roman}${numPart}`;
+  }
   return compact;
 }
 
 function frontendIdAliases(raw: string): string[] {
   const exact = normalizeFrontendIdKey(raw);
-  const aliases = [exact];
+  const aliases = new Set<string>([exact]);
   const series = exact.match(/^(LCR|LCP)\s+0*(\d+)$/);
   if (series?.[1] && series?.[2]) {
-    const unpadded = `${series[1]} ${series[2]}`;
-    if (unpadded !== exact) {
-      aliases.push(unpadded);
+    aliases.add(`${series[1]} ${series[2]}`);
+  }
+  if (exact.startsWith("面试题 ") || exact.startsWith("剑指 OFFER ")) {
+    aliases.add(exact.replace(/\s+/g, ""));
+    aliases.add(exact.replace(/\s*-\s*/g, "-"));
+    aliases.add(exact.replace(/\s*-\s*/g, "- "));
+    const offerPad = exact.match(/^剑指 OFFER ([IVX]+ )?0*(\d+)(.*)$/);
+    if (offerPad?.[2]) {
+      const roman = offerPad[1] ?? "";
+      const num = offerPad[2];
+      const tail = offerPad[3] ?? "";
+      aliases.add(`剑指 OFFER ${roman}${num}${tail}`);
+      aliases.add(`剑指 OFFER ${roman}${num.padStart(2, "0")}${tail}`);
     }
   }
-  return aliases;
+  return [...aliases];
 }
 
 function stripOuterFormatting(raw: string): string {
@@ -260,51 +282,111 @@ function stripOuterFormatting(raw: string): string {
   return text;
 }
 
-/**
- * Extracts expected outputs from LeetCode Markdown/HTML example blocks:
- * supports inline `**Output:** [0,1]`, inline code ``**Output:** `[0,1]` ``,
- * Chinese `**输出：** 2` / `输出：`, and newline-after-`Output:` (plain or fenced code block).
- */
-export function extractLeetCodeExampleOutputs(statementMarkdown: string): string[] {
-  const outputs: string[] = [];
-  const lines = statementMarkdown.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+interface DelimiterBalanceState {
+  balance: number;
+  inString: boolean;
+  escaped: boolean;
+}
 
-  const lineLabelRe =
-    /^(?:[-*+>]+\s*)?(?:[*_`]{1,3})?(?:Output|输出)(?:\*\*|__|`)?\s*[:：](?:`(?=\s|$|\*\*|__)|(?:\*\*|__))*(.*)$/i;
-  const inlineBoldLabelRe =
-    /(?:\*\*|__)(?:Output|输出)(?:\*\*|__)?\s*[:：](?:\*\*|__)?\s*([^\n]+)/gi;
-  const stopLineRe =
-    /^(?:(?:[-*+>]+\s*)?(?:[*_`]{1,3})?(?:(?:Input|Output|Explanation|Example|Constraints|Follow[- ]?up)\b|(?:输入|输出|解释|说明|示例|提示))|#{1,6}\s|```)/i;
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const trimmedLine = lines[i]!.trim();
-    const match = trimmedLine.match(lineLabelRe);
-    if (!match) {
-      // Fallback for rare single-line `**Input:** ... **Output:** ...` format
-      let inlineMatch: RegExpExecArray | null;
-      inlineBoldLabelRe.lastIndex = 0;
-      while ((inlineMatch = inlineBoldLabelRe.exec(trimmedLine)) !== null) {
-        const cleaned = stripOuterFormatting(inlineMatch[1] ?? "");
-        if (cleaned.length > 0) {
-          outputs.push(cleaned);
-        }
+function updateDelimiterBalance(text: string, state: DelimiterBalanceState): void {
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i]!;
+    if (state.inString) {
+      if (state.escaped) {
+        state.escaped = false;
+      } else if (ch === "\\") {
+        state.escaped = true;
+      } else if (ch === "\"") {
+        state.inString = false;
       }
       continue;
     }
+    if (ch === "\"") {
+      state.inString = true;
+    } else if (ch === "[" || ch === "{" || ch === "(") {
+      state.balance += 1;
+    } else if ((ch === "]" || ch === "}" || ch === ")") && state.balance > 0) {
+      state.balance -= 1;
+    }
+  }
+}
 
-    const sameLine = stripOuterFormatting(match[1] ?? "");
+interface ExtractedLeetCodeExample {
+  input?: string;
+  output: string;
+}
+
+/**
+ * Extracts `(input, output)` example pairs from LeetCode Markdown/HTML statements:
+ * supports colon-bearing (`**Output:** [0,1]`, `**输出：** 2`) and colon-less
+ * standalone labels (`Output\n[null,...]`, `输出`), inline code, fenced blocks,
+ * and multiline bracket-balanced arrays/objects.
+ */
+export function extractLeetCodeExamples(statementMarkdown: string): ExtractedLeetCodeExample[] {
+  const examples: ExtractedLeetCodeExample[] = [];
+  const lines = statementMarkdown.replace(/\r\n/g, "\n").replace(/\r/g, "\n").split("\n");
+
+  const outputColonRe =
+    /^(?:[-*+>]+\s*)?(?:[*_`]{1,3})?(?:Output|输出)(?:\*\*|__|`)?\s*[:：](?:`(?=\s|$|\*\*|__)|(?:\*\*|__))*(.*)$/i;
+  const outputBareRe =
+    /^(?:[-*+>]+\s*)?(?:[*_`]{1,3})?(?:Output|输出)(?:[*_`]{1,3})?\s*$/i;
+  const inputColonRe =
+    /^(?:[-*+>]+\s*)?(?:[*_`]{1,3})?(?:Input|输入)(?:\*\*|__|`)?\s*[:：](?:`(?=\s|$|\*\*|__)|(?:\*\*|__))*(.*)$/i;
+  const inputBareRe =
+    /^(?:[-*+>]+\s*)?(?:[*_`]{1,3})?(?:Input|输入)(?:[*_`]{1,3})?\s*$/i;
+
+  const inlinePairRe =
+    /(?:\*\*|__)?(?:Input|输入)(?:\*\*|__)?\s*[:：](?:\*\*|__)?\s*([^\n]*?)\s+(?:\*\*|__)(?:Output|输出)(?:\*\*|__)?\s*[:：](?:\*\*|__)?\s*([^\n]+)/i;
+  const inlineBoldOutputRe =
+    /(?:\*\*|__)(?:Output|输出)(?:\*\*|__)?\s*[:：](?:\*\*|__)?\s*([^\n]+)/gi;
+
+  const stopLineRe =
+    /^(?:(?:[-*+>]+\s*)?(?:[*_`]{1,3})?(?:(?:Input|Output|Explanation|Example|Constraints|Follow[- ]?up)\b|(?:输入|输出|解释|说明|示例|提示))(?:\s*[:：]|[*_`]*\s*$)|#{1,6}\s|```)/i;
+
+  let currentInput: string | undefined;
+
+  const readBlockAfterLabel = (
+    startIdx: number,
+    sameLineRaw: string
+  ): { value: string; nextIndex: number } => {
+    const state: DelimiterBalanceState = { balance: 0, inString: false, escaped: false };
+    const sameLine = stripOuterFormatting(sameLineRaw);
     if (sameLine.length > 0) {
-      outputs.push(sameLine);
-      continue;
+      updateDelimiterBalance(sameLine, state);
+      if (state.balance <= 0 && !state.inString) {
+        return { value: sameLine, nextIndex: startIdx };
+      }
+      const collected = [sameLine];
+      let j = startIdx + 1;
+      while (j < lines.length) {
+        const nextTrimmed = lines[j]!.trim();
+        if (nextTrimmed.startsWith("```") || stopLineRe.test(nextTrimmed)) {
+          break;
+        }
+        if (!nextTrimmed) {
+          if (state.balance <= 0 && !state.inString) {
+            break;
+          }
+          j += 1;
+          continue;
+        }
+        const cleaned = stripOuterFormatting(nextTrimmed);
+        collected.push(cleaned);
+        updateDelimiterBalance(cleaned, state);
+        j += 1;
+        if (state.balance <= 0 && !state.inString) {
+          break;
+        }
+      }
+      return { value: collected.join("\n").trim(), nextIndex: j - 1 };
     }
 
-    // Nothing on the same line -> inspect subsequent line(s)
-    let j = i + 1;
+    let j = startIdx + 1;
     while (j < lines.length && lines[j]!.trim() === "") {
       j += 1;
     }
     if (j >= lines.length) {
-      break;
+      return { value: "", nextIndex: startIdx };
     }
 
     if (lines[j]!.trim().startsWith("```")) {
@@ -314,31 +396,152 @@ export function extractLeetCodeExampleOutputs(statementMarkdown: string): string
         blockLines.push(lines[j]!.trimEnd());
         j += 1;
       }
-      const blockVal = blockLines.join("\n").trim();
-      if (blockVal.length > 0) {
-        outputs.push(blockVal);
-      }
-      i = j;
-      continue;
+      return { value: blockLines.join("\n").trim(), nextIndex: j };
     }
 
     const collected: string[] = [];
     while (j < lines.length) {
       const nextTrimmed = lines[j]!.trim();
-      if (!nextTrimmed || stopLineRe.test(nextTrimmed)) {
+      if (nextTrimmed.startsWith("```") || stopLineRe.test(nextTrimmed)) {
         break;
       }
-      collected.push(stripOuterFormatting(nextTrimmed));
+      if (!nextTrimmed) {
+        if (collected.length === 0 || (state.balance <= 0 && !state.inString)) {
+          break;
+        }
+        j += 1;
+        continue;
+      }
+      const cleaned = stripOuterFormatting(nextTrimmed);
+      collected.push(cleaned);
+      updateDelimiterBalance(cleaned, state);
       j += 1;
     }
-    const value = collected.join("\n").trim();
-    if (value.length > 0) {
-      outputs.push(value);
+    return { value: collected.join("\n").trim(), nextIndex: j - 1 };
+  };
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const trimmedLine = lines[i]!.trim();
+
+    const inColon = trimmedLine.match(inputColonRe);
+    const inBare = !inColon && inputBareRe.test(trimmedLine);
+    if (inColon || inBare) {
+      // Check rare single-line `**Input:** ... **Output:** ...`
+      const pairMatch = trimmedLine.match(inlinePairRe);
+      if (pairMatch?.[2]) {
+        const inputVal = stripOuterFormatting(pairMatch[1] ?? "");
+        const outputVal = stripOuterFormatting(pairMatch[2] ?? "");
+        if (outputVal) {
+          examples.push({ ...(inputVal ? { input: inputVal } : {}), output: outputVal });
+          currentInput = undefined;
+          continue;
+        }
+      }
+      const res = readBlockAfterLabel(i, inColon?.[1] ?? "");
+      if (res.value) {
+        currentInput = res.value;
+      }
+      i = res.nextIndex;
+      continue;
     }
-    i = j - 1;
+
+    const outColon = trimmedLine.match(outputColonRe);
+    const outBare = !outColon && outputBareRe.test(trimmedLine);
+    if (outColon || outBare) {
+      const res = readBlockAfterLabel(i, outColon?.[1] ?? "");
+      if (res.value) {
+        examples.push({
+          ...(currentInput !== undefined ? { input: currentInput } : {}),
+          output: res.value
+        });
+        currentInput = undefined;
+      }
+      i = res.nextIndex;
+      continue;
+    }
+
+    // Fallback for any other single-line bold `**Output:** ...`
+    let inlineMatch: RegExpExecArray | null;
+    inlineBoldOutputRe.lastIndex = 0;
+    while ((inlineMatch = inlineBoldOutputRe.exec(trimmedLine)) !== null) {
+      const cleaned = stripOuterFormatting(inlineMatch[1] ?? "");
+      if (cleaned.length > 0) {
+        examples.push({
+          ...(currentInput !== undefined ? { input: currentInput } : {}),
+          output: cleaned
+        });
+        currentInput = undefined;
+      }
+    }
   }
 
-  return outputs;
+  return examples;
+}
+
+export function extractLeetCodeExampleOutputs(statementMarkdown: string): string[] {
+  return extractLeetCodeExamples(statementMarkdown).map((ex) => ex.output);
+}
+
+function canonicalizeExampleInputForMatch(raw: string): string {
+  const normalized = raw.replace(/\r\n/g, "\n").trim();
+  const out: string[] = [];
+  let inString = false;
+  let escaped = false;
+  let depth = 0;
+
+  let i = 0;
+  while (i < normalized.length) {
+    const ch = normalized[i]!;
+    if (inString) {
+      out.push(ch);
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === "\"") {
+        inString = false;
+      }
+      i += 1;
+      continue;
+    }
+
+    if (ch === "\"") {
+      inString = true;
+      out.push(ch);
+      i += 1;
+      continue;
+    }
+
+    if (ch === "[" || ch === "{" || ch === "(") {
+      depth += 1;
+      out.push(ch);
+      i += 1;
+      continue;
+    }
+    if ((ch === "]" || ch === "}" || ch === ")") && depth > 0) {
+      depth -= 1;
+      out.push(ch);
+      i += 1;
+      continue;
+    }
+
+    // Strip top-level parameter assignment prefixes like `nums = ` or `, target = `
+    if (depth === 0) {
+      const rest = normalized.slice(i);
+      const assignMatch = rest.match(/^(?:,\s*)?[A-Za-z_][A-Za-z0-9_]*\s*=\s*/);
+      if (assignMatch && (out.length === 0 || rest.startsWith(",") || /[\s\n]/.test(normalized[i - 1] ?? ""))) {
+        i += assignMatch[0].length;
+        continue;
+      }
+    }
+
+    if (!/\s/.test(ch)) {
+      out.push(ch);
+    }
+    i += 1;
+  }
+
+  return out.join("");
 }
 
 function buildFunctionMeta(
@@ -407,9 +610,42 @@ function buildSamples(
     inputs.push(question.sampleTestCase.replace(/\r\n/g, "\n").trim());
   }
 
-  const expectedOutputs = extractLeetCodeExampleOutputs(statementMarkdown);
+  const examples = extractLeetCodeExamples(statementMarkdown);
+  if (examples.length === inputs.length) {
+    return inputs.map((input, idx) => {
+      const expectedOutput = examples[idx]?.output;
+      return {
+        id: `sample-${idx + 1}`,
+        input,
+        ...(expectedOutput !== undefined ? { expectedOutput } : {}),
+        isOriginal: true
+      };
+    });
+  }
+
+  // When example count in statement differs from `exampleTestcaseList` (e.g., CN translations
+  // missing newly added test cases), align by canonicalized input instead of shifting outputs.
+  const alignedOutputs = new Array<string | undefined>(inputs.length).fill(undefined);
+  const inputKeys = inputs.map((inp) => canonicalizeExampleInputForMatch(inp));
+  const usedIndices = new Set<number>();
+
+  for (const ex of examples) {
+    if (!ex.input) {
+      continue;
+    }
+    const exKey = canonicalizeExampleInputForMatch(ex.input);
+    if (!exKey) {
+      continue;
+    }
+    const matchIdx = inputKeys.findIndex((k, idx) => !usedIndices.has(idx) && k === exKey);
+    if (matchIdx >= 0) {
+      usedIndices.add(matchIdx);
+      alignedOutputs[matchIdx] = ex.output;
+    }
+  }
+
   return inputs.map((input, idx) => {
-    const expectedOutput = expectedOutputs[idx];
+    const expectedOutput = alignedOutputs[idx];
     return {
       id: `sample-${idx + 1}`,
       input,
@@ -461,27 +697,27 @@ export class LeetCodeAdapter implements ProblemSourceAdapter {
 
   canHandleUrl(url: string): boolean {
     try {
-      const parsed = new URL(url.trim());
+      const parsed = new URL(normalizeRefInput(url));
       const hostname = parsed.hostname.toLowerCase();
       const expectedHost = this.host;
       if (hostname !== expectedHost && hostname !== `www.${expectedHost}`) {
         return false;
       }
-      return /^\/problems\/[a-z0-9-]+(?:\/.*)?$/i.test(parsed.pathname);
+      return /^\/(?:contest\/[a-z0-9-]+\/)?problems\/[a-z0-9-]+(?:\/.*)?$/i.test(parsed.pathname);
     } catch {
       return false;
     }
   }
 
   resolveRef(input: string): { sourceId: string; canonicalUrl?: string } | null {
-    const trimmed = input.trim();
+    const trimmed = normalizeRefInput(input);
     if (!trimmed) {
       return null;
     }
 
     // Special daily alias (respecting site-specific prefix when provided)
     const dailyMatch = trimmed.match(
-      /^(?:(lc-cn|lc-global|leetcode-cn|leetcode-global|lc|leetcode):)?(?:daily|today)$/i
+      /^(?:(lc-cn|lc-global|leetcode-cn|leetcode-global|lc|leetcode)\s*:\s*)?(?:daily|today)$/i
     );
     if (dailyMatch) {
       const prefix = dailyMatch[1]?.toLowerCase();
@@ -497,20 +733,21 @@ export class LeetCodeAdapter implements ProblemSourceAdapter {
         return null;
       }
       const parsed = new URL(trimmed);
-      const match = parsed.pathname.match(/^\/problems\/([a-z0-9-]+)/i);
-      const slug = match?.[1]?.toLowerCase();
-      if (!slug) {
+      const match = parsed.pathname.match(/^\/(?:contest\/[a-z0-9-]+\/)?problems\/([A-Za-z0-9-]+)/i);
+      const rawSlug = match?.[1];
+      if (!rawSlug) {
         return null;
       }
+      const slug = this.site === "cn" ? rawSlug : rawSlug.toLowerCase();
       return {
         sourceId: slug,
         canonicalUrl: `https://${this.host}/problems/${slug}/`
       };
     }
 
-    // Colon-prefixed ref (supports slugs, numeric IDs, and LCR/LCP series IDs)
+    // Colon-prefixed ref (supports slugs, numeric IDs, and LCR/LCP/面试题/剑指 Offer series IDs)
     const prefixMatch = trimmed.match(
-      /^(lc-cn|lc-global|leetcode-cn|leetcode-global|lc|leetcode):(.+)$/i
+      /^(lc-cn|lc-global|leetcode-cn|leetcode-global|lc|leetcode)\s*:\s*(.+)$/i
     );
     if (prefixMatch?.[1] && prefixMatch?.[2]) {
       const prefix = prefixMatch[1].toLowerCase();
@@ -523,7 +760,7 @@ export class LeetCodeAdapter implements ProblemSourceAdapter {
         return { sourceId: `#${frontendId}` };
       }
       if (/^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(body)) {
-        const slug = body.toLowerCase();
+        const slug = this.site === "cn" ? body : body.toLowerCase();
         return {
           sourceId: slug,
           canonicalUrl: `https://${this.host}/problems/${slug}/`
@@ -532,8 +769,8 @@ export class LeetCodeAdapter implements ProblemSourceAdapter {
       return null;
     }
 
-    // Compact LC numeric prefix (e.g. "LC1", "LC-146", "lc 146", "lc#1", "力扣1")
-    const compactLcNum = trimmed.match(/^(?:lc|leetcode|力扣)[-\s#]?(\d{1,5})$/i);
+    // Compact LC numeric prefix (e.g. "LC1", "LC-146", "lc 146", "lc #1", "力扣 #1")
+    const compactLcNum = trimmed.match(/^(?:lc|leetcode|力扣)(?:\s*[-\s#]\s*|\s*)(\d{1,5})$/i);
     if (compactLcNum?.[1]) {
       return { sourceId: `#${normalizeFrontendIdKey(compactLcNum[1])}` };
     }
@@ -544,13 +781,21 @@ export class LeetCodeAdapter implements ProblemSourceAdapter {
       return { sourceId: `#${seriesMatch[1].toUpperCase()} ${seriesMatch[2]}` };
     }
 
-    // Bare numeric or #-prefixed frontend ID (e.g. "1", "#1", "146", "#146")
-    const bareNum = trimmed.match(/^#?(\d{1,5})$/);
+    // CN-exclusive series ("面试题 01.01", "剑指 Offer 03", "剑指 Offer 10- I", "剑指 Offer II 001")
+    if (this.site === "cn") {
+      const cnSeries = this.parseCnExclusiveSeriesId(trimmed);
+      if (cnSeries) {
+        return { sourceId: `#${cnSeries}` };
+      }
+    }
+
+    // Bare numeric or #-prefixed frontend ID (e.g. "1", "#1", "# 1", "146", "#146")
+    const bareNum = trimmed.match(/^#?\s*(\d{1,5})$/);
     if (bareNum?.[1]) {
       return { sourceId: `#${normalizeFrontendIdKey(bareNum[1])}` };
     }
 
-    // Bare kebab-case slug (e.g. "two-sum", "3sum")
+    // Bare slug (e.g. "two-sum", "3sum", or CN mixed-case "1fGaJU")
     if (
       /[a-z]/i.test(trimmed) &&
       /^[a-z0-9]+(?:-[a-z0-9]+)*$/i.test(trimmed) &&
@@ -559,7 +804,7 @@ export class LeetCodeAdapter implements ProblemSourceAdapter {
       ) &&
       !/^\d+-?[A-Z]\d?$/i.test(trimmed)
     ) {
-      const slug = trimmed.toLowerCase();
+      const slug = this.site === "cn" ? trimmed : trimmed.toLowerCase();
       return {
         sourceId: slug,
         canonicalUrl: `https://${this.host}/problems/${slug}/`
@@ -847,14 +1092,35 @@ export class LeetCodeAdapter implements ProblemSourceAdapter {
     return true;
   }
 
+  private parseCnExclusiveSeriesId(body: string): string | null {
+    const trimmed = normalizeRefInput(body);
+    const msMatch = trimmed.match(/^面试题\s*(\d+(?:\.\d+)?)$/);
+    if (msMatch?.[1]) {
+      return `面试题 ${msMatch[1]}`;
+    }
+    const jzMatch = trimmed.match(
+      /^剑指\s*offer\s*([IVX]+\s+)?(\d+(?:\s*[-–]\s*(?:I{1,3}|[12]))?)$/i
+    );
+    if (jzMatch?.[2]) {
+      const roman = jzMatch[1] ? `${jzMatch[1].trim().toUpperCase()} ` : "";
+      const numPart = jzMatch[2].replace(/\s*[-–]\s*/g, "- ").trim().toUpperCase();
+      return `剑指 Offer ${roman}${numPart}`;
+    }
+    return null;
+  }
+
   private parseFrontendIdToken(body: string): string | null {
-    const trimmed = body.trim();
-    if (/^\d{1,5}$/.test(trimmed)) {
-      return normalizeFrontendIdKey(trimmed);
+    const trimmed = normalizeRefInput(body);
+    const numMatch = trimmed.match(/^#?\s*(\d{1,5})$/);
+    if (numMatch?.[1]) {
+      return normalizeFrontendIdKey(numMatch[1]);
     }
     const series = trimmed.match(/^(LCR|LCP)[-\s]?(\d{1,4})$/i);
     if (series?.[1] && series?.[2]) {
       return `${series[1].toUpperCase()} ${series[2]}`;
+    }
+    if (this.site === "cn") {
+      return this.parseCnExclusiveSeriesId(trimmed);
     }
     return null;
   }

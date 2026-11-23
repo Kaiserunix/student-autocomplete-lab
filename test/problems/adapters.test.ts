@@ -18,6 +18,7 @@ import {
   isAntiBotChallenge,
   listCuratedSheets,
   mapHttpStatusError,
+  parseAtCoderTaskHtml,
   parseCodeforcesRef,
   parseNowCoderHtml
 } from "../../src/problems";
@@ -142,6 +143,21 @@ describe("htmlUtils", () => {
     expect(md).toContain("`1 <= n <= 10^9`");
     expect(md).toContain("`Output:`");
     expect(md).not.toContain("****");
+  });
+
+  it("unwraps NowCoder prose <pre><div>...</div></pre> with equations, decodes extended entities, and preserves bold/code inside <li>", () => {
+    const html = `
+      <pre><div>The first line contains an integer <img src="https://www.nowcoder.com/equation?tex=%7BT%7D" /> &mdash; test cases.</div></pre>
+      <p>Bounds: a &leq; b, c &geq; d, x &middot; y, &plusmn;1, A &rarr; B.</p>
+      <ul>
+        <li><strong>Important</strong>: keep <code>x &lt; y</code> and check $a < b$ and $c > d$.</li>
+      </ul>
+    `;
+    const md = htmlToMarkdown(html);
+    expect(md).toContain("${T}$");
+    expect(md).not.toContain("```\nThe first line");
+    expect(md).toContain("a <= b, c >= d, x · y, ±1, A → B");
+    expect(md).toContain("- **Important**: keep `x < y` and check $a < b$ and $c > d$.");
   });
 });
 
@@ -363,6 +379,83 @@ describe("LeetCodeAdapter (global & cn)", () => {
     ].join("\n");
 
     expect(extractLeetCodeExampleOutputs(md)).toEqual(["[0,1]", "[1,2]", "true", "42"]);
+  });
+
+  it("extracts colon-less Output/输出, multiline bracket-balanced arrays, and safely aligns mismatched example lists", async () => {
+    const designMd = [
+      "```",
+      "输入",
+      '["LRUCache", "put", "get"]',
+      "[[2], [1, 1], [1]]",
+      "输出",
+      "[null, null, 1]",
+      "",
+      "解释",
+      "LRUCache lRUCache = new LRUCache(2);",
+      "```",
+      "",
+      "**Example 2:**",
+      "**Input:** matrix = [[1,2,3],[4,5,6],[7,8,9]]",
+      "**Output:** [[7,4,1],",
+      " [8,5,2],",
+      " [9,6,3]]"
+    ].join("\n");
+
+    expect(extractLeetCodeExampleOutputs(designMd)).toEqual([
+      "[null, null, 1]",
+      "[[7,4,1],\n[8,5,2],\n[9,6,3]]"
+    ]);
+
+    // Simulate binary-tree-inorder-traversal on CN: 4 testcases in exampleTestcaseList vs 3 examples in translatedContent
+    const mockFetch = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        data: {
+          question: {
+            title: "Binary Tree Inorder Traversal",
+            translatedTitle: "二叉树的中序遍历",
+            titleSlug: "binary-tree-inorder-traversal",
+            translatedContent: [
+              "<pre><strong>输入：</strong>root = [1,null,2,3]\n<strong>输出：</strong>[1,3,2]</pre>",
+              "<pre><strong>输入：</strong>root = []\n<strong>输出：</strong>[]</pre>",
+              "<pre><strong>输入：</strong>root = [1]\n<strong>输出：</strong>[1]</pre>"
+            ].join("\n"),
+            isPaidOnly: false,
+            difficulty: "Easy",
+            topicTags: [],
+            codeSnippets: [],
+            exampleTestcaseList: [
+              "[1,null,2,3]",
+              "[1,2,3,4,5,null,8,null,null,6,7,9]",
+              "[]",
+              "[1]"
+            ]
+          }
+        }
+      })
+    );
+
+    const cn = createLeetCodeCnAdapter({ fetchImpl: mockFetch });
+    const doc = await cn.fetchProblem("https://leetcode.cn/contest/weekly-1/problems/binary-tree-inorder-traversal/");
+    expect(doc.samples).toEqual([
+      { id: "sample-1", input: "[1,null,2,3]", expectedOutput: "[1,3,2]", isOriginal: true },
+      { id: "sample-2", input: "[1,2,3,4,5,null,8,null,null,6,7,9]", isOriginal: true },
+      { id: "sample-3", input: "[]", expectedOutput: "[]", isOriginal: true },
+      { id: "sample-4", input: "[1]", expectedOutput: "[1]", isOriginal: true }
+    ]);
+
+    // CN 面试题 & 剑指 Offer frontend IDs
+    const mockSeriesFetch = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      jsonResponse({
+        stat_status_pairs: [
+          { stat: { frontend_question_id: "面试题 01.01", question__title_slug: "is-unique-lcci" } },
+          { stat: { frontend_question_id: "剑指 Offer 03", question__title_slug: "shu-zu-zhong-zhong-fu-de-shu-zi-lcof" } }
+        ]
+      })
+    );
+    const cnSeries = createLeetCodeCnAdapter({ fetchImpl: mockSeriesFetch });
+    expect(cnSeries.resolveRef("面试题 01.01")?.sourceId).toBe("#面试题 01.01");
+    expect(cnSeries.resolveRef("剑指 Offer 03")?.sourceId).toBe("#剑指 Offer 03");
+    expect(cnSeries.canHandleUrl("https://leetcode.cn/contest/biweekly-100/problems/two-sum/")).toBe(true);
   });
 
   it("supports LeetCode CN daily question and translated content", async () => {
@@ -1062,5 +1155,199 @@ describe("NowCoderAdapter", () => {
     const health = await new NowCoderAdapter({ fetchImpl: healthyFetch }).healthCheck();
     expect(health.ok).toBe(true);
     expect(health.message).toContain("Competitive Companion");
+  });
+
+  it("handles off-screen -1000000px SSR div, C/C++/Rust/Pascal limits, and 试题不存在 soft-404 on NowCoder", async () => {
+    const offscreenPracticeHtml = `
+      <html>
+        <head><title>BM1 反转链表</title></head>
+        <body>
+          <div class="question-intr">
+            时间限制：C/C++/Rust/Pascal 1秒，其他语言2秒<br/>
+            空间限制：C/C++/Rust/Pascal 256 M，其他语言512 M
+          </div>
+          <div style="position:absolute;top:-1000000px;left:-1000000px;">
+            <h2>题目描述</h2>
+            <p>给定一个单链表，反转链表。</p>
+            <div class="question-oi">
+              <div class="question-oi-cont"><pre>{1,2,3}</pre></div>
+              <div class="question-oi-cont"><pre>{3,2,1}</pre></div>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+    const parsed = parseNowCoderHtml(offscreenPracticeHtml, "practice-bm1");
+    expect(parsed.statementMarkdown).toContain("反转链表");
+    expect(parsed.constraints).toEqual({ timeLimitMs: 1000, memoryLimitMb: 256 });
+    expect(parsed.samples).toEqual([
+      { id: "sample-1", input: "{1,2,3}", expectedOutput: "{3,2,1}", isOriginal: true }
+    ]);
+
+    const notFoundFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        textResponse('<html><title>牛客网-试题不存在_牛客网</title><a href="/login">登录</a></html>', 200)
+      );
+    await expect(
+      new NowCoderAdapter({ fetchImpl: notFoundFetch }).fetchProblem(
+        "https://www.nowcoder.com/practice/75a6ab5124d9464396763858a78eb667"
+      )
+    ).rejects.toMatchObject({
+      code: "NOT_FOUND",
+      source: "nowcoder"
+    });
+  });
+
+  it("covers hardened AtCoder, Luogu, and Codeforces edge cases (abc001_1, ?lang=ja, edpc/Ex, search filters, CF mirror fallback)", async () => {
+    // 1. AtCoder legacy layout (<h3> outside <section>) + JA locale detection + ?lang=ja
+    const legacyJaHtml = `
+      <html>
+        <head><title>A - 積雪深差</title></head>
+        <body>
+          <span class="h2">A - 積雪深差</span>
+          <div id="task-statement">
+            <div class="part"><h3>問題文</h3><section><p>積雪深の差を求めよ。</p></section></div>
+            <div class="part"><h3>入力例 1</h3><section><pre>15000\n10000\n</pre></section></div>
+            <div class="part"><h3>出力例 1</h3><section><pre>5000\n</pre></section></div>
+          </div>
+        </body>
+      </html>
+    `;
+    const parsedJa = parseAtCoderTaskHtml(legacyJaHtml, "abc001_1");
+    expect(parsedJa.locale).toBe("ja-JP");
+    expect(parsedJa.samples).toEqual([
+      { id: "sample-1", input: "15000\n10000", expectedOutput: "5000", isOriginal: true }
+    ]);
+
+    const bilingualHtml = `
+      <html>
+        <head><title>A - Test</title></head>
+        <body>
+          <div id="task-statement">
+            <span class="lang">
+              <span class="lang-ja"><div class="part"><section><h3>問題文</h3><p>日本語テスト</p></section></div></span>
+              <span class="lang-en"><div class="part"><section><h3>Problem Statement</h3><p>English test</p></section></div></span>
+            </span>
+          </div>
+        </body>
+      </html>
+    `;
+    const atFetch = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("problems.json")) {
+        return jsonResponse([
+          { id: "arc058_a", contest_id: "abc042", problem_index: "C", title: "C - Iroha's Obsession" }
+        ]);
+      }
+      if (url.includes("problem-models.json")) {
+        return jsonResponse({});
+      }
+      if (url === "https://atcoder.jp/contests/abc042/tasks/abc042_c") {
+        return textResponse("Not Found", 404);
+      }
+      if (url === "https://atcoder.jp/contests/abc042/tasks/arc058_a") {
+        return textResponse(bilingualHtml, 200);
+      }
+      if (url === "https://atcoder.jp/contests/abc300/tasks/abc300_a") {
+        return textResponse(bilingualHtml, 200);
+      }
+      return textResponse("Not Found", 404);
+    });
+    const atAdapter = new AtCoderAdapter({ fetchImpl: atFetch });
+    expect(atAdapter.resolveRef("edpc_a")?.sourceId).toBe("dp/dp_a");
+    expect(atAdapter.resolveRef("abc233ex")?.sourceId).toBe("abc233/abc233_h");
+    expect(atAdapter.resolveRef("abc318_ex")?.sourceId).toBe("abc318/abc318_h");
+    expect(atAdapter.resolveRef("ABC350 A")?.sourceId).toBe("abc350/abc350_a");
+
+    const jaDoc = await atAdapter.fetchProblem("https://atcoder.jp/contests/abc300/tasks/abc300_a?lang=ja");
+    expect(jaDoc.locale).toBe("ja-JP");
+    expect(jaDoc.statementMarkdown).toContain("日本語テスト");
+
+    const sharedDoc = await atAdapter.fetchProblem("abc042c");
+    expect(sharedDoc.problemKey).toBe("atcoder:arc058_a");
+    expect(sharedDoc.canonicalUrl).toBe("https://atcoder.jp/contests/abc042/tasks/arc058_a");
+
+    // 2. Luogu: reject /problem/list, honor maxTier/tag filtering, and fix English locale fallback
+    const lgFetch = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/problem/list")) {
+        return jsonResponse({
+          data: {
+            problems: {
+              count: 3,
+              result: [
+                { pid: "P1001", title: "A+B", difficulty: 1, tags: ["模拟"] },
+                { pid: "P1002", title: "A+B Hard", difficulty: 4, tags: ["动态规划"] },
+                { pid: "P1003", title: "A+B Easy DP", difficulty: 1, tags: ["动态规划"] }
+              ]
+            }
+          }
+        });
+      }
+      if (url.includes("/problem/CF1900A")) {
+        return jsonResponse({
+          status: 200,
+          data: {
+            problem: {
+              pid: "CF1900A",
+              translations: {
+                en: {
+                  name: "Cover in Water",
+                  description: "Filip has a row of cells."
+                }
+              },
+              samples: [["1\n3\n...", "2"]]
+            }
+          }
+        });
+      }
+      return textResponse("Not Found", 404);
+    });
+    const lgAdapter = new LuoguAdapter({ fetchImpl: lgFetch });
+    expect(lgAdapter.canHandleUrl("https://www.luogu.com.cn/problem/list")).toBe(false);
+    expect(lgAdapter.resolveRef("P 1001")?.sourceId).toBe("P1001");
+
+    const lgSearch = await lgAdapter.search({ keyword: "A+B", maxTier: 1, tags: ["动态规划"] });
+    expect(lgSearch.items.map((i) => i.sourceId)).toEqual(["P1003"]);
+    expect(lgSearch.total).toBe(1);
+
+    const lgRemoteEn = await lgAdapter.fetchProblem("CF1900A");
+    expect(lgRemoteEn.locale).toBe("en-US");
+
+    // 3. Codeforces: trailing /en, mirror host, and luogu-public fallback when problemset.problems fails
+    expect(parseCodeforcesRef("https://codeforces.com/problemset/problem/1900/A/en")?.sourceId).toBe("1900A");
+    expect(parseCodeforcesRef("https://mirror.codeforces.com/contest/1900/problem/A")?.sourceId).toBe("1900A");
+    expect(parseCodeforcesRef("CF 1900 A")?.sourceId).toBe("1900A");
+
+    const cfOutageFetch = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("codeforces.com/api/problemset.problems")) {
+        return textResponse("Service Unavailable", 503);
+      }
+      if (url.includes("luogu.com.cn/problem/CF1900A")) {
+        return jsonResponse({
+          status: 200,
+          data: {
+            problem: {
+              pid: "CF1900A",
+              limits: { time: [1000], memory: [262144] },
+              translations: {
+                en: { name: "Cover in Water", description: "Fill empty cells." }
+              },
+              samples: [["1\n3\n...", "2"]]
+            }
+          }
+        });
+      }
+      return textResponse("Not Found", 404);
+    });
+    const cfFallback = await new CodeforcesAdapter({
+      fetchImpl: cfOutageFetch,
+      statementMirror: "luogu-public"
+    }).fetchProblem("CF1900A");
+    expect(cfFallback.problemKey).toBe("cf:1900A");
+    expect(cfFallback.completeness).toBe("full");
+    expect(cfFallback.statementMarkdown).toContain("Fill empty cells");
   });
 });

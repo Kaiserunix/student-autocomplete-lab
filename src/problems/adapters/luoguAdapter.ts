@@ -6,7 +6,7 @@ import {
   type ProblemSearchQuery,
   type ProblemSourceAdapter
 } from "../../core/contracts";
-import { decodeHtmlEntities } from "./htmlUtils";
+import { decodeHtmlEntities, normalizeRefInput } from "./htmlUtils";
 import {
   DEFAULT_HTTP_TIMEOUT_MS,
   DEFAULT_USER_AGENT,
@@ -255,10 +255,31 @@ function selectContentBlocks(
       ? problem.contenu ?? enTranslation ?? zhTranslation
       : problem.content ?? enTranslation ?? zhTranslation;
 
+  const sampleText = [
+    asString(primary?.name),
+    asString(primary?.background),
+    asString(primary?.description),
+    asString(primary?.formatI),
+    asString(primary?.formatO),
+    asString(primary?.hint),
+    asString(problem.title),
+    asString(problem.name),
+    asString(problem.description)
+  ]
+    .join(" ")
+    .trim();
+  const hasCjk = /[\u4e00-\u9fff]/.test(sampleText);
+  const inferredLocale: "zh-CN" | "en-US" =
+    primary === enTranslation ||
+    isEnglishLocale(primary?.locale) ||
+    (!hasCjk && /[A-Za-z]{3,}/.test(sampleText))
+      ? "en-US"
+      : "zh-CN";
+
   return {
     primary,
     fallback,
-    locale: "zh-CN"
+    locale: inferredLocale
   };
 }
 
@@ -525,18 +546,18 @@ async function requestLuoguEnvelope(
 }
 
 export function normalizeLuoguPid(input: string): string {
-  const trimmed = input.trim();
+  const trimmed = normalizeRefInput(input);
   if (/^\d+$/.test(trimmed)) {
     return `P${trimmed}`;
   }
-  const prefixed = trimmed.match(/^(p|b|t|u)(\d+)$/i);
+  const prefixed = trimmed.match(/^(p|b|t|u)\s*(\d+)$/i);
   if (prefixed) {
     return `${prefixed[1]!.toUpperCase()}${prefixed[2]!}`;
   }
-  const remoteMatch = trimmed.match(/^(cf|sp|uva|at)([a-z0-9_]+)$/i);
+  const remoteMatch = trimmed.match(/^(cf|sp|uva|at)\s*([a-z0-9_ ]+)$/i);
   if (remoteMatch) {
     const prefix = remoteMatch[1]!.toUpperCase();
-    const rest = remoteMatch[2]!;
+    const rest = remoteMatch[2]!.replace(/\s+/g, "");
     if (prefix === "AT") {
       return `AT${rest.toLowerCase()}`;
     }
@@ -623,11 +644,14 @@ export function normalizeLuoguProblemPayload(
 
   const pid = asString(problem.pid).trim();
   const contenu = problem.contenu ?? problem.content;
+  const { primary, fallback } = selectContentBlocks(problem, "zh-CN");
   const title =
     decodeText(problem.title).trim() ||
     decodeText(problem.name).trim() ||
+    decodeText(primary?.name).trim() ||
     decodeText(contenu?.name).trim() ||
-    decodeText(problem.content?.name).trim();
+    decodeText(problem.content?.name).trim() ||
+    decodeText(fallback?.name).trim();
 
   if (!pid || !title) {
     throw new ProblemAdapterError(
@@ -637,7 +661,7 @@ export function normalizeLuoguProblemPayload(
     );
   }
 
-  const { markdown: statementMarkdown } = buildLuoguStatementMarkdown(problem, "zh-CN");
+  const { markdown: statementMarkdown, locale } = buildLuoguStatementMarkdown(problem, "zh-CN");
   const samples = normalizeSamples(problem.samples);
   const constraints = extractConstraints(problem);
   const diffNum = typeof problem.difficulty === "number" ? problem.difficulty : undefined;
@@ -657,7 +681,7 @@ export function normalizeLuoguProblemPayload(
     sourceId: pid,
     canonicalUrl: `https://www.luogu.com.cn/problem/${encodeURIComponent(pid)}`,
     title,
-    locale: "zh-CN",
+    locale,
     completeness,
     ioMode: "stdio",
     ...(statementMarkdown ? { statementMarkdown } : {}),
@@ -708,19 +732,23 @@ export class LuoguAdapter implements ProblemSourceAdapter {
 
   canHandleUrl(url: string): boolean {
     try {
-      const parsed = new URL(url.trim());
+      const parsed = new URL(normalizeRefInput(url));
       const host = parsed.hostname.toLowerCase();
       if (host !== "www.luogu.com.cn" && host !== "luogu.com.cn") {
         return false;
       }
-      return /^\/problem\/[A-Za-z0-9_]+(?:\/.*)?$/.test(parsed.pathname);
+      const match = parsed.pathname.match(/^\/problem\/([A-Za-z0-9_]+)(?:\/.*)?$/);
+      if (!match?.[1] || match[1].toLowerCase() === "list") {
+        return false;
+      }
+      return true;
     } catch {
       return false;
     }
   }
 
   resolveRef(input: string): { sourceId: string; canonicalUrl?: string } | null {
-    const trimmed = input.trim();
+    const trimmed = normalizeRefInput(input);
     if (!trimmed) {
       return null;
     }
@@ -732,7 +760,7 @@ export class LuoguAdapter implements ProblemSourceAdapter {
       const parsed = new URL(trimmed);
       const match = parsed.pathname.match(/^\/problem\/([A-Za-z0-9_]+)/);
       const rawPid = match?.[1];
-      if (!rawPid) {
+      if (!rawPid || rawPid.toLowerCase() === "list") {
         return null;
       }
       const pid = normalizeLuoguPid(rawPid);
@@ -742,16 +770,19 @@ export class LuoguAdapter implements ProblemSourceAdapter {
       };
     }
 
-    const prefixMatch = trimmed.match(/^(?:luogu|lg):([A-Za-z0-9_]+)$/i);
-    if (prefixMatch) {
-      const pid = normalizeLuoguPid(prefixMatch[1]!);
+    const prefixMatch = trimmed.match(/^(?:luogu|lg)\s*:\s*(.+)$/i);
+    if (prefixMatch?.[1]) {
+      const pid = normalizeLuoguPid(prefixMatch[1]);
+      if (!/^[A-Za-z0-9_]+$/.test(pid)) {
+        return null;
+      }
       return {
         sourceId: pid,
         canonicalUrl: `https://www.luogu.com.cn/problem/${encodeURIComponent(pid)}`
       };
     }
 
-    if (/^(?:[PBTU]\d+|CF\d+[A-Z]\d?|SP\d+|UVA\d+|AT_[a-z0-9_]+)$/i.test(trimmed)) {
+    if (/^(?:[PBTU]\s*\d+|CF\s*\d+\s*[A-Z]\d?|SP\s*\d+|UVA\s*\d+|AT_[a-z0-9_]+)$/i.test(trimmed)) {
       const pid = normalizeLuoguPid(trimmed);
       return {
         sourceId: pid,
@@ -793,6 +824,9 @@ export class LuoguAdapter implements ProblemSourceAdapter {
     if (query.keyword?.trim()) {
       params.set("keyword", query.keyword.trim());
     }
+    if (query.maxTier === 1 && (query.minTier === undefined || query.minTier <= 1)) {
+      params.set("difficulty", "1");
+    }
     if (query.page && query.page > 1) {
       params.set("page", String(query.page));
     }
@@ -806,7 +840,7 @@ export class LuoguAdapter implements ProblemSourceAdapter {
     );
     const tagMap = needsTags ? await this.loadTagMap(signal) : undefined;
 
-    const items: ProblemDocument[] = [];
+    const mappedItems: ProblemDocument[] = [];
     for (const item of rawList) {
       if (!item || typeof item !== "object") {
         continue;
@@ -819,7 +853,7 @@ export class LuoguAdapter implements ProblemSourceAdapter {
       }
       const diffNum = typeof p.difficulty === "number" ? p.difficulty : undefined;
       const diffMeta = diffNum !== undefined ? LUOGU_DIFFICULTY_LABELS[diffNum] : undefined;
-      items.push({
+      mappedItems.push({
         schemaVersion: "problem-doc/v2",
         problemKey: `luogu:${pid}`,
         source: "luogu",
@@ -847,7 +881,32 @@ export class LuoguAdapter implements ProblemSourceAdapter {
       });
     }
 
-    const total = typeof problemsBlock?.count === "number" ? problemsBlock.count : undefined;
+    const wantedTags = (query.tags ?? []).map((t) => t.trim().toLowerCase()).filter(Boolean);
+    const hasLocalFilters =
+      query.minTier !== undefined || query.maxTier !== undefined || wantedTags.length > 0;
+
+    const items = hasLocalFilters
+      ? mappedItems.filter((doc) => {
+          const tier = doc.difficulty?.normalizedTier;
+          if (query.minTier !== undefined && (tier === undefined || tier < query.minTier)) {
+            return false;
+          }
+          if (query.maxTier !== undefined && (tier === undefined || tier > query.maxTier)) {
+            return false;
+          }
+          if (wantedTags.length > 0) {
+            const docTags = doc.rawTags.map((t) => t.toLowerCase());
+            if (!wantedTags.every((wanted) => docTags.some((t) => t === wanted || t.includes(wanted)))) {
+              return false;
+            }
+          }
+          return true;
+        })
+      : mappedItems;
+
+    const serverTotal = typeof problemsBlock?.count === "number" ? problemsBlock.count : undefined;
+    const total =
+      hasLocalFilters && items.length < mappedItems.length ? items.length : serverTotal;
     return { items, ...(total !== undefined ? { total } : {}) };
   }
 

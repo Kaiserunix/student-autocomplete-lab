@@ -11,18 +11,33 @@ const NAMED_ENTITIES: Record<string, string> = {
   apos: "'",
   nbsp: " ",
   le: "<=",
+  leq: "<=",
   ge: ">=",
+  geq: ">=",
   ne: "!=",
   times: "×",
+  middot: "·",
+  plusmn: "±",
   minus: "-",
   mdash: "—",
   ndash: "–",
+  rarr: "→",
+  larr: "←",
+  harr: "↔",
   hellip: "...",
   lsquo: "'",
   rsquo: "'",
   ldquo: "\"",
   rdquo: "\""
 };
+
+export function normalizeRefInput(input: string): string {
+  return input
+    .normalize("NFKC")
+    .replace(/[\u3000\u00A0]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export function decodeHtmlEntities(input: string): string {
   return input
@@ -40,8 +55,10 @@ export function decodeHtmlEntities(input: string): string {
     });
 }
 
+const HTML_TAG_RE = /<\/?[a-zA-Z!][^>]*>/g;
+
 export function stripHtmlTags(html: string): string {
-  return decodeHtmlEntities(html.replace(/<[^>]+>/g, ""));
+  return decodeHtmlEntities(html.replace(HTML_TAG_RE, ""));
 }
 
 /**
@@ -92,10 +109,10 @@ export function htmlToMarkdown(html: string): string {
   }
 
   let text = html.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-  const placeholders: Array<{ value: string; isBlock: boolean }> = [];
-  const stash = (value: string, isBlock = false): string => {
+  const placeholders: Array<{ value: string; isBlock: boolean; isEquation?: boolean }> = [];
+  const stash = (value: string, isBlock = false, isEquation = false): string => {
     const idx = placeholders.length;
-    placeholders.push({ value, isBlock });
+    placeholders.push({ value, isBlock, isEquation });
     return `${PLACEHOLDER_PREFIX}${idx}${PLACEHOLDER_SUFFIX}`;
   };
   const containsBlockPlaceholder = (fragment: string): boolean => {
@@ -109,25 +126,43 @@ export function htmlToMarkdown(html: string): string {
     }
     return false;
   };
+  const containsEquationPlaceholder = (fragment: string): boolean => {
+    let m: RegExpExecArray | null;
+    const re = new RegExp(PLACEHOLDER_RE.source, "g");
+    while ((m = re.exec(fragment)) !== null) {
+      const entry = placeholders[Number(m[1])];
+      if (entry?.isEquation) {
+        return true;
+      }
+    }
+    return false;
+  };
 
-  // Preserve <pre> blocks as fenced code blocks before stripping inner tags
-  text = text.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (_m, inner: string) => {
-    const cleaned = decodeHtmlEntities(
-      inner
-        .replace(/<br\s*\/?>/gi, "\n")
-        .replace(/<[^>]+>/g, "")
-    ).trim();
-    return stash(`\n\n\`\`\`\n${cleaned}\n\`\`\`\n\n`, true);
-  });
-
-  // Convert NowCoder equation images `<img src=".../equation?tex=...">` into inline LaTeX
+  // Convert NowCoder equation images `<img src=".../equation?tex=...">` BEFORE <pre> stripping
   text = text.replace(/<img\b[^>]*>/gi, (tag) => {
     const tex = extractTexFromEquationImgTag(tag);
     if (!tex) {
       return "";
     }
     const rendered = tex.startsWith("$") && tex.endsWith("$") ? tex : `$${tex}$`;
-    return stash(rendered, false);
+    return stash(rendered, false, true);
+  });
+
+  // Unwrap NowCoder prose `<pre><div>...</div></pre>` (and equation-bearing prose `<pre>`),
+  // while preserving genuine code/sample `<pre>` blocks as fenced code blocks.
+  text = text.replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (_m, inner: string) => {
+    const isNowCoderProse =
+      /<(?:div|p|ul|ol|li|table|blockquote|h[1-6])\b/i.test(inner) ||
+      containsEquationPlaceholder(inner);
+    if (isNowCoderProse) {
+      return `\n\n${inner}\n\n`;
+    }
+    const cleaned = decodeHtmlEntities(
+      inner
+        .replace(/<br\s*\/?>/gi, "\n")
+        .replace(HTML_TAG_RE, "")
+    ).trim();
+    return stash(`\n\n\`\`\`\n${cleaned}\n\`\`\`\n\n`, true);
   });
 
   // Superscript & subscript (before <var> and <code> so `10<sup>9</sup>` & `<var>C<sub>i</sub></var>` render cleanly)
@@ -194,17 +229,19 @@ export function htmlToMarkdown(html: string): string {
     return `${lead}*${trimmed}*${trail}`;
   });
 
-  // Lists & line breaks & paragraphs
-  text = text.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, (_m, inner: string) => {
-    const cleaned = stripHtmlTags(inner).trim();
-    return cleaned ? `\n- ${cleaned}` : "";
-  });
+  // Lists & line breaks & paragraphs (process innermost <li> first, preserving bold/code placeholders)
+  for (let pass = 0; pass < 4 && /<li\b/i.test(text); pass += 1) {
+    text = text.replace(/<li[^>]*>((?:(?!<li\b)[\s\S])*?)<\/li>/gi, (_m, inner: string) => {
+      const cleaned = stripHtmlTags(inner.replace(/<br\s*\/?>/gi, "\n")).trim();
+      return cleaned ? `\n- ${cleaned}` : "";
+    });
+  }
   text = text.replace(/<br\s*\/?>/gi, "\n");
   text = text.replace(/<\/(?:p|div|section|ul|ol|blockquote|tr)>/gi, "\n\n");
   text = text.replace(/<hr\s*\/?>/gi, "\n\n---\n\n");
 
   // Drop remaining tags & decode entities
-  text = decodeHtmlEntities(text.replace(/<[^>]+>/g, ""));
+  text = decodeHtmlEntities(text.replace(HTML_TAG_RE, ""));
 
   // Restore protected code / LaTeX / pre placeholders (iteratively for nested cases)
   for (let pass = 0; pass < 3 && text.includes(PLACEHOLDER_PREFIX); pass += 1) {

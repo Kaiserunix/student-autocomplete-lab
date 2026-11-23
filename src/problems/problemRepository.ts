@@ -9,11 +9,13 @@ import {
 } from "../core/contracts";
 import { AtCoderAdapter } from "./adapters/atcoderAdapter";
 import { CodeforcesAdapter, type CodeforcesStatementMirror } from "./adapters/codeforcesAdapter";
+import { normalizeRefInput } from "./adapters/htmlUtils";
 import { createLeetCodeCnAdapter, createLeetCodeGlobalAdapter } from "./adapters/leetcodeAdapter";
 import { LuoguAdapter } from "./adapters/luoguAdapter";
 import { NowCoderAdapter } from "./adapters/nowcoderAdapter";
 import {
   mergeProblemDocuments,
+  mergeRichSamples,
   parseMarkdownProblem,
   type MarkdownProblemParseOptions
 } from "./parsers/markdownParser";
@@ -93,7 +95,7 @@ export class ProblemRepository {
     input: string,
     preferredSource?: ProblemSourceId
   ): { adapter: ProblemSourceAdapter; sourceId: string; canonicalUrl?: string } | null {
-    const trimmed = input.trim();
+    const trimmed = normalizeRefInput(input);
     if (!trimmed) {
       return null;
     }
@@ -184,17 +186,32 @@ export class ProblemRepository {
       }
     }
 
-    const fetched = await resolved.adapter.fetchProblem(input, {
+    const normalizedInput = normalizeRefInput(input);
+    const fetched = await resolved.adapter.fetchProblem(normalizedInput, {
       forceRefresh: opts?.forceRefresh,
       signal: opts?.signal
     });
 
-    // If we already had richer local content (e.g., merged clipboard statement on top of CF metadata), preserve it!
+    // Preserve richer existing content (full statement or Companion expectedOutput samples)
     const existing = await this.getCachedProblem(fetched.problemKey);
-    const finalDoc =
-      existing && fetched.completeness !== "full" && existing.completeness === "full"
-        ? mergeProblemDocuments(fetched, existing)
-        : fetched;
+    let finalDoc: ProblemDocument;
+    if (existing && fetched.completeness !== "full" && existing.completeness === "full") {
+      finalDoc = mergeProblemDocuments(fetched, existing);
+    } else if (existing) {
+      const mergedSamples = mergeRichSamples(fetched.samples, existing.samples);
+      finalDoc = {
+        ...fetched,
+        samples: mergedSamples,
+        ...(fetched.completeness === "metadata_only" && mergedSamples.length > 0
+          ? { completeness: "samples_only" as const }
+          : {}),
+        ...(!fetched.functionMeta && existing.functionMeta
+          ? { functionMeta: existing.functionMeta }
+          : {})
+      };
+    } else {
+      finalDoc = fetched;
+    }
 
     await this.saveProblem(finalDoc);
     return finalDoc;
