@@ -40,6 +40,9 @@ vi.mock("vscode", async () => {
 });
 
 import {
+  buildReaderWebviewHtml
+} from "../../src/extension/problemReaderPanel";
+import {
   buildWebviewHtml,
   generateNonce,
   SidebarController
@@ -77,6 +80,7 @@ describe("SidebarController HTML CSP security, StatusBarController & host messag
       cspSource: "vscode-webview://test-origin",
       scriptUri: "vscode-webview://test-origin/dist/webview.js",
       styleUri: "vscode-webview://test-origin/dist/webview.css",
+      assetsUri: "vscode-webview://test-origin/resources/ui",
       nonce: nonce1,
       uiLanguage: "zh-CN"
     });
@@ -84,14 +88,43 @@ describe("SidebarController HTML CSP security, StatusBarController & host messag
     expect(html).toContain(`default-src 'none'`);
     expect(html).toContain(`script-src 'nonce-${nonce1}'`);
     expect(html).toContain(`style-src vscode-webview://test-origin`);
+    expect(html).toContain(`<meta name="ac-assets" content="vscode-webview://test-origin/resources/ui">`);
     expect(html).toContain(`<script nonce="${nonce1}" src="vscode-webview://test-origin/dist/webview.js"></script>`);
     expect(html).toContain(`<div id="app"></div>`);
+
+    const htmlNoAssets = buildWebviewHtml({
+      cspSource: "vscode-webview://test-origin",
+      scriptUri: "vscode-webview://test-origin/dist/webview.js",
+      styleUri: "vscode-webview://test-origin/dist/webview.css",
+      nonce: nonce1
+    });
+    expect(htmlNoAssets).not.toContain('name="ac-assets"');
 
     // Security redlines
     expect(html).not.toContain("unsafe-inline");
     expect(html).not.toContain("unsafe-eval");
     expect(html).not.toMatch(/<script[^>]+src=["']https?:\/\//i);
     expect(html).not.toMatch(/\son[a-z]+\s*=/i);
+
+    const readerHtml = buildReaderWebviewHtml({
+      cspSource: "vscode-webview://reader-origin",
+      scriptUri: "vscode-webview://reader-origin/dist/reader.js",
+      styleUri: "vscode-webview://reader-origin/dist/webview.css",
+      assetsUri: 'vscode-webview://reader-origin/resources/ui"><img src=x>',
+      nonce: nonce2,
+      title: 'P1001 <script>bad()</script>',
+      uiLanguage: "zh-CN"
+    });
+    expect(readerHtml).toContain(`default-src 'none'`);
+    expect(readerHtml).toContain(`script-src 'nonce-${nonce2}'`);
+    expect(readerHtml).toContain(
+      `<meta name="ac-assets" content="vscode-webview://reader-origin/resources/ui&quot;&gt;&lt;img src=x&gt;">`
+    );
+    expect(readerHtml).toContain(`<div id="reader-app"></div>`);
+    expect(readerHtml).not.toContain("unsafe-inline");
+    expect(readerHtml).not.toContain("<script>bad()");
+    expect(readerHtml).not.toContain("<img src=x>");
+    expect(readerHtml).not.toMatch(/\son[a-z]+\s*=/i);
   });
 
   it("enforces zero Unicode Emoji, Codicons, auto-hiding mute & 6s status-bar whisper in StatusBarController", () => {
@@ -380,6 +413,8 @@ describe("SidebarController HTML CSP security, StatusBarController & host messag
       onDidDispose: vi.fn(() => ({ dispose: () => undefined }))
     };
     sidebar.resolveWebviewView(mockWebviewView as unknown as import("vscode").WebviewView);
+    expect(mockWebviewView.webview.html).toContain('<meta name="ac-assets" content="');
+    expect(mockWebviewView.webview.html).toMatch(/resources[\\/]ui/);
 
     const lastSyncedState = (): SidebarStateSnapshot => {
       const syncs = postedMessages.filter(
@@ -418,10 +453,13 @@ describe("SidebarController HTML CSP security, StatusBarController & host messag
     await sidebar.handleMessage({ type: "starter/restoreVisualPreset" });
     expect(lastSyncedState().visualPresetApplied).toBe(false);
 
-    // 4. Load 3-problem warmup pack & add custom sample
+    // 4. Load 3-problem warmup pack & add custom sample (auto-switches to workspace tab)
     await sidebar.handleMessage({ type: "starter/loadWarmupPack" });
     expect(lastSyncedState().activeProblem?.problemKey).toBe("warmup:stdio-sum");
     expect(lastSyncedState().problems.length).toBe(3);
+    expect(
+      postedMessages.some((m) => m.type === "ui/switchTab" && m.payload.tab === "workspace")
+    ).toBe(true);
 
     await sidebar.handleMessage({
       type: "problem/addSample",
@@ -453,21 +491,30 @@ describe("SidebarController HTML CSP security, StatusBarController & host messag
       payload: { action: "giveUp", confirmGiveUp: false }
     });
     expect(lastSyncedState().stylishRank?.hintCeiling).toBe("SS");
+    expect(lastSyncedState().giveUpUnlocked).toBe(false);
 
     await sidebar.handleMessage({
       type: "coach/request",
       payload: { action: "giveUp", confirmGiveUp: true }
     });
     expect(lastSyncedState().stylishRank?.hintCeiling).toBe("C");
+    expect(lastSyncedState().giveUpUnlocked).toBe(true);
 
-    // 8. Report manual verdict -> persists terminal LearningEventV2 & updates OLM snapshot
+    // 8. Report manual verdict -> persists terminal LearningEventV2, updates OLM snapshot, exposes recentEvents & 1-click undoEventId
     await sidebar.handleMessage({
       type: "submit/reportVerdict",
       payload: { verdict: "AC" }
     });
     const events = await eventStore.readAll();
-    expect(events.some((e) => e.verdict === "AC" && e.kind === "attempt_completed")).toBe(true);
+    const acEvent = events.find((e) => e.verdict === "AC" && e.kind === "attempt_completed");
+    expect(acEvent).toBeDefined();
     expect(lastSyncedState().learnerSnapshot.totalTerminalEvents).toBeGreaterThanOrEqual(2);
+    expect(lastSyncedState().recentEvents?.[0]?.eventId).toBe(acEvent!.eventId);
+    expect(
+      postedMessages.some(
+        (m) => m.type === "toast/inline" && m.payload.undoEventId === acEvent!.eventId
+      )
+    ).toBe(true);
 
     // 9. OLM overrides: mute misconception & upsert code habit
     await sidebar.handleMessage({
@@ -605,6 +652,226 @@ describe("SidebarController HTML CSP security, StatusBarController & host messag
 
     await sidebar.handleMessage({ type: "learner/voidEvent", payload: { eventId: "cf-sub-987654" } });
     expect(lastSyncedState().userOverrides.voidedEventIds).toContain("cf-sub-987654");
+
+    // 16. Split ProblemReaderPanel opens beside editor, syncs on updates, copies to clipboard, and respects dismissal
+    expect(mockState.harness!.webviewPanels.length).toBeGreaterThanOrEqual(1);
+    const readerPanel = mockState.harness!.webviewPanels[0]!;
+    expect(readerPanel.viewType).toBe("algoCoach.problemReader");
+    expect(readerPanel.webview.html).toContain("reader.js");
+    expect(readerPanel.webview.html).toContain('<meta name="ac-assets" content="');
+    expect(readerPanel.webview.html).toMatch(/resources[\\/]ui/);
+    expect(readerPanel.postedMessages.some((m) => (m as { type?: string }).type === "reader/sync")).toBe(true);
+
+    // Copy sample text via sidebar & reader messages
+    await sidebar.handleMessage({
+      type: "clipboard/copy",
+      payload: { text: "3\n1 2\n", label: "Sample #1" }
+    });
+    expect(mockState.harness!.getClipboard()).toBe("3\n1 2\n");
+
+    // Reader 1-click clipboard merge routes through handleReaderMessage (reading system clipboard when text is "")
+    await problemRepository.saveProblem({
+      schemaVersion: "problem-doc/v2",
+      problemKey: "lc-cn:meta-only-reader",
+      source: "leetcode-cn",
+      sourceId: "meta-only-reader",
+      title: "Meta Only Reader",
+      locale: "zh-CN",
+      completeness: "metadata_only",
+      ioMode: "function",
+      samples: [],
+      rawTags: ["array"],
+      provenance: { ingestChannel: "builtin-adapter", fetchedAt: new Date().toISOString() }
+    });
+    await sidebar.handleMessage({
+      type: "problem/select",
+      payload: { problemKey: "lc-cn:meta-only-reader", openFile: false }
+    });
+    await mockState.harness!.vscodeMock.env.clipboard.writeText(
+      "# Meta Only Reader\nFull problem statement pasted from Reader clipboard.\n"
+    );
+    await sidebar.handleReaderMessage({
+      type: "problem/importClipboard",
+      payload: { text: "", mergeWithActive: true }
+    });
+    expect(lastSyncedState().activeProblem?.statementMarkdown).toContain(
+      "Full problem statement pasted from Reader clipboard."
+    );
+
+    // Closing the reader panel remembers user dismissal until explicitly opened again
+    readerPanel.dispose();
+    const countAfterClose = mockState.harness!.webviewPanels.length;
+    await sidebar.handleMessage({
+      type: "problem/select",
+      payload: { problemKey: "warmup:two-sum", openFile: true }
+    });
+    expect(mockState.harness!.webviewPanels.length).toBe(countAfterClose);
+
+    // Explicit problem/openReader re-opens a fresh panel beside the editor
+    await sidebar.handleMessage({ type: "problem/openReader" });
+    expect(mockState.harness!.webviewPanels.length).toBe(countAfterClose + 1);
+
+    sidebar.dispose();
+    workspaceFiles.dispose();
+    statusBar.dispose();
+    managedModules.dispose();
+  });
+
+  it("emits warn toasts on selectProblem lazy-hydration failure and importProblemRef partial completeness", async () => {
+    const context = createMockExtensionContext(tempDir, resolve("."));
+    mockState.harness!.setWorkspaceFolders([tempDir]);
+
+    const config = new VscodeWorkspaceConfigAdapter();
+    const memento = new VscodeMementoAdapter(
+      context.globalState as unknown as import("vscode").Memento
+    );
+    const secrets = new SecretKeyStore(context.secrets);
+    const visualPresetManager = new StarterVisualPresetManager(config, memento);
+    const managedModules = new ManagedModuleController();
+    const problemRepository = new ProblemRepository({
+      cacheDir: join(tempDir, "problems-ux")
+    });
+    const workspaceFiles = new WorkspaceFileController({ storageDir: tempDir, memento });
+    await workspaceFiles.init();
+    const statusBar = new StatusBarController();
+
+    const postedMessages: HostToWebviewMessage[] = [];
+    const sidebar = new SidebarController({
+      extensionUri: MockUri.file(resolve(".")) as unknown as import("vscode").Uri,
+      storageDir: tempDir,
+      config,
+      secrets,
+      visualPresetManager,
+      managedModules,
+      problemRepository,
+      runnerEngine: {
+        engineId: "noop",
+        runSamples: vi.fn(),
+        probeToolchains: vi.fn(async () => [])
+      },
+      modelRouter: new ModelRouter(DEFAULT_AI_ROUTER_CONFIG),
+      coachService: new CoachService({
+        hintLadder: new HintLadderMachine({ store: new InMemoryHintLadderStore() }),
+        modelRouter: new ModelRouter(DEFAULT_AI_ROUTER_CONFIG)
+      }),
+      eventStore: new InMemoryLearningEventStore(),
+      overridesStore: new InMemoryUserOverridesStore(),
+      triggerTracker: new TriggerSignalTracker(),
+      workspaceFiles,
+      statusBar,
+      getShortcutCoach: () => undefined,
+      getSoundController: () => undefined,
+      getAudioMuted: () => false,
+      setAudioMuted: () => undefined
+    });
+    await sidebar.init();
+
+    const mockWebviewView = {
+      webview: {
+        cspSource: "vscode-webview://unit-test",
+        options: {},
+        html: "",
+        asWebviewUri: (u: MockUri) => u,
+        postMessage: vi.fn(async (msg: HostToWebviewMessage) => {
+          postedMessages.push(msg);
+          return true;
+        }),
+        onDidReceiveMessage: vi.fn(() => ({ dispose: () => undefined }))
+      },
+      onDidDispose: vi.fn(() => ({ dispose: () => undefined }))
+    };
+    sidebar.resolveWebviewView(mockWebviewView as unknown as import("vscode").WebviewView);
+
+    const toasts = () =>
+      postedMessages.filter(
+        (m): m is Extract<HostToWebviewMessage, { type: "toast/inline" }> => m.type === "toast/inline"
+      );
+
+    // 1. selectProblem: lazy hydration failure posts a warn toast but still opens the cached metadata_only problem
+    await problemRepository.saveProblem({
+      schemaVersion: "problem-doc/v2",
+      problemKey: "cf:1900A",
+      source: "codeforces",
+      sourceId: "1900A",
+      canonicalUrl: "https://codeforces.com/contest/1900/problem/A",
+      title: "Cover in Water",
+      locale: "en-US",
+      completeness: "metadata_only",
+      ioMode: "stdio",
+      samples: [],
+      rawTags: ["greedy"],
+      provenance: { ingestChannel: "builtin-adapter", fetchedAt: new Date().toISOString() }
+    });
+    const importSpy = vi
+      .spyOn(problemRepository, "importProblem")
+      .mockRejectedValueOnce(new Error("Network timeout"));
+
+    await sidebar.selectProblem("cf:1900A", false);
+    expect(sidebar.getActiveProblem()?.problemKey).toBe("cf:1900A");
+    const hydrateToast = toasts().at(-1);
+    expect(hydrateToast?.payload.level).toBe("warn");
+    expect(hydrateToast?.payload.text).toContain("Network timeout");
+
+    // 2. importProblemRef: partial completeness (metadata_only) emits warn guidance mentioning Competitive Companion & Paste Statement
+    importSpy.mockResolvedValueOnce({
+      schemaVersion: "problem-doc/v2",
+      problemKey: "cf:1900B",
+      source: "codeforces",
+      sourceId: "1900B",
+      canonicalUrl: "https://codeforces.com/contest/1900/problem/B",
+      title: "Laura and Operations",
+      locale: "en-US",
+      completeness: "metadata_only",
+      ioMode: "stdio",
+      samples: [],
+      rawTags: ["math"],
+      provenance: { ingestChannel: "builtin-adapter", fetchedAt: new Date().toISOString() }
+    });
+    await sidebar.importProblemRef("CF1900B", "codeforces");
+    const partialToastZh = toasts().at(-1);
+    expect(partialToastZh?.payload.level).toBe("warn");
+    expect(partialToastZh?.payload.text).toContain("Competitive Companion");
+    expect(partialToastZh?.payload.text).toContain("粘贴题面");
+
+    // 3. en-US full import emits info toast; en-US samples_only emits warn toast mentioning Paste Statement
+    await sidebar.updateFeatureFlag("uiLanguage", "en-US");
+    importSpy.mockResolvedValueOnce({
+      schemaVersion: "problem-doc/v2",
+      problemKey: "lc-cn:two-sum",
+      source: "leetcode-cn",
+      sourceId: "two-sum",
+      title: "Two Sum",
+      locale: "zh-CN",
+      completeness: "samples_only",
+      ioMode: "function",
+      samples: [{ id: "s1", input: "[2,7]\n9", expectedOutput: "[0,1]", isOriginal: true }],
+      rawTags: ["array"],
+      provenance: { ingestChannel: "builtin-adapter", fetchedAt: new Date().toISOString() }
+    });
+    await sidebar.importProblemRef("two-sum", "leetcode-cn");
+    const partialToastEn = toasts().at(-1);
+    expect(partialToastEn?.payload.level).toBe("warn");
+    expect(partialToastEn?.payload.text).toContain("Competitive Companion");
+    expect(partialToastEn?.payload.text).toContain("Paste Statement");
+
+    importSpy.mockResolvedValueOnce({
+      schemaVersion: "problem-doc/v2",
+      problemKey: "luogu:P1001",
+      source: "luogu",
+      sourceId: "P1001",
+      title: "A+B Problem",
+      locale: "zh-CN",
+      completeness: "full",
+      ioMode: "stdio",
+      statementMarkdown: "Given a and b, output a + b.",
+      samples: [{ id: "s1", input: "1 2\n", expectedOutput: "3\n", isOriginal: true }],
+      rawTags: ["入门"],
+      provenance: { ingestChannel: "builtin-adapter", fetchedAt: new Date().toISOString() }
+    });
+    await sidebar.importProblemRef("P1001", "luogu");
+    const fullToastEn = toasts().at(-1);
+    expect(fullToastEn?.payload.level).toBe("info");
+    expect(fullToastEn?.payload.text).toContain("Imported: A+B Problem");
 
     sidebar.dispose();
     workspaceFiles.dispose();

@@ -56,6 +56,13 @@ export interface SidebarBridgeStatus {
   lastError?: string;
 }
 
+export interface SidebarRecentEvent {
+  eventId: string;
+  title: string;
+  verdict: string;
+  timestamp: string;
+}
+
 export interface SidebarStateSnapshot {
   flags: FeatureFlags;
   visualPresetApplied: boolean;
@@ -66,12 +73,14 @@ export interface SidebarStateSnapshot {
   problems: ProblemDocument[];
   lastRun?: LocalRunResult;
   hintLevel: HintLevel;
+  giveUpUnlocked?: boolean;
   coachHistory: CoachResponsePayload[];
   coachBusy: boolean;
   runnerBusy: boolean;
   learnerSnapshot: LearnerSnapshotV2;
   userOverrides: UserOverridesV2;
   recommendations: RecommendationItem[];
+  recentEvents?: SidebarRecentEvent[];
   stylishRank?: StylishRankState;
   aiConfig: SidebarAiConfigView;
   lastHealthCheck?: SidebarHealthCheckSummary;
@@ -86,6 +95,7 @@ export interface SidebarStateSnapshot {
   statusBanner?: {
     level: "info" | "warn" | "error";
     text: string;
+    undoEventId?: string;
   };
 }
 
@@ -103,7 +113,8 @@ export type HostToWebviewMessage =
       };
     }
   | { type: "coach/streamDelta"; payload: { requestId: string; delta: string } }
-  | { type: "toast/inline"; payload: { level: "info" | "warn" | "error"; text: string } };
+  | { type: "toast/inline"; payload: { level: "info" | "warn" | "error"; text: string; undoEventId?: string } }
+  | { type: "ui/switchTab"; payload: { tab: "workspace" | "problems" | "coach" | "dossier" | "settings" } };
 
 export type WebviewToHostMessage =
   | { type: "webview/ready" }
@@ -144,6 +155,8 @@ export type WebviewToHostMessage =
   | { type: "problem/search"; payload: { source: ProblemSourceId; keyword: string } }
   | { type: "problem/addSample"; payload: { problemKey: string; input: string; expectedOutput: string } }
   | { type: "problem/deleteSample"; payload: { problemKey: string; sampleId: string } }
+  | { type: "problem/openReader"; payload?: { problemKey?: string } }
+  | { type: "clipboard/copy"; payload: { text: string; label?: string } }
   | { type: "runner/runSamples" }
   | { type: "runner/checkToolchains" }
   | { type: "submit/copyAndOpen" }
@@ -174,3 +187,33 @@ export type WebviewToHostMessage =
   | { type: "ai/runHealthCheck" }
   | { type: "audio/toggleMute" }
   | { type: "audio/testSound"; payload: { kind: SoundEventKind } };
+
+export interface ProblemReaderSnapshot {
+  problem?: ProblemDocument;
+  uiLanguage: "zh-CN" | "en-US";
+  activeLanguage?: SupportedLanguage;
+  lastRun?: LocalRunResult;
+  hintLevel: HintLevel;
+  runnerBusy: boolean;
+  coachBusy: boolean;
+}
+
+export type HostToReaderMessage =
+  | { type: "reader/sync"; payload: ProblemReaderSnapshot }
+  | { type: "toast/inline"; payload: { level: "info" | "warn" | "error"; text: string } };
+
+export type ReaderToHostMessage =
+  | { type: "reader/ready" }
+  | { type: "runner/runSamples" }
+  | { type: "submit/copyAndOpen" }
+  | {
+      type: "coach/request";
+      payload: {
+        action: CoachAction;
+        stuckCategory?: StuckCategory;
+        studentQuestion?: string;
+        confirmGiveUp?: boolean;
+      };
+    }
+  | { type: "clipboard/copy"; payload: { text: string; label?: string } }
+  | { type: "problem/importClipboard"; payload: { text: string; mergeWithActive?: boolean } };

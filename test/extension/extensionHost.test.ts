@@ -55,7 +55,7 @@ describe("Extension Host activation, commands & SecretKeyStore", () => {
 
     expect(registeredCommands).toEqual(declaredCommands);
     expect([...EXTENSION_COMMANDS].sort()).toEqual(declaredCommands);
-    expect(registeredCommands).toHaveLength(18);
+    expect(registeredCommands).toHaveLength(19);
 
     // Sidebar provider must be registered with retainContextWhenHidden: true
     const sidebarReg = mockState.harness!.webviewProviders.get("algoCoach.sidebar");

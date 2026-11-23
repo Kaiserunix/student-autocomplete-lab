@@ -344,7 +344,16 @@ function parseModelResponseToPayload(params: {
 }): CoachResponsePayload {
   const parsed = tryParseCoachJson(params.rawText);
   const isEn = params.uiLanguage === "en-US";
+  const isCe = params.fallbackDryRun.verdict === "CE";
   const levelSpec = HINT_LEVEL_SPECS[params.hintLevel];
+  const defaultHeadline =
+    isCe && params.action === "dryRun"
+      ? isEn
+        ? "Compile Error Diagnosis (CE)"
+        : "编译错误诊断（CE）"
+      : isEn
+        ? levelSpec.titleEn
+        : levelSpec.titleZh;
 
   if (parsed && typeof parsed.guidance === "string" && parsed.guidance.trim().length > 0) {
     const normalizedMisconceptions = Array.from(
@@ -365,8 +374,9 @@ function parseModelResponseToPayload(params: {
       )
     );
 
-    const dryRunPrompt =
-      parsed.dryRunPrompt?.minimalInput && parsed.dryRunPrompt?.question
+    const dryRunPrompt = isCe
+      ? undefined
+      : parsed.dryRunPrompt?.minimalInput && parsed.dryRunPrompt?.question
         ? {
             minimalInput: parsed.dryRunPrompt.minimalInput,
             question: parsed.dryRunPrompt.question
@@ -383,7 +393,7 @@ function parseModelResponseToPayload(params: {
       hintLevel: params.hintLevel,
       strictness: params.strictness,
       stuckCategory: params.stuckCategory,
-      headline: parsed.headline?.trim() || (isEn ? levelSpec.titleEn : levelSpec.titleZh),
+      headline: parsed.headline?.trim() || defaultHeadline,
       guidance: parsed.guidance.trim(),
       guidingQuestion: parsed.guidingQuestion?.trim() || undefined,
       dryRunPrompt,
@@ -404,15 +414,16 @@ function parseModelResponseToPayload(params: {
     hintLevel: params.hintLevel,
     strictness: params.strictness,
     stuckCategory: params.stuckCategory,
-    headline: isEn ? levelSpec.titleEn : levelSpec.titleZh,
+    headline: defaultHeadline,
     guidance: params.rawText.trim(),
     guidingQuestion: undefined,
-    dryRunPrompt: params.fallbackDryRun.hasFailureEvidence
-      ? {
-          minimalInput: params.fallbackDryRun.minimalInput,
-          question: isEn ? params.fallbackDryRun.questionEn : params.fallbackDryRun.questionZh
-        }
-      : undefined,
+    dryRunPrompt:
+      params.fallbackDryRun.hasFailureEvidence && !isCe
+        ? {
+            minimalInput: params.fallbackDryRun.minimalInput,
+            question: isEn ? params.fallbackDryRun.questionEn : params.fallbackDryRun.questionZh
+          }
+        : undefined,
     misconceptionIds: params.fallbackDryRun.suggestedMisconceptionIds,
     conceptTags: params.fallbackConceptTags,
     spoilerSafe: true,
@@ -504,20 +515,29 @@ function buildDeterministicOfflinePayload(params: {
   }
 
   if (params.action === "dryRun") {
+    const isCe = params.dryRun.verdict === "CE";
     return {
       action: "dryRun",
       hintLevel: params.hintLevel,
       strictness: params.strictness,
       stuckCategory: params.dryRun.stuckCategory,
-      headline: isEn
-        ? `Minimal Counterexample Dry-Run (${params.dryRun.verdict ?? "TRACE"})`
-        : `最小反例干跑推演（${params.dryRun.verdict ?? "手推"}）`,
+      headline: isCe
+        ? isEn
+          ? "Compile Error Diagnosis (CE)"
+          : "编译错误诊断（CE）"
+        : isEn
+          ? `Minimal Counterexample Dry-Run (${params.dryRun.verdict ?? "TRACE"})`
+          : `最小反例干跑推演（${params.dryRun.verdict ?? "手推"}）`,
       guidance: isEn ? params.dryRun.divergenceSummaryEn : params.dryRun.divergenceSummaryZh,
       guidingQuestion: isEn ? params.dryRun.questionEn : params.dryRun.questionZh,
-      dryRunPrompt: {
-        minimalInput: params.dryRun.minimalInput,
-        question: isEn ? params.dryRun.questionEn : params.dryRun.questionZh
-      },
+      ...(isCe
+        ? {}
+        : {
+            dryRunPrompt: {
+              minimalInput: params.dryRun.minimalInput,
+              question: isEn ? params.dryRun.questionEn : params.dryRun.questionZh
+            }
+          }),
       misconceptionIds: params.dryRun.suggestedMisconceptionIds,
       conceptTags: params.conceptTags,
       spoilerSafe: true,
@@ -644,12 +664,13 @@ function buildDeterministicOfflinePayload(params: {
     headline: isEn ? levelSpec.titleEn : levelSpec.titleZh,
     guidance,
     guidingQuestion,
-    dryRunPrompt: params.dryRun.hasFailureEvidence
-      ? {
-          minimalInput: params.dryRun.minimalInput,
-          question: isEn ? params.dryRun.questionEn : params.dryRun.questionZh
-        }
-      : undefined,
+    dryRunPrompt:
+      params.dryRun.hasFailureEvidence && params.dryRun.verdict !== "CE"
+        ? {
+            minimalInput: params.dryRun.minimalInput,
+            question: isEn ? params.dryRun.questionEn : params.dryRun.questionZh
+          }
+        : undefined,
     misconceptionIds: params.dryRun.suggestedMisconceptionIds,
     conceptTags: params.conceptTags,
     spoilerSafe: true,

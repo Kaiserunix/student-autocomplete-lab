@@ -15,7 +15,9 @@ import type {
   OfficialVerdictStatus,
   PresetMode,
   ProblemDocument,
+  ProblemReaderSnapshot,
   ProblemSourceId,
+  ReaderToHostMessage,
   RecommendationCandidate,
   RecommendationItem,
   RunnerEngine,
@@ -80,6 +82,7 @@ import {
   prepareSubmitPayload
 } from "../submitBridge";
 import { syncStrictWordAcceptContext } from "./inlineProvider";
+import { ProblemReaderPanel } from "./problemReaderPanel";
 import type { StatusBarController } from "./statusBarController";
 import {
   AI_CONFIG_KEYS,
@@ -101,8 +104,18 @@ export interface WebviewHtmlParams {
   cspSource: string;
   scriptUri: string;
   styleUri: string;
+  assetsUri?: string;
   nonce: string;
   uiLanguage?: "zh-CN" | "en-US";
+}
+
+function escapeAttr(raw: string): string {
+  return raw
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }
 
 /**
@@ -110,6 +123,9 @@ export interface WebviewHtmlParams {
  */
 export function buildWebviewHtml(params: WebviewHtmlParams): string {
   const lang = params.uiLanguage === "en-US" ? "en" : "zh-CN";
+  const assetsMeta = params.assetsUri
+    ? [`  <meta name="ac-assets" content="${escapeAttr(params.assetsUri)}">`]
+    : [];
   const csp = [
     "default-src 'none'",
     `img-src ${params.cspSource} data:`,
@@ -125,6 +141,7 @@ export function buildWebviewHtml(params: WebviewHtmlParams): string {
     '  <meta charset="UTF-8">',
     '  <meta name="viewport" content="width=device-width, initial-scale=1.0">',
     `  <meta http-equiv="Content-Security-Policy" content="${csp}">`,
+    ...assetsMeta,
     "  <title>Algo Coach</title>",
     `  <link rel="stylesheet" href="${params.styleUri}">`,
     "</head>",
@@ -242,6 +259,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
 
   private readonly sessionId: string;
   private readonly now: () => number;
+  private readonly readerPanel: ProblemReaderPanel;
   private view: vscode.WebviewView | undefined;
   private readonly viewDisposables: vscode.Disposable[] = [];
 
@@ -262,6 +280,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
   private userOverrides: UserOverridesV2;
   private learnerSnapshot: LearnerSnapshotV2;
   private recommendations: RecommendationItem[] = [];
+  private recentEvents: NonNullable<SidebarStateSnapshot["recentEvents"]> = [];
   private lastHealthCheck: SidebarHealthCheckSummary | undefined;
   private toolchains: ToolchainProbe[] = [];
   private bridgeStatus: SidebarBridgeStatus = { listening: false };
@@ -274,6 +293,10 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     this.flags = resolveFeatureFlags(deps.config);
     this.userOverrides = createDefaultUserOverrides(new Date(this.now()).toISOString());
     this.learnerSnapshot = deriveLearnerSnapshot([], this.userOverrides, new Date(this.now()));
+    this.readerPanel = new ProblemReaderPanel({
+      extensionUri: deps.extensionUri,
+      onMessage: (msg) => this.handleReaderMessage(msg)
+    });
   }
 
   async init(): Promise<void> {
@@ -319,11 +342,15 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     const styleUri = webviewView.webview
       .asWebviewUri(vscode.Uri.joinPath(this.deps.extensionUri, "dist", "webview.css"))
       .toString();
+    const assetsUri = webviewView.webview
+      .asWebviewUri(vscode.Uri.joinPath(this.deps.extensionUri, "resources", "ui"))
+      .toString();
 
     webviewView.webview.html = buildWebviewHtml({
       cspSource: webviewView.webview.cspSource,
       scriptUri,
       styleUri,
+      assetsUri,
       nonce: generateNonce(),
       uiLanguage: this.flags.uiLanguage
     });
@@ -443,11 +470,11 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     });
   }
 
-  postToast(level: "info" | "warn" | "error", text: string): void {
-    this.statusBanner = { level, text };
+  postToast(level: "info" | "warn" | "error", text: string, undoEventId?: string): void {
+    this.statusBanner = { level, text, ...(undoEventId ? { undoEventId } : {}) };
     this.postMessage({
       type: "toast/inline",
-      payload: { level, text }
+      payload: { level, text, ...(undoEventId ? { undoEventId } : {}) }
     });
   }
 
@@ -496,6 +523,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
         ? { lastRun: this.lastRunByProblem.get(this.activeProblem.problemKey) }
         : {}),
       hintLevel,
+      giveUpUnlocked: hintState?.giveUpUnlocked ?? false,
       coachHistory: this.activeProblem
         ? [...(this.coachHistoryByProblem.get(this.activeProblem.problemKey) ?? [])]
         : [],
@@ -504,6 +532,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
       learnerSnapshot: this.learnerSnapshot,
       userOverrides: this.userOverrides,
       recommendations: this.recommendations,
+      recentEvents: this.recentEvents,
       ...(rankState ? { stylishRank: rankState } : {}),
       aiConfig,
       ...(this.lastHealthCheck ? { lastHealthCheck: this.lastHealthCheck } : {}),
@@ -523,6 +552,97 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
       type: "state/sync",
       payload: snapshot
     });
+    this.readerPanel.syncIfOpen(this.toReaderSnapshot(snapshot));
+  }
+
+  private toReaderSnapshot(snapshot: SidebarStateSnapshot): ProblemReaderSnapshot {
+    return {
+      ...(snapshot.activeProblem ? { problem: snapshot.activeProblem } : {}),
+      uiLanguage: snapshot.flags.uiLanguage,
+      ...(snapshot.activeLanguage ? { activeLanguage: snapshot.activeLanguage } : {}),
+      ...(snapshot.lastRun ? { lastRun: snapshot.lastRun } : {}),
+      hintLevel: snapshot.hintLevel,
+      runnerBusy: snapshot.runnerBusy,
+      coachBusy: snapshot.coachBusy
+    };
+  }
+
+  async openProblemReader(problemKey?: string, preserveFocus = false): Promise<void> {
+    if (problemKey && problemKey !== this.activeProblem?.problemKey) {
+      const matched = await this.deps.problemRepository.getCachedProblem(problemKey);
+      if (matched) {
+        this.setActiveProblemInternal(matched);
+      }
+    }
+    if (!this.activeProblem) {
+      this.postToast(
+        "warn",
+        this.isEn()
+          ? "Select or import a problem before opening Split Reader."
+          : "请先导入或选择一道题目，再打开宽屏分屏读题。"
+      );
+      return;
+    }
+    const snapshot = await this.getStateSnapshot();
+    this.readerPanel.openOrReveal(this.toReaderSnapshot(snapshot), {
+      preserveFocus,
+      explicitUserAction: !preserveFocus
+    });
+  }
+
+  async handleReaderMessage(message: ReaderToHostMessage): Promise<void> {
+    try {
+      switch (message.type) {
+        case "reader/ready": {
+          const snapshot = await this.getStateSnapshot();
+          this.readerPanel.syncIfOpen(this.toReaderSnapshot(snapshot));
+          return;
+        }
+        case "runner/runSamples":
+          await this.runActiveSamples(false);
+          return;
+        case "submit/copyAndOpen":
+          await this.copyAndOpenSubmit();
+          return;
+        case "coach/request":
+          await vscode.commands.executeCommand("algoCoach.sidebar.focus");
+          await this.requestCoach(message.payload, false);
+          return;
+        case "clipboard/copy":
+          await this.copyTextToClipboard(message.payload.text, message.payload.label, true);
+          return;
+        case "problem/importClipboard":
+          await this.importClipboardStatement(
+            message.payload.text,
+            Boolean(message.payload.mergeWithActive),
+            true
+          );
+          return;
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.readerPanel.postToast("error", msg);
+    }
+  }
+
+  private async copyTextToClipboard(
+    text: string,
+    label: string | undefined,
+    fromReader: boolean
+  ): Promise<void> {
+    await vscode.env.clipboard.writeText(text);
+    const toastText = label
+      ? this.isEn()
+        ? `Copied ${label}.`
+        : `已复制 ${label}。`
+      : this.isEn()
+        ? "Copied to clipboard."
+        : "已复制到剪贴板。";
+    if (fromReader) {
+      this.readerPanel.postToast("info", toastText);
+    } else {
+      this.postToast("info", toastText);
+    }
   }
 
   // -------------------------------------------------------------------------
@@ -610,6 +730,14 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
             message.payload.sampleId
           );
           await this.syncState();
+          return;
+
+        case "problem/openReader":
+          await this.openProblemReader(message.payload?.problemKey, false);
+          return;
+
+        case "clipboard/copy":
+          await this.copyTextToClipboard(message.payload.text, message.payload.label, false);
           return;
 
         case "runner/runSamples":
@@ -771,6 +899,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     const first = warmups[0];
     if (first) {
       await this.activateAndOpenProblem(first, true);
+      this.postMessage({ type: "ui/switchTab", payload: { tab: "workspace" } });
     }
     this.postToast(
       "info",
@@ -804,8 +933,16 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
           { preferredSource: doc.source }
         );
         this.problemsCache = await this.deps.problemRepository.listCachedProblems();
-      } catch {
-        // Keep metadata_only doc offline without blocking the user
+      } catch (err) {
+        // Keep metadata_only doc offline without blocking the user, while surfacing why live fetch failed
+        const rawReason = err instanceof Error ? err.message : String(err);
+        const reason = rawReason.length > 140 ? `${rawReason.slice(0, 137)}...` : rawReason;
+        this.postToast(
+          "warn",
+          this.isEn()
+            ? `Opened cached metadata (live fetch failed: ${reason}).`
+            : `已打开本地元信息（联网拉取题面失败：${reason}）。`
+        );
       }
     }
 
@@ -839,18 +976,42 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
 
     this.problemsCache = await this.deps.problemRepository.listCachedProblems();
     await this.activateAndOpenProblem(doc, true, language);
-    this.postToast(
-      "info",
-      this.isEn() ? `Imported: ${doc.title}` : `已导入题目：${doc.title}`
-    );
+    this.postMessage({ type: "ui/switchTab", payload: { tab: "workspace" } });
+    if (doc.completeness !== "full") {
+      const partialZh =
+        doc.completeness === "samples_only"
+          ? `已导入样例（${doc.title}），暂缺完整题面，可使用 Competitive Companion 或「粘贴题面」补全。`
+          : `已导入题目元信息（${doc.title}），暂缺完整题面，可使用 Competitive Companion 或「粘贴题面」补全。`;
+      const partialEn =
+        doc.completeness === "samples_only"
+          ? `Imported samples only (${doc.title}). Complete the statement via Competitive Companion or Paste Statement.`
+          : `Imported metadata only (${doc.title}). Fetch full statement via Competitive Companion or Paste Statement.`;
+      this.postToast("warn", this.isEn() ? partialEn : partialZh);
+    } else {
+      this.postToast(
+        "info",
+        this.isEn() ? `Imported: ${doc.title}` : `已导入题目：${doc.title}`
+      );
+    }
     await this.syncState();
     return doc;
   }
 
-  async importClipboardStatement(text: string, mergeWithActive: boolean): Promise<void> {
+  async importClipboardStatement(
+    text: string,
+    mergeWithActive: boolean,
+    fromReader = false
+  ): Promise<void> {
+    const notify = (level: "info" | "warn" | "error", msg: string): void => {
+      if (fromReader) {
+        this.readerPanel.postToast(level, msg);
+      } else {
+        this.postToast(level, msg);
+      }
+    };
     const rawText = text.trim() || (await vscode.env.clipboard.readText()).trim();
     if (!rawText) {
-      this.postToast(
+      notify(
         "warn",
         this.isEn() ? "Clipboard is empty." : "剪贴板为空，请先复制题面或样例。"
       );
@@ -868,7 +1029,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
 
     this.problemsCache = await this.deps.problemRepository.listCachedProblems();
     await this.activateAndOpenProblem(doc, !mergeWithActive);
-    this.postToast(
+    notify(
       "info",
       mergeWithActive
         ? this.isEn()
@@ -885,6 +1046,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     const saved = await this.deps.problemRepository.ingestFromBridge(doc);
     this.problemsCache = await this.deps.problemRepository.listCachedProblems();
     await this.activateAndOpenProblem(saved, true);
+    this.postMessage({ type: "ui/switchTab", payload: { tab: "workspace" } });
     this.postToast(
       "info",
       this.isEn()
@@ -1122,12 +1284,13 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
       platform: problem.source,
       verdict
     });
-    await this.ingestOfficialVerdict(problem, event);
+    const eventId = await this.ingestOfficialVerdict(problem, event);
     this.postToast(
       verdict === "AC" ? "info" : "warn",
       this.isEn()
         ? `Recorded official verdict: ${verdict}.`
-        : `已回填官方评测结果：${verdict}。`
+        : `已回填官方评测结果：${verdict}。`,
+      eventId
     );
     await this.syncState();
   }
@@ -1218,6 +1381,8 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
   ): Promise<CoachResponsePayload | undefined> {
     if (triggeredFromSidebar && payload.action === "hint") {
       this.deps.getShortcutCoach()?.recordSidebarClick("requestHint", this.now());
+    } else if (!triggeredFromSidebar) {
+      this.postMessage({ type: "ui/switchTab", payload: { tab: "coach" } });
     }
 
     const problem = this.activeProblem;
@@ -1426,6 +1591,12 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
       const opened = await this.deps.workspaceFiles.openOrCreatePracticeFile(doc, language);
       this.activeFilePath = opened.filePath;
       this.activeLanguage = opened.language;
+      if (
+        (doc.statementMarkdown || doc.samples.length > 0) &&
+        (this.readerPanel.isOpen() || !this.readerPanel.wasDismissedByUser())
+      ) {
+        await this.openProblemReader(undefined, true);
+      }
     } else if (language && language !== "generic") {
       this.activeLanguage = language;
     }
@@ -1461,7 +1632,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     problem: ProblemDocument,
     event: OfficialVerdictEvent,
     explicitEventId?: string
-  ): Promise<void> {
+  ): Promise<string> {
     // 1. Update StylishRankEngine
     const rankEngine = this.ensureRankEngine(problem);
     const transition = rankEngine.recordOfficialVerdict(event, this.now());
@@ -1473,7 +1644,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     // 3. Persist terminal LearningEventV2 into immutable JSONL store & recompute OLM + FSRS
     const verdict = mapOfficialVerdictToLearningVerdict(event.verdict);
     const misconceptions = this.latestMisconceptionsByProblem.get(problem.problemKey) ?? [];
-    await this.appendLearningEventForProblem({
+    const eventId = await this.appendLearningEventForProblem({
       problem,
       language: this.activeLanguage,
       kind: "attempt_completed",
@@ -1485,6 +1656,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
       explicitEventId
     });
     await this.recomputeLearnerState();
+    return eventId;
   }
 
   private async appendLearningEventForProblem(params: {
@@ -1497,7 +1669,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     misconceptionIds: string[];
     summary: string;
     explicitEventId?: string;
-  }): Promise<void> {
+  }): Promise<string> {
     const hintState = await this.deps.coachService.getHintState(params.problem.problemKey);
     const pattern = analyzeProblemPattern(params.problem);
     const conceptTags = Array.from(
@@ -1543,10 +1715,22 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     };
 
     await this.deps.eventStore.append(event);
+    return event.eventId;
   }
 
   private async recomputeLearnerState(): Promise<void> {
     const events = await this.deps.eventStore.readAll();
+    const voided = new Set(this.userOverrides.voidedEventIds);
+    this.recentEvents = events
+      .filter((e) => !voided.has(e.eventId))
+      .slice(-5)
+      .reverse()
+      .map((e) => ({
+        eventId: e.eventId,
+        title: e.problemRef.title ?? e.problemRef.problemKey,
+        verdict: e.verdict,
+        timestamp: e.timestamp
+      }));
     const nowDate = new Date(this.now());
     this.learnerSnapshot = deriveLearnerSnapshot(events, this.userOverrides, nowDate);
     const candidates = this.buildRecommendationCandidates(events);
@@ -1614,6 +1798,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
   dispose(): void {
     this.disposed = true;
     this.disposeViewListeners();
+    this.readerPanel.dispose();
     this.view = undefined;
   }
 }

@@ -169,6 +169,26 @@ export function createMockVscodeState() {
     string,
     { provider: unknown; options?: { webviewOptions?: { retainContextWhenHidden?: boolean } } }
   >();
+  const webviewPanels: Array<{
+    viewType: string;
+    title: string;
+    showOptions: unknown;
+    options: unknown;
+    disposed: boolean;
+    revealCalls: Array<{ viewColumn?: number; preserveFocus?: boolean }>;
+    postedMessages: unknown[];
+    webview: {
+      cspSource: string;
+      html: string;
+      asWebviewUri: (u: MockUri) => MockUri;
+      postMessage: ReturnType<typeof vi.fn>;
+      onDidReceiveMessage: (listener: (msg: unknown) => void) => { dispose: () => void };
+    };
+    onDidDispose: (listener: () => void) => { dispose: () => void };
+    reveal: (viewColumn?: number, preserveFocus?: boolean) => void;
+    dispose: () => void;
+    emitMessage: (msg: unknown) => void;
+  }> = [];
   const inlineProviders: Array<{ selector: unknown; provider: unknown; disposed: boolean }> = [];
   const openedExternalUrls: string[] = [];
   let clipboardText = "";
@@ -247,6 +267,14 @@ export function createMockVscodeState() {
     Redo: 2
   };
 
+  const ViewColumn = {
+    Active: -1,
+    Beside: -2,
+    One: 1,
+    Two: 2,
+    Three: 3
+  };
+
   const vscodeMock = {
     Uri: MockUri,
     Position: MockPosition,
@@ -258,6 +286,7 @@ export function createMockVscodeState() {
     InlineCompletionTriggerKind,
     DiagnosticSeverity,
     TextDocumentChangeReason,
+    ViewColumn,
     workspace: {
       get workspaceFolders() {
         return workspaceFolders.length > 0 ? workspaceFolders : undefined;
@@ -331,6 +360,47 @@ export function createMockVscodeState() {
           }
         };
       },
+      createWebviewPanel(viewType: string, title: string, showOptions: unknown, options?: unknown) {
+        const msgEmitter = new MockEventEmitter<unknown>();
+        const disposeEmitter = new MockEventEmitter<void>();
+        const postedMessages: unknown[] = [];
+        const revealCalls: Array<{ viewColumn?: number; preserveFocus?: boolean }> = [];
+        const panel = {
+          viewType,
+          title,
+          showOptions,
+          options,
+          disposed: false,
+          revealCalls,
+          postedMessages,
+          webview: {
+            cspSource: "vscode-webview://panel-test",
+            html: "",
+            asWebviewUri: (u: MockUri) => u,
+            postMessage: vi.fn(async (msg: unknown) => {
+              postedMessages.push(msg);
+              return true;
+            }),
+            onDidReceiveMessage: msgEmitter.event
+          },
+          onDidDispose: disposeEmitter.event,
+          reveal(viewColumn?: number, preserveFocus?: boolean) {
+            revealCalls.push({ viewColumn, preserveFocus });
+          },
+          dispose() {
+            if (panel.disposed) return;
+            panel.disposed = true;
+            disposeEmitter.fire();
+            msgEmitter.dispose();
+            disposeEmitter.dispose();
+          },
+          emitMessage(msg: unknown) {
+            msgEmitter.fire(msg);
+          }
+        };
+        webviewPanels.push(panel);
+        return panel;
+      },
       showTextDocument,
       showQuickPick,
       showInputBox,
@@ -396,6 +466,7 @@ export function createMockVscodeState() {
     executedCommands.length = 0;
     statusBarItems.length = 0;
     webviewProviders.clear();
+    webviewPanels.length = 0;
     inlineProviders.length = 0;
     openedExternalUrls.length = 0;
     clipboardText = "";
@@ -420,6 +491,7 @@ export function createMockVscodeState() {
     executedCommands,
     statusBarItems,
     webviewProviders,
+    webviewPanels,
     inlineProviders,
     openedExternalUrls,
     diagnosticsByUri,

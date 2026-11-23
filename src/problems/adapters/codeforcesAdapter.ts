@@ -5,10 +5,27 @@ import {
   type ProblemSearchQuery,
   type ProblemSourceAdapter
 } from "../../core/contracts";
+import {
+  DEFAULT_HTTP_TIMEOUT_MS,
+  DEFAULT_USER_AGENT,
+  fetchWithTimeout,
+  mapHttpStatusError
+} from "./httpClient";
+import { fetchLuoguRemoteProblem } from "./luoguAdapter";
+
+export type CodeforcesStatementMirror = "none" | "luogu-public";
 
 export interface CodeforcesAdapterOptions {
   fetchImpl?: typeof fetch;
   indexTtlMs?: number;
+  timeoutMs?: number;
+  userAgent?: string;
+  /**
+   * Optional public statement mirror for enriching statements, samples, and limits
+   * without touching Cloudflare-protected `codeforces.com` HTML.
+   * Defaults to `"none"` in the standalone adapter; enabled as `"luogu-public"` in `ProblemRepository`.
+   */
+  statementMirror?: CodeforcesStatementMirror;
 }
 
 interface CfApiProblem {
@@ -63,7 +80,7 @@ export function parseCodeforcesRef(input: string): ParsedCfRef | null {
       return null;
     }
     const host = parsed.hostname.toLowerCase();
-    if (host !== "codeforces.com" && host !== "www.codeforces.com") {
+    if (host !== "codeforces.com" && host !== "www.codeforces.com" && host !== "m.codeforces.com") {
       return null;
     }
     const contestMatch = parsed.pathname.match(/^\/contest\/(\d+)\/problem\/([A-Za-z0-9]+)\/?$/i);
@@ -105,7 +122,9 @@ export function parseCodeforcesRef(input: string): ParsedCfRef | null {
     return null;
   }
 
-  const stripped = trimmed.replace(/^(?:codeforces|cf):/i, "");
+  // Strip optional prefix: `codeforces:`, `cf:`, `cf-`, `cf `, or bare `CF` before digits/gym
+  const stripped = trimmed.replace(/^(?:codeforces:|cf[:\s-]?)/i, "").trim();
+
   const gymDirect = stripped.match(/^gym:(\d+)[/-]?([A-Za-z][A-Za-z0-9]?)$/i);
   if (gymDirect?.[1] && gymDirect?.[2]) {
     const contestId = Number.parseInt(gymDirect[1], 10);
@@ -136,29 +155,39 @@ export function parseCodeforcesRef(input: string): ParsedCfRef | null {
 }
 
 /**
- * Codeforces adapter powered strictly by the official `problemset.problems` public REST API.
- * Explicitly returns `completeness: "metadata_only"` and NEVER attempts to scrape Cloudflare-protected HTML.
+ * Codeforces adapter powered by the official `problemset.problems` public REST API,
+ * with optional public statement/sample enrichment via Luogu RemoteJudge JSON (`statementMirror: "luogu-public"`).
+ * NEVER attempts to scrape or bypass Cloudflare-protected `codeforces.com` HTML.
  */
 export class CodeforcesAdapter implements ProblemSourceAdapter {
   readonly id = "codeforces" as const;
   readonly displayName = "Codeforces";
-  readonly capabilities: AdapterCapabilities = {
-    search: true,
-    problemLists: false,
-    directStatementFetch: false,
-    directSamplesFetch: false,
-    ioModes: ["stdio"],
-    supportsOptionalUserSession: false
-  };
+  readonly capabilities: AdapterCapabilities;
 
   private readonly fetchImpl: typeof fetch;
   private readonly indexTtlMs: number;
+  private readonly timeoutMs: number;
+  private readonly userAgent: string;
+  private readonly statementMirror: CodeforcesStatementMirror;
   private cachedProblems: CfApiProblem[] | null = null;
   private cachedAt = 0;
 
   constructor(options: CodeforcesAdapterOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.indexTtlMs = options.indexTtlMs ?? 30 * 60 * 1000;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS;
+    this.userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
+    this.statementMirror = options.statementMirror ?? "none";
+
+    const mirrorEnabled = this.statementMirror === "luogu-public";
+    this.capabilities = {
+      search: true,
+      problemLists: false,
+      directStatementFetch: mirrorEnabled,
+      directSamplesFetch: mirrorEnabled,
+      ioModes: ["stdio"],
+      supportsOptionalUserSession: false
+    };
   }
 
   canHandleUrl(url: string): boolean {
@@ -185,7 +214,7 @@ export class CodeforcesAdapter implements ProblemSourceAdapter {
       throw new ProblemAdapterError(
         "NOT_FOUND",
         "codeforces",
-        `Invalid Codeforces reference: "${ref}". Expected e.g. 1433G, cf:1433G, or a Codeforces problem URL.`
+        `Invalid Codeforces reference: "${ref}". Expected e.g. 1900A, CF1900A, cf:1900A, or a Codeforces problem URL.`
       );
     }
 
@@ -222,7 +251,12 @@ export class CodeforcesAdapter implements ProblemSourceAdapter {
       );
     }
 
-    return this.toMetadataDocument(found);
+    const baseDoc = this.toMetadataDocument(found);
+    if (this.statementMirror !== "luogu-public") {
+      return baseDoc;
+    }
+
+    return this.enrichWithLuoguPublicMirror(baseDoc, parsed.contestId, parsed.index, opts?.signal);
   }
 
   async search(
@@ -272,9 +306,13 @@ export class CodeforcesAdapter implements ProblemSourceAdapter {
   ): Promise<{ ok: boolean; code?: ProblemAdapterError["code"]; message?: string }> {
     try {
       const problems = await this.loadProblemset(false, signal);
+      const mirrorNote =
+        this.statementMirror === "luogu-public"
+          ? "with public Luogu RemoteJudge statement mirror (graceful metadata_only fallback)"
+          : "metadata_only; use Localhost Bridge / Clipboard for statements & samples";
       return {
         ok: problems.length > 0,
-        message: `Codeforces official problemset API reachable (${problems.length} problems, metadata_only; use Localhost Bridge / Clipboard for statements & samples).`
+        message: `Codeforces official problemset API reachable (${problems.length} problems, ${mirrorNote}).`
       };
     } catch (error) {
       if (error instanceof ProblemAdapterError) {
@@ -285,6 +323,47 @@ export class CodeforcesAdapter implements ProblemSourceAdapter {
         code: "NETWORK_ERROR",
         message: error instanceof Error ? error.message : String(error)
       };
+    }
+  }
+
+  private async enrichWithLuoguPublicMirror(
+    baseDoc: ProblemDocument,
+    contestId: number,
+    index: string,
+    signal?: AbortSignal
+  ): Promise<ProblemDocument> {
+    try {
+      const mirror = await fetchLuoguRemoteProblem(`CF${contestId}${index}`, {
+        fetchImpl: this.fetchImpl,
+        userAgent: this.userAgent,
+        timeoutMs: this.timeoutMs,
+        signal,
+        preferLocale: "en"
+      });
+
+      const hasStatement = mirror.statementMarkdown.trim().length > 0;
+      const hasSamples = mirror.samples.length > 0;
+      if (!hasStatement && !hasSamples && !mirror.constraints) {
+        return baseDoc;
+      }
+
+      const completeness = hasStatement
+        ? "full"
+        : hasSamples
+          ? "samples_only"
+          : baseDoc.completeness;
+
+      return {
+        ...baseDoc,
+        locale: hasStatement ? mirror.locale : baseDoc.locale,
+        completeness,
+        ...(hasStatement ? { statementMarkdown: mirror.statementMarkdown } : {}),
+        samples: hasSamples ? mirror.samples : baseDoc.samples,
+        ...(mirror.constraints ? { constraints: mirror.constraints } : {})
+      };
+    } catch {
+      // Gracefully fall back to official metadata_only if mirror is absent, rate-limited, or offline
+      return baseDoc;
     }
   }
 
@@ -333,10 +412,18 @@ export class CodeforcesAdapter implements ProblemSourceAdapter {
 
     let response: Response;
     try {
-      response = await this.fetchImpl(CF_PROBLEMSET_API, {
-        headers: { accept: "application/json" },
-        signal
-      });
+      response = await fetchWithTimeout(
+        this.fetchImpl,
+        CF_PROBLEMSET_API,
+        {
+          headers: {
+            accept: "application/json",
+            "user-agent": this.userAgent
+          },
+          signal
+        },
+        this.timeoutMs
+      );
     } catch (error) {
       throw new ProblemAdapterError(
         "NETWORK_ERROR",
@@ -345,18 +432,12 @@ export class CodeforcesAdapter implements ProblemSourceAdapter {
       );
     }
 
-    if (response.status === 429 || response.status === 503) {
-      throw new ProblemAdapterError(
-        "RATE_LIMITED",
-        "codeforces",
-        `Codeforces API temporarily unavailable or rate-limited (HTTP ${response.status}).`
-      );
-    }
     if (!response.ok) {
-      throw new ProblemAdapterError(
-        "NETWORK_ERROR",
+      throw mapHttpStatusError(
         "codeforces",
-        `Codeforces API failed with HTTP ${response.status}.`
+        response.status,
+        CF_PROBLEMSET_API,
+        "Please retry shortly or use Localhost Bridge / Clipboard import."
       );
     }
 

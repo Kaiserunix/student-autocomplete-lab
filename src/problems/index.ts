@@ -8,7 +8,22 @@ export {
   type CuratedSheet
 } from "./sheets/curatedSheets";
 
-export { decodeHtmlEntities, htmlToMarkdown, stripHtmlTags } from "./adapters/htmlUtils";
+export {
+  DEFAULT_HTTP_TIMEOUT_MS,
+  DEFAULT_USER_AGENT,
+  createTimeoutSignal,
+  fetchWithTimeout,
+  isAntiBotChallenge,
+  mapHttpStatusError,
+  type TimeoutSignalHandle
+} from "./adapters/httpClient";
+
+export {
+  decodeHtmlEntities,
+  extractTexFromEquationImgTag,
+  htmlToMarkdown,
+  stripHtmlTags
+} from "./adapters/htmlUtils";
 
 export {
   LeetCodeAdapter,
@@ -21,9 +36,13 @@ export {
 
 export {
   LuoguAdapter,
+  extractLuoguEnvelopeFromHtml,
+  fetchLuoguRemoteProblem,
   normalizeLuoguPid,
   normalizeLuoguProblemPayload,
-  type LuoguAdapterOptions
+  type FetchLuoguRemoteProblemOptions,
+  type LuoguAdapterOptions,
+  type LuoguRemoteProblemData
 } from "./adapters/luoguAdapter";
 
 export {
@@ -39,10 +58,16 @@ export {
   codeforcesRatingToTier,
   parseCodeforcesRef,
   type CodeforcesAdapterOptions,
+  type CodeforcesStatementMirror,
   type ParsedCfRef
 } from "./adapters/codeforcesAdapter";
 
-export { NowCoderAdapter } from "./adapters/nowcoderAdapter";
+export {
+  NowCoderAdapter,
+  parseNowCoderHtml,
+  type NowCoderAdapterOptions,
+  type ParsedNowCoderHtml
+} from "./adapters/nowcoderAdapter";
 
 export {
   mergeProblemDocuments,

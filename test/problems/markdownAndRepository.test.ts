@@ -100,6 +100,115 @@ Print YES if possible, otherwise NO.
 });
 
 describe("ProblemRepository & templateGenerator", () => {
+  it("routes cross-platform problem references accurately without colliding on CF/AT/numeric IDs", () => {
+    const repo = new ProblemRepository();
+
+    // Codeforces (bare, CF-prefixed, slash/hyphen variants)
+    expect(repo.resolveInput("CF1900A")?.adapter.id).toBe("codeforces");
+    expect(repo.resolveInput("CF1900A")?.sourceId).toBe("1900A");
+    expect(repo.resolveInput("cf1900a")?.adapter.id).toBe("codeforces");
+    expect(repo.resolveInput("CF-1900A")?.adapter.id).toBe("codeforces");
+    expect(repo.resolveInput("1900A")?.adapter.id).toBe("codeforces");
+    expect(repo.resolveInput("1900/A")?.adapter.id).toBe("codeforces");
+    expect(repo.resolveInput("1900-A")?.adapter.id).toBe("codeforces");
+
+    // Explicit Luogu prefix & Luogu URL still route to Luogu even for CF/AT RemoteJudge IDs
+    expect(repo.resolveInput("luogu:CF1900A")?.adapter.id).toBe("luogu");
+    expect(repo.resolveInput("https://www.luogu.com.cn/problem/CF1900A")?.adapter.id).toBe("luogu");
+    expect(repo.resolveInput("luogu:AT_abc350_c")?.adapter.id).toBe("luogu");
+    expect(repo.resolveInput("P1873")?.adapter.id).toBe("luogu");
+
+    // Preferred Luogu + bare numeric routes to Luogu (while Auto bare numeric routes to LeetCode)
+    expect(repo.resolveInput("1001", "luogu")).toMatchObject({
+      adapter: expect.objectContaining({ id: "luogu" }),
+      sourceId: "P1001"
+    });
+    expect(repo.resolveInput("1")?.adapter.id).toBe("leetcode-cn");
+    expect(repo.resolveInput("146")?.adapter.id).toBe("leetcode-cn");
+    expect(repo.resolveInput("LC1")?.adapter.id).toBe("leetcode-cn");
+    expect(repo.resolveInput("LC-146")?.adapter.id).toBe("leetcode-cn");
+    expect(repo.resolveInput("LCR 007")?.adapter.id).toBe("leetcode-cn");
+    expect(repo.resolveInput("two-sum")?.adapter.id).toBe("leetcode-cn");
+    expect(repo.resolveInput("lc-global:1")?.adapter.id).toBe("leetcode-global");
+
+    // AtCoder shorthand, AT_ prefix, and non-standard task IDs
+    expect(repo.resolveInput("abc350c")?.adapter.id).toBe("atcoder");
+    expect(repo.resolveInput("ABC350C")?.sourceId).toBe("abc350/abc350_c");
+    expect(repo.resolveInput("abc350_c")?.adapter.id).toBe("atcoder");
+    expect(repo.resolveInput("AT_abc350_c")?.adapter.id).toBe("atcoder");
+    expect(repo.resolveInput("practice2_a")?.adapter.id).toBe("atcoder");
+    expect(repo.resolveInput("tessoku_book_a")?.adapter.id).toBe("atcoder");
+
+    // NowCoder bare NC ID and prefixed refs
+    expect(repo.resolveInput("NC14362")?.adapter.id).toBe("nowcoder");
+    expect(repo.resolveInput("nc:14362")?.adapter.id).toBe("nowcoder");
+    expect(repo.resolveInput("nowcoder:14362")?.adapter.id).toBe("nowcoder");
+  });
+
+  it("enables luogu-public statement mirror for Codeforces and passes fetchImpl to NowCoderAdapter", async () => {
+    const mockFetch = vi.fn<typeof fetch>().mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("codeforces.com/api/problemset.problems")) {
+        return new Response(
+          JSON.stringify({
+            status: "OK",
+            result: {
+              problems: [
+                {
+                  contestId: 1900,
+                  index: "A",
+                  name: "Cover in Water",
+                  rating: 800,
+                  tags: ["greedy"]
+                }
+              ]
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.includes("luogu.com.cn/problem/CF1900A")) {
+        return new Response(
+          JSON.stringify({
+            status: 200,
+            data: {
+              problem: {
+                pid: "CF1900A",
+                limits: { time: [1000], memory: [262144] },
+                translations: {
+                  en: { name: "Cover in Water", description: "Fill empty cells with water." }
+                },
+                samples: [["1\n3\n...", "2"]]
+              }
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+      if (url.includes("ac.nowcoder.com/acm/problem/14362")) {
+        return new Response(
+          `<html><title>A+B</title><div class="subject-describe"><p>求两数之和。</p><textarea data-clipboard-text-id="input1">1 2</textarea><textarea data-clipboard-text-id="output1">3</textarea></div></html>`,
+          { status: 200, headers: { "content-type": "text/html" } }
+        );
+      }
+      return new Response("Not Found", { status: 404 });
+    });
+
+    const repo = new ProblemRepository({ fetchImpl: mockFetch });
+    const cfDoc = await repo.importProblem("CF1900A");
+    expect(cfDoc.source).toBe("codeforces");
+    expect(cfDoc.problemKey).toBe("cf:1900A");
+    expect(cfDoc.canonicalUrl).toBe("https://codeforces.com/contest/1900/problem/A");
+    expect(cfDoc.completeness).toBe("full");
+    expect(cfDoc.samples[0]?.expectedOutput).toBe("2");
+
+    const ncDoc = await repo.importProblem("NC14362");
+    expect(ncDoc.source).toBe("nowcoder");
+    expect(ncDoc.problemKey).toBe("nowcoder:acm-14362");
+    expect(ncDoc.completeness).toBe("full");
+    expect(ncDoc.samples[0]?.expectedOutput).toBe("3");
+  });
+
   it("orchestrates adapters, caches locally to JSON, and merges clipboard statement", async () => {
     const cacheDir = await mkdtemp(join(tmpdir(), "algo-coach-repo-"));
     tempDirs.push(cacheDir);

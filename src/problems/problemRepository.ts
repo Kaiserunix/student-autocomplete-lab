@@ -8,7 +8,7 @@ import {
   type ProblemSourceId
 } from "../core/contracts";
 import { AtCoderAdapter } from "./adapters/atcoderAdapter";
-import { CodeforcesAdapter } from "./adapters/codeforcesAdapter";
+import { CodeforcesAdapter, type CodeforcesStatementMirror } from "./adapters/codeforcesAdapter";
 import { createLeetCodeCnAdapter, createLeetCodeGlobalAdapter } from "./adapters/leetcodeAdapter";
 import { LuoguAdapter } from "./adapters/luoguAdapter";
 import { NowCoderAdapter } from "./adapters/nowcoderAdapter";
@@ -25,8 +25,16 @@ export interface ProblemRepositoryOptions {
   adapters?: ProblemSourceAdapter[];
   /** Custom fetch implementation passed to default built-in adapters. */
   fetchImpl?: typeof fetch;
+  /** Per-request HTTP timeout in milliseconds passed to built-in adapters. */
+  timeoutMs?: number;
   /** Preferred LeetCode site when resolving ambiguous bare slugs like "two-sum". Defaults to "leetcode-cn". */
   defaultLeetCodeSource?: "leetcode-cn" | "leetcode-global";
+  /** Public statement mirror strategy for Codeforces. Defaults to "luogu-public". */
+  codeforcesStatementMirror?: CodeforcesStatementMirror;
+  /** Optional user-supplied LeetCode CN Cookie header (never stolen). */
+  leetCodeCnCookie?: string;
+  /** Optional user-supplied LeetCode Global Cookie header (never stolen). */
+  leetCodeGlobalCookie?: string;
 }
 
 function sanitizeKeyForFile(problemKey: string): string {
@@ -44,12 +52,24 @@ export class ProblemRepository {
     this.defaultLeetCodeSource = options.defaultLeetCodeSource ?? "leetcode-cn";
 
     const initialAdapters = options.adapters ?? [
-      createLeetCodeCnAdapter({ fetchImpl: options.fetchImpl }),
-      createLeetCodeGlobalAdapter({ fetchImpl: options.fetchImpl }),
-      new LuoguAdapter({ fetchImpl: options.fetchImpl }),
-      new AtCoderAdapter({ fetchImpl: options.fetchImpl }),
-      new CodeforcesAdapter({ fetchImpl: options.fetchImpl }),
-      new NowCoderAdapter()
+      createLeetCodeCnAdapter({
+        fetchImpl: options.fetchImpl,
+        timeoutMs: options.timeoutMs,
+        cookieHeader: options.leetCodeCnCookie
+      }),
+      createLeetCodeGlobalAdapter({
+        fetchImpl: options.fetchImpl,
+        timeoutMs: options.timeoutMs,
+        cookieHeader: options.leetCodeGlobalCookie
+      }),
+      new LuoguAdapter({ fetchImpl: options.fetchImpl, timeoutMs: options.timeoutMs }),
+      new AtCoderAdapter({ fetchImpl: options.fetchImpl, timeoutMs: options.timeoutMs }),
+      new CodeforcesAdapter({
+        fetchImpl: options.fetchImpl,
+        timeoutMs: options.timeoutMs,
+        statementMirror: options.codeforcesStatementMirror ?? "luogu-public"
+      }),
+      new NowCoderAdapter({ fetchImpl: options.fetchImpl, timeoutMs: options.timeoutMs })
     ];
 
     for (const adapter of initialAdapters) {
@@ -81,14 +101,18 @@ export class ProblemRepository {
     if (preferredSource) {
       const preferred = this.adapters.get(preferredSource);
       if (preferred) {
-        const resolved = preferred.resolveRef(trimmed);
+        const resolved =
+          preferred.resolveRef(trimmed) ??
+          (preferred.id === "luogu" && /^\d+$/.test(trimmed)
+            ? preferred.resolveRef(`luogu:${trimmed}`)
+            : null);
         if (resolved) {
           return { adapter: preferred, ...resolved };
         }
       }
     }
 
-    // 1. Exact URL match first
+    // 1. Exact URL match first (preserves Luogu URLs like `luogu.com.cn/problem/CF1900A`)
     if (/^https?:\/\//i.test(trimmed)) {
       for (const adapter of this.adapters.values()) {
         if (adapter.canHandleUrl(trimmed)) {
@@ -101,12 +125,13 @@ export class ProblemRepository {
       return null;
     }
 
-    // 2. Non-LeetCode explicit OJ patterns & prefixed IDs before bare LeetCode slugs
+    // 2. Native OJ patterns before Luogu RemoteJudge aliases (`CF1900A` -> codeforces,
+    //    `AT_abc350_c` -> atcoder; explicit `luogu:CF1900A` still falls through to `luogu`)
     const orderedIds: ProblemSourceId[] = [
-      "luogu",
       "codeforces",
       "atcoder",
       "nowcoder",
+      "luogu",
       this.defaultLeetCodeSource,
       this.defaultLeetCodeSource === "leetcode-cn" ? "leetcode-global" : "leetcode-cn"
     ];
@@ -147,7 +172,7 @@ export class ProblemRepository {
       throw new ProblemAdapterError(
         "NOT_FOUND",
         opts?.preferredSource ?? "local-markdown",
-        `Could not recognize problem URL or identifier: "${input}". Try a full OJ URL, Luogu PID (P1001), Codeforces ID (1433G), AtCoder task (abc300_a), LeetCode slug (two-sum), or Markdown import.`
+        `Could not recognize problem URL or identifier: "${input}". Try a full OJ URL, Luogu PID (P1001), Codeforces ID (CF1900A / 1433G), AtCoder task (abc350c / abc350_c), NowCoder ID (NC14362), LeetCode ID/slug (1 / two-sum), or Markdown import.`
       );
     }
 
@@ -242,7 +267,15 @@ export class ProblemRepository {
 
   async healthCheckAll(
     signal?: AbortSignal
-  ): Promise<Array<{ source: ProblemSourceId; displayName: string; ok: boolean; code?: string; message?: string }>> {
+  ): Promise<
+    Array<{
+      source: ProblemSourceId;
+      displayName: string;
+      ok: boolean;
+      code?: string;
+      message?: string;
+    }>
+  > {
     const results = await Promise.all(
       this.listAdapters().map(async (adapter) => {
         if (!adapter.healthCheck) {
@@ -339,9 +372,11 @@ export class ProblemRepository {
   private computeExpectedKey(source: ProblemSourceId, sourceId: string): string | undefined {
     switch (source) {
       case "leetcode-cn":
-        return sourceId === "daily" ? undefined : `lc-cn:${sourceId}`;
+        return sourceId === "daily" || sourceId.startsWith("#") ? undefined : `lc-cn:${sourceId}`;
       case "leetcode-global":
-        return sourceId === "daily" ? undefined : `lc-global:${sourceId}`;
+        return sourceId === "daily" || sourceId.startsWith("#")
+          ? undefined
+          : `lc-global:${sourceId}`;
       case "luogu":
         return `luogu:${sourceId}`;
       case "codeforces":

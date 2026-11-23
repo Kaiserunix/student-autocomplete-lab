@@ -6,10 +6,41 @@ import {
   type ProblemSearchQuery,
   type ProblemSourceAdapter
 } from "../../core/contracts";
+import { decodeHtmlEntities } from "./htmlUtils";
+import {
+  DEFAULT_HTTP_TIMEOUT_MS,
+  DEFAULT_USER_AGENT,
+  fetchWithTimeout,
+  isAntiBotChallenge,
+  mapHttpStatusError
+} from "./httpClient";
 
 export interface LuoguAdapterOptions {
   fetchImpl?: typeof fetch;
   userAgent?: string;
+  timeoutMs?: number;
+  tagsTtlMs?: number;
+}
+
+export interface FetchLuoguRemoteProblemOptions {
+  fetchImpl?: typeof fetch;
+  userAgent?: string;
+  timeoutMs?: number;
+  signal?: AbortSignal;
+  /** Preferred translation locale when Luogu RemoteJudge `translations` is present. Defaults to "en". */
+  preferLocale?: "en" | "zh-CN";
+}
+
+export interface LuoguRemoteProblemData {
+  pid: string;
+  title: string;
+  locale: "zh-CN" | "en-US";
+  statementMarkdown: string;
+  samples: ProblemSample[];
+  constraints?: {
+    timeLimitMs?: number;
+    memoryLimitMb?: number;
+  };
 }
 
 interface LuoguContentBlock {
@@ -36,6 +67,7 @@ interface LuoguRawProblem {
   hint?: unknown;
   contenu?: LuoguContentBlock;
   content?: LuoguContentBlock;
+  translations?: Record<string, LuoguContentBlock | undefined>;
   limits?: {
     time?: unknown;
     memory?: unknown;
@@ -44,7 +76,10 @@ interface LuoguRawProblem {
 
 interface LuoguEnvelope {
   code?: unknown;
+  status?: unknown;
   data?: {
+    errorCode?: unknown;
+    errorMessage?: unknown;
     problem?: LuoguRawProblem;
     problems?: {
       result?: unknown;
@@ -52,11 +87,14 @@ interface LuoguEnvelope {
     };
     training?: {
       id?: unknown;
+      name?: unknown;
       title?: unknown;
       problems?: unknown;
     };
   };
   currentData?: {
+    errorCode?: unknown;
+    errorMessage?: unknown;
     problem?: LuoguRawProblem;
     problems?: {
       result?: unknown;
@@ -64,14 +102,17 @@ interface LuoguEnvelope {
     };
     training?: {
       id?: unknown;
+      name?: unknown;
       title?: unknown;
       problems?: unknown;
     };
   };
 }
 
-const DEFAULT_LUOGU_UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) AlgoCoach/0.2.0";
+const LUOGU_TAGS_URL = "https://www.luogu.com.cn/_lfe/tags";
+const DEFAULT_TAGS_TTL_MS = 30 * 60 * 1000;
+const LUOGU_GUIDANCE =
+  "Please use Luogu Copy Markdown or Competitive Companion (Localhost Bridge).";
 
 const LUOGU_DIFFICULTY_LABELS: Record<number, { label: string; tier: 1 | 2 | 3 | 4 | 5 }> = {
   1: { label: "入门", tier: 1 },
@@ -85,6 +126,31 @@ const LUOGU_DIFFICULTY_LABELS: Record<number, { label: string; tier: 1 | 2 | 3 |
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function decodeText(value: unknown): string {
+  const raw = asString(value);
+  return raw ? decodeHtmlEntities(raw) : "";
+}
+
+function hasContentBlockBody(block?: LuoguContentBlock): boolean {
+  if (!block || typeof block !== "object") {
+    return false;
+  }
+  return Boolean(
+    asString(block.description).trim() ||
+      asString(block.background).trim() ||
+      asString(block.formatI).trim() ||
+      asString(block.formatO).trim()
+  );
+}
+
+function isEnglishLocale(locale: unknown): boolean {
+  return typeof locale === "string" && /^en(?:[-_]|$)/i.test(locale.trim());
+}
+
+function hasNumericTags(raw: unknown): boolean {
+  return Array.isArray(raw) && raw.some((tag) => typeof tag === "number");
 }
 
 function normalizeSamples(raw: unknown): ProblemSample[] {
@@ -117,49 +183,152 @@ function normalizeSamples(raw: unknown): ProblemSample[] {
   return result;
 }
 
-function normalizeTags(raw: unknown): string[] {
+function normalizeTags(raw: unknown, tagMap?: ReadonlyMap<number, string>): string[] {
   if (!Array.isArray(raw)) {
     return [];
   }
   return raw
     .map((tag) => {
-      if (typeof tag === "string") return tag.trim();
-      if (typeof tag === "number") return `tag-${tag}`;
+      if (typeof tag === "string") return decodeHtmlEntities(tag).trim();
+      if (typeof tag === "number") {
+        return tagMap?.get(tag) ?? `tag-${tag}`;
+      }
       if (tag && typeof tag === "object") {
         const rec = tag as Record<string, unknown>;
-        return asString(rec.name).trim() || (rec.id !== undefined ? `tag-${String(rec.id)}` : "");
+        const named = decodeText(rec.name).trim();
+        if (named) return named;
+        if (typeof rec.id === "number") {
+          return tagMap?.get(rec.id) ?? `tag-${rec.id}`;
+        }
+        return rec.id !== undefined ? `tag-${String(rec.id)}` : "";
       }
       return "";
     })
     .filter(Boolean);
 }
 
-function buildLuoguStatementMarkdown(problem: LuoguRawProblem): string {
-  const contenu = problem.contenu ?? problem.content;
-  const background = asString(contenu?.background) || asString(problem.background);
-  const description = asString(contenu?.description) || asString(problem.description);
-  const formatI = asString(contenu?.formatI) || asString(problem.inputFormat);
-  const formatO = asString(contenu?.formatO) || asString(problem.outputFormat);
-  const hint = asString(contenu?.hint) || asString(problem.hint);
+function selectContentBlocks(
+  problem: LuoguRawProblem,
+  preferLocale: "en" | "zh-CN" = "zh-CN"
+): {
+  primary?: LuoguContentBlock;
+  fallback?: LuoguContentBlock;
+  locale: "zh-CN" | "en-US";
+} {
+  const translations =
+    problem.translations && typeof problem.translations === "object"
+      ? problem.translations
+      : undefined;
+  const enTranslation = translations?.en ?? translations?.["en-US"];
+  const zhTranslation = translations?.["zh-CN"] ?? translations?.zh;
+
+  if (preferLocale === "en") {
+    const enCandidate = hasContentBlockBody(enTranslation)
+      ? enTranslation
+      : isEnglishLocale(problem.content?.locale) && hasContentBlockBody(problem.content)
+        ? problem.content
+        : undefined;
+    if (enCandidate) {
+      return {
+        primary: enCandidate,
+        fallback: problem.content ?? problem.contenu ?? zhTranslation,
+        locale: "en-US"
+      };
+    }
+    const primary = problem.content ?? problem.contenu ?? zhTranslation;
+    const fallback = primary === problem.content ? problem.contenu ?? zhTranslation : problem.content;
+    const sampleText = `${asString(primary?.description)} ${asString(primary?.name)}`;
+    const inferredLocale: "zh-CN" | "en-US" =
+      isEnglishLocale(primary?.locale) || (!/[\u4e00-\u9fff]/.test(sampleText) && sampleText.trim().length > 0)
+        ? "en-US"
+        : "zh-CN";
+    return { primary, fallback, locale: inferredLocale };
+  }
+
+  const primary = hasContentBlockBody(problem.contenu)
+    ? problem.contenu
+    : hasContentBlockBody(zhTranslation)
+      ? zhTranslation
+      : problem.contenu ?? problem.content ?? enTranslation;
+  const fallback =
+    primary === problem.content
+      ? problem.contenu ?? enTranslation ?? zhTranslation
+      : problem.content ?? enTranslation ?? zhTranslation;
+
+  return {
+    primary,
+    fallback,
+    locale: "zh-CN"
+  };
+}
+
+function buildLuoguStatementMarkdown(
+  problem: LuoguRawProblem,
+  preferLocale: "en" | "zh-CN" = "zh-CN"
+): { markdown: string; locale: "zh-CN" | "en-US" } {
+  const { primary, fallback, locale } = selectContentBlocks(problem, preferLocale);
+
+  const background =
+    decodeText(primary?.background).trim() ||
+    decodeText(fallback?.background).trim() ||
+    decodeText(problem.background).trim();
+  const description =
+    decodeText(primary?.description).trim() ||
+    decodeText(fallback?.description).trim() ||
+    decodeText(problem.description).trim();
+  const formatI =
+    decodeText(primary?.formatI).trim() ||
+    decodeText(fallback?.formatI).trim() ||
+    decodeText(problem.inputFormat).trim();
+  const formatO =
+    decodeText(primary?.formatO).trim() ||
+    decodeText(fallback?.formatO).trim() ||
+    decodeText(problem.outputFormat).trim();
+  const hint =
+    decodeText(primary?.hint).trim() ||
+    decodeText(fallback?.hint).trim() ||
+    decodeText(problem.content?.hint).trim() ||
+    decodeText(problem.contenu?.hint).trim() ||
+    decodeText(problem.hint).trim();
+
+  const headings =
+    locale === "en-US"
+      ? {
+          background: "## Problem Background",
+          description: "## Problem Statement",
+          formatI: "## Input Format",
+          formatO: "## Output Format",
+          hint: "## Note"
+        }
+      : {
+          background: "## 题目背景",
+          description: "## 题目描述",
+          formatI: "## 输入格式",
+          formatO: "## 输出格式",
+          hint: "## 说明/提示"
+        };
 
   const sections: string[] = [];
-  if (background.trim()) {
-    sections.push(`## 题目背景\n\n${background.trim()}`);
+  if (background) {
+    sections.push(`${headings.background}\n\n${background}`);
   }
-  if (description.trim()) {
-    sections.push(`## 题目描述\n\n${description.trim()}`);
+  if (description) {
+    sections.push(`${headings.description}\n\n${description}`);
   }
-  if (formatI.trim()) {
-    sections.push(`## 输入格式\n\n${formatI.trim()}`);
+  if (formatI) {
+    sections.push(`${headings.formatI}\n\n${formatI}`);
   }
-  if (formatO.trim()) {
-    sections.push(`## 输出格式\n\n${formatO.trim()}`);
+  if (formatO) {
+    sections.push(`${headings.formatO}\n\n${formatO}`);
   }
-  if (hint.trim()) {
-    sections.push(`## 说明/提示\n\n${hint.trim()}`);
+  if (hint) {
+    sections.push(`${headings.hint}\n\n${hint}`);
   }
 
-  return sections.join("\n\n").trim();
+  return {
+    markdown: sections.join("\n\n").trim(),
+    locale
+  };
 }
 
 function extractConstraints(
@@ -191,6 +360,170 @@ function extractConstraints(
   };
 }
 
+/**
+ * Extracts Luogu's embedded JSON envelope from HTML responses:
+ * - Modern `<script id="lentille-context" type="application/json">{...}</script>`
+ * - Legacy `window._feInjection = JSON.parse(decodeURIComponent("..."))`
+ */
+export function extractLuoguEnvelopeFromHtml(html: string): LuoguEnvelope | null {
+  if (!html) {
+    return null;
+  }
+
+  const lentilleMatch = html.match(
+    /<script\b[^>]*\bid=["']lentille-context["'][^>]*>([\s\S]*?)<\/script>/i
+  );
+  if (lentilleMatch?.[1]) {
+    try {
+      const parsed = JSON.parse(lentilleMatch[1].trim()) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as LuoguEnvelope;
+      }
+    } catch {
+      // Fall through to legacy extraction
+    }
+  }
+
+  const feInjectionMatch = html.match(
+    /window\._feInjection\s*=\s*JSON\.parse\(\s*decodeURIComponent\(\s*(["'])([\s\S]*?)\1\s*\)\s*\)/i
+  );
+  if (feInjectionMatch?.[2]) {
+    try {
+      const decoded = decodeURIComponent(feInjectionMatch[2]);
+      const parsed = JSON.parse(decoded) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return parsed as LuoguEnvelope;
+      }
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function assertLuoguEnvelopeOk(payload: LuoguEnvelope): void {
+  const candidates = [
+    payload.data?.errorCode,
+    payload.currentData?.errorCode,
+    payload.code,
+    payload.status
+  ].filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+
+  const errMsg =
+    decodeText(payload.data?.errorMessage).trim() ||
+    decodeText(payload.currentData?.errorMessage).trim();
+  const detail = errMsg ? ` (${errMsg})` : "";
+
+  for (const code of candidates) {
+    if (code === 404) {
+      throw new ProblemAdapterError("NOT_FOUND", "luogu", `Luogu returned status 404${detail}.`);
+    }
+    if (code === 401 || code === 403) {
+      throw new ProblemAdapterError(
+        "AUTH_REQUIRED",
+        "luogu",
+        `Luogu returned status ${code}${detail}; authentication may be required. ${LUOGU_GUIDANCE}`
+      );
+    }
+    if (code === 418 || code === 429) {
+      throw new ProblemAdapterError(
+        "RATE_LIMITED",
+        "luogu",
+        `Luogu returned status ${code}${detail}. ${LUOGU_GUIDANCE}`
+      );
+    }
+    if (code >= 500) {
+      throw new ProblemAdapterError(
+        "NETWORK_ERROR",
+        "luogu",
+        `Luogu returned server error status ${code}${detail}.`
+      );
+    }
+  }
+}
+
+async function requestLuoguEnvelope(
+  url: string,
+  options: {
+    fetchImpl: typeof fetch;
+    userAgent: string;
+    timeoutMs: number;
+    signal?: AbortSignal;
+  }
+): Promise<LuoguEnvelope> {
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      options.fetchImpl,
+      url,
+      {
+        headers: {
+          "user-agent": options.userAgent,
+          "x-lentille-request": "content-only",
+          accept: "application/json, text/html;q=0.9"
+        },
+        signal: options.signal
+      },
+      options.timeoutMs
+    );
+  } catch (error) {
+    throw new ProblemAdapterError(
+      "NETWORK_ERROR",
+      "luogu",
+      `Network error requesting Luogu: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+
+  if (!response.ok) {
+    throw mapHttpStatusError("luogu", response.status, url, LUOGU_GUIDANCE);
+  }
+
+  const bodyText = await response.text();
+  let payload: LuoguEnvelope | null = null;
+
+  const trimmed = bodyText.trimStart();
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(bodyText) as unknown;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        payload = parsed as LuoguEnvelope;
+      }
+    } catch {
+      payload = null;
+    }
+  }
+
+  if (!payload) {
+    payload = extractLuoguEnvelopeFromHtml(bodyText);
+  }
+
+  if (!payload) {
+    if (isAntiBotChallenge(response, bodyText, ["lentille-context", "_feInjection"])) {
+      throw new ProblemAdapterError(
+        "ANTIBOT_BLOCKED",
+        "luogu",
+        `Luogu returned an anti-bot challenge page. ${LUOGU_GUIDANCE}`
+      );
+    }
+    if (/\/auth\/login|请先登录|用户登录/i.test(bodyText)) {
+      throw new ProblemAdapterError(
+        "AUTH_REQUIRED",
+        "luogu",
+        `Luogu requires login for this resource. ${LUOGU_GUIDANCE}`
+      );
+    }
+    throw new ProblemAdapterError(
+      "SCHEMA_DRIFT",
+      "luogu",
+      `Luogu returned an unreadable payload (neither Lentille JSON nor embedded HTML context). ${LUOGU_GUIDANCE}`
+    );
+  }
+
+  assertLuoguEnvelopeOk(payload);
+  return payload;
+}
+
 export function normalizeLuoguPid(input: string): string {
   const trimmed = input.trim();
   if (/^\d+$/.test(trimmed)) {
@@ -203,16 +536,82 @@ export function normalizeLuoguPid(input: string): string {
   const remoteMatch = trimmed.match(/^(cf|sp|uva|at)([a-z0-9_]+)$/i);
   if (remoteMatch) {
     const prefix = remoteMatch[1]!.toUpperCase();
-    return `${prefix}${remoteMatch[2]!}`;
+    const rest = remoteMatch[2]!;
+    if (prefix === "AT") {
+      return `AT${rest.toLowerCase()}`;
+    }
+    return `${prefix}${rest.toUpperCase()}`;
   }
   return trimmed;
 }
 
 /**
- * Lenient schema mapper supporting both legacy Luogu `DataResponse` (`currentData.problem`)
- * and modern `LentilleDataResponse` (`data.problem` with `contenu`/`content`).
+ * Reusable helper that fetches a Luogu problem (including RemoteJudge entries such as `CF1900A`)
+ * via Luogu's public Lentille endpoint with HTML fallback and returns statement, samples, and limits.
  */
-export function normalizeLuoguProblemPayload(payload: LuoguEnvelope): ProblemDocument {
+export async function fetchLuoguRemoteProblem(
+  pid: string,
+  opts: FetchLuoguRemoteProblemOptions = {}
+): Promise<LuoguRemoteProblemData> {
+  const normalizedPid = normalizeLuoguPid(pid);
+  if (!/^[A-Za-z0-9_]+$/.test(normalizedPid)) {
+    throw new ProblemAdapterError(
+      "NOT_FOUND",
+      "luogu",
+      `Invalid Luogu problem ID: "${pid}".`
+    );
+  }
+
+  const payload = await requestLuoguEnvelope(
+    `https://www.luogu.com.cn/problem/${encodeURIComponent(normalizedPid)}`,
+    {
+      fetchImpl: opts.fetchImpl ?? fetch,
+      userAgent: opts.userAgent ?? DEFAULT_USER_AGENT,
+      timeoutMs: opts.timeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS,
+      signal: opts.signal
+    }
+  );
+
+  const problem = payload.data?.problem ?? payload.currentData?.problem;
+  if (!problem || typeof problem !== "object") {
+    throw new ProblemAdapterError(
+      "SCHEMA_DRIFT",
+      "luogu",
+      "Luogu remote response did not include data.problem or currentData.problem."
+    );
+  }
+
+  const preferLocale = opts.preferLocale ?? "en";
+  const { markdown, locale } = buildLuoguStatementMarkdown(problem, preferLocale);
+  const { primary, fallback } = selectContentBlocks(problem, preferLocale);
+  const resolvedPid = asString(problem.pid).trim() || normalizedPid;
+  const title =
+    decodeText(primary?.name).trim() ||
+    decodeText(problem.title).trim() ||
+    decodeText(problem.name).trim() ||
+    decodeText(fallback?.name).trim() ||
+    resolvedPid;
+  const samples = normalizeSamples(problem.samples);
+  const constraints = extractConstraints(problem);
+
+  return {
+    pid: resolvedPid,
+    title,
+    locale,
+    statementMarkdown: markdown,
+    samples,
+    ...(constraints ? { constraints } : {})
+  };
+}
+
+/**
+ * Lenient schema mapper supporting both legacy Luogu `DataResponse` (`currentData.problem`)
+ * and modern `LentilleDataResponse` (`data.problem` with `contenu`/`content`/`translations`).
+ */
+export function normalizeLuoguProblemPayload(
+  payload: LuoguEnvelope,
+  options?: { tagMap?: ReadonlyMap<number, string> }
+): ProblemDocument {
   const problem = payload.data?.problem ?? payload.currentData?.problem;
   if (!problem || typeof problem !== "object") {
     throw new ProblemAdapterError(
@@ -225,9 +624,10 @@ export function normalizeLuoguProblemPayload(payload: LuoguEnvelope): ProblemDoc
   const pid = asString(problem.pid).trim();
   const contenu = problem.contenu ?? problem.content;
   const title =
-    asString(problem.title).trim() ||
-    asString(problem.name).trim() ||
-    asString(contenu?.name).trim();
+    decodeText(problem.title).trim() ||
+    decodeText(problem.name).trim() ||
+    decodeText(contenu?.name).trim() ||
+    decodeText(problem.content?.name).trim();
 
   if (!pid || !title) {
     throw new ProblemAdapterError(
@@ -237,17 +637,18 @@ export function normalizeLuoguProblemPayload(payload: LuoguEnvelope): ProblemDoc
     );
   }
 
-  const statementMarkdown = buildLuoguStatementMarkdown(problem);
+  const { markdown: statementMarkdown } = buildLuoguStatementMarkdown(problem, "zh-CN");
   const samples = normalizeSamples(problem.samples);
   const constraints = extractConstraints(problem);
   const diffNum = typeof problem.difficulty === "number" ? problem.difficulty : undefined;
   const diffMeta = diffNum !== undefined ? LUOGU_DIFFICULTY_LABELS[diffNum] : undefined;
 
-  const completeness = statementMarkdown.length > 0
-    ? "full"
-    : samples.length > 0
-      ? "samples_only"
-      : "metadata_only";
+  const completeness =
+    statementMarkdown.length > 0
+      ? "full"
+      : samples.length > 0
+        ? "samples_only"
+        : "metadata_only";
 
   return {
     schemaVersion: "problem-doc/v2",
@@ -271,7 +672,7 @@ export function normalizeLuoguProblemPayload(payload: LuoguEnvelope): ProblemDoc
           }
         }
       : {}),
-    rawTags: normalizeTags(problem.tags),
+    rawTags: normalizeTags(problem.tags, options?.tagMap),
     provenance: {
       ingestChannel: "builtin-adapter",
       fetchedAt: new Date().toISOString()
@@ -293,10 +694,16 @@ export class LuoguAdapter implements ProblemSourceAdapter {
 
   private readonly fetchImpl: typeof fetch;
   private readonly userAgent: string;
+  private readonly timeoutMs: number;
+  private readonly tagsTtlMs: number;
+  private cachedTagMap: Map<number, string> | null = null;
+  private tagMapCachedAt = 0;
 
   constructor(options: LuoguAdapterOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch;
-    this.userAgent = options.userAgent ?? DEFAULT_LUOGU_UA;
+    this.userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS;
+    this.tagsTtlMs = options.tagsTtlMs ?? DEFAULT_TAGS_TTL_MS;
   }
 
   canHandleUrl(url: string): boolean {
@@ -373,7 +780,9 @@ export class LuoguAdapter implements ProblemSourceAdapter {
       `https://www.luogu.com.cn/problem/${encodeURIComponent(pid)}`,
       opts?.signal
     );
-    return normalizeLuoguProblemPayload(payload);
+    const problem = payload.data?.problem ?? payload.currentData?.problem;
+    const tagMap = hasNumericTags(problem?.tags) ? await this.loadTagMap(opts?.signal) : undefined;
+    return normalizeLuoguProblemPayload(payload, { tagMap });
   }
 
   async search(
@@ -392,6 +801,11 @@ export class LuoguAdapter implements ProblemSourceAdapter {
     const problemsBlock = payload.data?.problems ?? payload.currentData?.problems;
     const rawList = Array.isArray(problemsBlock?.result) ? problemsBlock.result : [];
 
+    const needsTags = rawList.some(
+      (item) => item && typeof item === "object" && hasNumericTags((item as LuoguRawProblem).tags)
+    );
+    const tagMap = needsTags ? await this.loadTagMap(signal) : undefined;
+
     const items: ProblemDocument[] = [];
     for (const item of rawList) {
       if (!item || typeof item !== "object") {
@@ -399,7 +813,7 @@ export class LuoguAdapter implements ProblemSourceAdapter {
       }
       const p = item as LuoguRawProblem;
       const pid = asString(p.pid).trim();
-      const title = asString(p.title).trim() || asString(p.name).trim();
+      const title = decodeText(p.title).trim() || decodeText(p.name).trim();
       if (!pid || !title) {
         continue;
       }
@@ -425,7 +839,7 @@ export class LuoguAdapter implements ProblemSourceAdapter {
               }
             }
           : {}),
-        rawTags: normalizeTags(p.tags),
+        rawTags: normalizeTags(p.tags, tagMap),
         provenance: {
           ingestChannel: "builtin-adapter",
           fetchedAt: new Date().toISOString()
@@ -463,12 +877,23 @@ export class LuoguAdapter implements ProblemSourceAdapter {
       );
     }
 
+    const needsTags = training.problems.some((entry) => {
+      if (!entry || typeof entry !== "object") return false;
+      const wrapped = entry as { problem?: LuoguRawProblem } & LuoguRawProblem;
+      const raw = wrapped.problem ?? wrapped;
+      return hasNumericTags(raw.tags);
+    });
+    const tagMap = needsTags ? await this.loadTagMap(signal) : undefined;
+
     const items: ProblemDocument[] = [];
     for (const entry of training.problems) {
+      if (!entry || typeof entry !== "object") {
+        continue;
+      }
       const wrapped = entry as { problem?: LuoguRawProblem } & LuoguRawProblem;
       const raw = wrapped.problem ?? wrapped;
       const pid = asString(raw.pid).trim();
-      const title = asString(raw.title).trim() || asString(raw.name).trim();
+      const title = decodeText(raw.title).trim() || decodeText(raw.name).trim();
       if (!pid || !title) {
         continue;
       }
@@ -494,7 +919,7 @@ export class LuoguAdapter implements ProblemSourceAdapter {
               }
             }
           : {}),
-        rawTags: normalizeTags(raw.tags),
+        rawTags: normalizeTags(raw.tags, tagMap),
         provenance: {
           ingestChannel: "builtin-adapter",
           fetchedAt: new Date().toISOString()
@@ -504,7 +929,10 @@ export class LuoguAdapter implements ProblemSourceAdapter {
 
     return {
       id: cleanId,
-      title: asString(training.title).trim() || `Luogu Training ${cleanId}`,
+      title:
+        decodeText(training.name).trim() ||
+        decodeText(training.title).trim() ||
+        `Luogu Training ${cleanId}`,
       items
     };
   }
@@ -528,82 +956,62 @@ export class LuoguAdapter implements ProblemSourceAdapter {
   }
 
   private async fetchLentilleJson(url: string, signal?: AbortSignal): Promise<LuoguEnvelope> {
-    let response: Response;
+    return requestLuoguEnvelope(url, {
+      fetchImpl: this.fetchImpl,
+      userAgent: this.userAgent,
+      timeoutMs: this.timeoutMs,
+      signal
+    });
+  }
+
+  private async loadTagMap(signal?: AbortSignal): Promise<ReadonlyMap<number, string> | undefined> {
+    if (this.cachedTagMap && Date.now() - this.tagMapCachedAt < this.tagsTtlMs) {
+      return this.cachedTagMap;
+    }
+
     try {
-      response = await this.fetchImpl(url, {
-        headers: {
-          "user-agent": this.userAgent,
-          "x-lentille-request": "content-only",
-          accept: "application/json"
+      const response = await fetchWithTimeout(
+        this.fetchImpl,
+        LUOGU_TAGS_URL,
+        {
+          headers: {
+            "user-agent": this.userAgent,
+            accept: "application/json"
+          },
+          signal
         },
-        signal
-      });
-    } catch (error) {
-      throw new ProblemAdapterError(
-        "NETWORK_ERROR",
-        "luogu",
-        `Network error requesting Luogu: ${error instanceof Error ? error.message : String(error)}`
+        this.timeoutMs
       );
-    }
+      if (!response.ok) {
+        return undefined;
+      }
+      const raw = (await response.json()) as unknown;
+      const list = Array.isArray(raw)
+        ? raw
+        : raw && typeof raw === "object"
+          ? Array.isArray((raw as { tags?: unknown }).tags)
+            ? ((raw as { tags: unknown[] }).tags)
+            : Array.isArray((raw as { data?: { tags?: unknown } }).data?.tags)
+              ? ((raw as { data: { tags: unknown[] } }).data.tags)
+              : []
+          : [];
 
-    if (response.status === 404) {
-      throw new ProblemAdapterError(
-        "NOT_FOUND",
-        "luogu",
-        `Luogu resource not found (HTTP 404): ${url}`
-      );
-    }
-    if (response.status === 401) {
-      throw new ProblemAdapterError(
-        "AUTH_REQUIRED",
-        "luogu",
-        "Luogu requires login for this resource (HTTP 401). Please use Luogu Copy Markdown or Localhost Bridge."
-      );
-    }
-    if (response.status === 403) {
-      throw new ProblemAdapterError(
-        "ANTIBOT_BLOCKED",
-        "luogu",
-        "Luogu blocked the request (HTTP 403). Please copy the Markdown from your browser or use Localhost Bridge."
-      );
-    }
-    if (response.status === 418 || response.status === 429) {
-      throw new ProblemAdapterError(
-        "RATE_LIMITED",
-        "luogu",
-        `Luogu rate-limited or rejected client request (HTTP ${response.status}). Please retry later or use Copy Markdown.`
-      );
-    }
-    if (!response.ok) {
-      throw new ProblemAdapterError(
-        "NETWORK_ERROR",
-        "luogu",
-        `Luogu request failed with HTTP ${response.status}.`
-      );
-    }
-
-    let payload: LuoguEnvelope;
-    try {
-      payload = (await response.json()) as LuoguEnvelope;
+      const map = new Map<number, string>();
+      for (const entry of list) {
+        if (!entry || typeof entry !== "object") continue;
+        const rec = entry as { id?: unknown; name?: unknown };
+        if (typeof rec.id === "number" && typeof rec.name === "string" && rec.name.trim()) {
+          map.set(rec.id, decodeHtmlEntities(rec.name).trim());
+        }
+      }
+      if (map.size > 0) {
+        this.cachedTagMap = map;
+        this.tagMapCachedAt = Date.now();
+        return map;
+      }
     } catch {
-      throw new ProblemAdapterError(
-        "SCHEMA_DRIFT",
-        "luogu",
-        "Luogu returned non-JSON content (possible login wall or WAF challenge). Please import via Copy Markdown."
-      );
+      // Best-effort enrichment only; never fail main fetch when /_lfe/tags is unreachable
     }
-
-    if (payload.code === 404) {
-      throw new ProblemAdapterError("NOT_FOUND", "luogu", "Luogu returned code 404.");
-    }
-    if (payload.code === 401 || payload.code === 403) {
-      throw new ProblemAdapterError(
-        "AUTH_REQUIRED",
-        "luogu",
-        `Luogu returned code ${payload.code}; authentication may be required.`
-      );
-    }
-
-    return payload;
+    return undefined;
   }
 }

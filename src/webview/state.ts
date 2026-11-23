@@ -2,12 +2,13 @@ import type { SidebarStateSnapshot, StuckCategory } from "../core/contracts";
 import type { AudioEngineState } from "./audioSynth";
 
 export type SidebarTab = "workspace" | "problems" | "coach" | "dossier" | "settings";
-export interface InlineToast { level: "info" | "warn" | "error"; text: string; }
+export interface InlineToast { level: "info" | "warn" | "error"; text: string; undoEventId?: string; }
 export interface StreamBufferState { requestId: string; text: string; }
 
 export interface WebviewState {
   readonly snapshot: SidebarStateSnapshot;
   readonly activeTab: SidebarTab;
+  readonly prevTab?: SidebarTab;
   readonly stuck: StuckCategory;
   readonly giveUpConfirmPending: boolean;
   readonly panels: Readonly<Record<string, boolean>>;
@@ -29,7 +30,7 @@ export const sanitizeExternalUrl = (raw: string | undefined): string | null => {
 
 const F = false;
 const AI_DEF = { provider: "openai-compatible" as const, model: "deepseek-chat", hasApiKey: F };
-const DS = "https://api.deepseek.com/";
+export const DS = "https://api.deepseek.com/";
 
 export const createInitialSnapshot = (): SidebarStateSnapshot => ({
   flags: {
@@ -57,15 +58,40 @@ export const createInitialWebviewState = (snapshot = createInitialSnapshot(), au
   panels: {}, audioState, toast: null, stream: null, drafts: {}, dirtyAiFields: {}
 });
 
-export const applyStateSync = (p: WebviewState, next: SidebarStateSnapshot): WebviewState => ({
-  ...p, snapshot: next,
-  giveUpConfirmPending: p.snapshot.activeProblem?.problemKey !== next.activeProblem?.problemKey ? F : p.giveUpConfirmPending,
-  stream: next.coachBusy ? p.stream : null,
-  toast: next.statusBanner ? { ...next.statusBanner } : p.toast
-});
+export const applyStateSync = (p: WebviewState, next: SidebarStateSnapshot): WebviewState => {
+  const nb = next.statusBanner, pb = p.snapshot.statusBanner;
+  const pk0 = p.snapshot.activeProblem?.problemKey;
+  const pk1 = next.activeProblem?.problemKey;
+  const sw = Boolean(pk0 && pk0 !== pk1);
+  const b = sw ? clearDraftKeys(p, ["sin", "sex", "ask"]) : p;
+  return {
+    ...b, snapshot: next,
+    giveUpConfirmPending: pk0 !== pk1 ? F : b.giveUpConfirmPending,
+    stuck: sw ? "no_idea" : b.stuck,
+    panels: sw ? { ...b.panels, sample: F, stmtFull: F } : b.panels,
+    stream: next.coachBusy ? b.stream : null,
+    toast: nb && (nb.level !== pb?.level || nb.text !== pb?.text) ? { ...nb } : b.toast
+  };
+};
 
 export const setActiveTab = (p: WebviewState, activeTab: SidebarTab): WebviewState =>
-  p.activeTab === activeTab ? p : { ...p, activeTab, giveUpConfirmPending: F };
+  p.activeTab === activeTab ? p : { ...p, prevTab: p.activeTab, activeTab, giveUpConfirmPending: F, toast: null };
+
+export const getDueReviewItems = (snap: SidebarStateSnapshot) => {
+  const lr = snap.learnerSnapshot;
+  const now = Number.isFinite(Date.parse(lr.derivedAt)) ? Date.parse(lr.derivedAt) : Date.now();
+  const dueM = Object.values(lr.mistakeNotebook)
+    .filter((e) => {
+      const du = Date.parse(e.fsrsCard.due);
+      return Number.isFinite(du) && du <= now;
+    })
+    .sort((a, b) => a.fsrsCard.due.localeCompare(b.fsrsCard.due));
+  const dueSet = new Set(dueM.map((m) => m.problemKey));
+  const dueR = snap.recommendations.filter((r) => r.bucket === "fsrs_due" && !dueSet.has(r.problemKey));
+  return { dueM, dueR, count: dueM.length + dueR.length };
+};
+
+export const countDueReviews = (snap: SidebarStateSnapshot): number => getDueReviewItems(snap).count;
 
 export const setGiveUpConfirmPending = (p: WebviewState, giveUpConfirmPending: boolean): WebviewState => ({ ...p, giveUpConfirmPending });
 export const appendCoachStreamDelta = (p: WebviewState, requestId: string, delta: string): WebviewState =>

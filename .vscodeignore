@@ -13,3 +13,5 @@ esbuild.config.mjs
 .runtime/**
 .algo-coach/**
 practice/**
+docs/**
+.github/**

@@ -370,6 +370,53 @@ describe("CoachService end-to-end (Prompt Isolation, Anti-Spoiler Gate, Offline 
     expect(unlocked.spoilerSafe).toBe(true);
   });
 
+  it("omits bogus runtime dryRunPrompt on compile error (CE) diagnosis", async () => {
+    const service = new CoachService();
+    const ceRun = {
+      schemaVersion: "local-run/v2" as const,
+      source: "local_runner" as const,
+      problemKey: SAMPLE_PROBLEM.problemKey,
+      language: "cpp" as const,
+      mode: "stdio" as const,
+      codeHash: "ce1",
+      compileOk: false,
+      compileStderr: "solution.cpp:4:1: error: expected ';'",
+      allPassed: false,
+      originalTotal: 1,
+      originalPassed: 0,
+      customTotal: 0,
+      customPassed: 0,
+      cases: [],
+      memoryNote: "",
+      timestamp: "2026-11-22T00:00:00Z"
+    };
+
+    const zhResp = await service.respond({
+      action: "dryRun",
+      problem: SAMPLE_PROBLEM,
+      language: "cpp",
+      studentCode: "int main() { return 0 }",
+      localRunResult: ceRun,
+      uiLanguage: "zh-CN",
+      offlineMode: true
+    });
+    expect(zhResp.headline).toBe("编译错误诊断（CE）");
+    expect(zhResp.dryRunPrompt).toBeUndefined();
+    expect(zhResp.stuckCategory).toBe("implementation");
+
+    const enResp = await service.respond({
+      action: "dryRun",
+      problem: SAMPLE_PROBLEM,
+      language: "cpp",
+      studentCode: "int main() { return 0 }",
+      localRunResult: ceRun,
+      uiLanguage: "en-US",
+      offlineMode: true
+    });
+    expect(enResp.headline).toBe("Compile Error Diagnosis (CE)");
+    expect(enResp.dryRunPrompt).toBeUndefined();
+  });
+
   it("blocks Rust fn main / C stdio skeletons at L4 and supports SSE streaming through CoachService", async () => {
     const rustLeak = enforceCoachSpoilerPolicy(
       makePayload({

@@ -10,3 +10,5 @@ Thumbs.db
 secrets/
 *.env
 !.env.example
+practice/
+.vscode/settings.json

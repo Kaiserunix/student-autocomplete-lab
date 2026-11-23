@@ -46,6 +46,7 @@ export const EXTENSION_COMMANDS = [
   "algoCoach.restoreStarterVisualPreset",
   "algoCoach.loadWarmupPack",
   "algoCoach.importProblem",
+  "algoCoach.openProblemReader",
   "algoCoach.runSamples",
   "algoCoach.checkToolchain",
   "algoCoach.copyAndOpenSubmit",
@@ -312,6 +313,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         const errorCount = countLspErrors(activeEditor.document.uri);
         const transition = rankEngine.updateDiagnostics(errorCount);
         sidebarController.applyRankTransition(transition);
+        if (transition.rankChanged || transition.scoreDelta !== 0) {
+          void sidebarController.syncState();
+        }
       })
   });
 
@@ -405,6 +409,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
                 nowMs
               });
               sidebarController.applyRankTransition(transition);
+              if (transition.rankChanged || transition.scoreDelta !== 0) {
+                void sidebarController.syncState();
+              }
             } else if (
               single.text.includes("\n") ||
               single.text === ";" ||
@@ -421,6 +428,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
                   nowMs
                 });
                 sidebarController.applyRankTransition(transition);
+                if (transition.rankChanged || transition.scoreDelta !== 0) {
+                  void sidebarController.syncState();
+                }
               }
             }
           }
@@ -532,6 +542,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       knownProblemKeys = (await problemRepository.listCachedProblems()).map((p) => p.problemKey);
       await vscode.commands.executeCommand("algoCoach.sidebar.focus");
     }
+  });
+
+  registerCommand("algoCoach.openProblemReader", async () => {
+    await sidebarController.openProblemReader(undefined, false);
   });
 
   registerCommand("algoCoach.runSamples", async () => {

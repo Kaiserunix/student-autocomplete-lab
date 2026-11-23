@@ -7,11 +7,19 @@ import {
   type ProblemSourceAdapter
 } from "../../core/contracts";
 import { decodeHtmlEntities, htmlToMarkdown, stripHtmlTags } from "./htmlUtils";
+import {
+  DEFAULT_HTTP_TIMEOUT_MS,
+  DEFAULT_USER_AGENT,
+  fetchWithTimeout,
+  isAntiBotChallenge,
+  mapHttpStatusError
+} from "./httpClient";
 
 export interface AtCoderAdapterOptions {
   fetchImpl?: typeof fetch;
   userAgent?: string;
   indexTtlMs?: number;
+  timeoutMs?: number;
 }
 
 interface KenkooooProblem {
@@ -27,11 +35,10 @@ interface KenkooooProblemModel {
   is_experimental?: boolean;
 }
 
-const DEFAULT_UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) AlgoCoach/0.2.0";
-
 const KENKOOOO_PROBLEMS_URL = "https://kenkoooo.com/atcoder/resources/problems.json";
 const KENKOOOO_MODELS_URL = "https://kenkoooo.com/atcoder/resources/problem-models.json";
+const ATCODER_GUIDANCE =
+  "Please use Competitive Companion (Localhost Bridge) or Markdown/Clipboard import.";
 
 export function atcoderDifficultyToTier(rating?: number): 1 | 2 | 3 | 4 | 5 | undefined {
   if (rating === undefined || !Number.isFinite(rating)) {
@@ -69,7 +76,10 @@ function extractBalancedElementById(html: string, id: string): string | undefine
 }
 
 function extractBalancedSpanByClass(html: string, className: string): string | undefined {
-  const openRe = new RegExp(`<span\\b[^>]*\\bclass=["'][^"']*\\b${className}\\b[^"']*["'][^>]*>`, "i");
+  const openRe = new RegExp(
+    `<span\\b[^>]*\\bclass=["'][^"']*\\b${className}\\b[^"']*["'][^>]*>`,
+    "i"
+  );
   const openMatch = openRe.exec(html);
   if (!openMatch) {
     return undefined;
@@ -148,7 +158,9 @@ export function parseAtCoderTaskHtml(html: string, fallbackTitle: string): Parse
       continue;
     }
     const heading = stripHtmlTags(headingMatch[1]).trim();
-    const preValue = decodeHtmlEntities(preMatch[1].replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, ""))
+    const preValue = decodeHtmlEntities(
+      preMatch[1].replace(/<br\s*\/?>/gi, "\n").replace(/<[^>]+>/g, "")
+    )
       .replace(/\r\n/g, "\n")
       .replace(/^\n+|\n+$/g, "");
 
@@ -214,14 +226,17 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
   private readonly fetchImpl: typeof fetch;
   private readonly userAgent: string;
   private readonly indexTtlMs: number;
+  private readonly timeoutMs: number;
   private cachedProblems: KenkooooProblem[] | null = null;
   private cachedModels: Record<string, KenkooooProblemModel> | null = null;
-  private cachedAt = 0;
+  private cachedProblemsAt = 0;
+  private cachedModelsAt = 0;
 
   constructor(options: AtCoderAdapterOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? fetch;
-    this.userAgent = options.userAgent ?? DEFAULT_UA;
+    this.userAgent = options.userAgent ?? DEFAULT_USER_AGENT;
     this.indexTtlMs = options.indexTtlMs ?? 30 * 60 * 1000;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS;
   }
 
   canHandleUrl(url: string): boolean {
@@ -269,16 +284,23 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
           canonicalUrl: `https://atcoder.jp/contests/${contestId}/tasks/${taskId}`
         };
       }
-      const inferred = this.inferContestAndTask(prefixed[1]);
-      if (inferred) {
-        return {
-          sourceId: `${inferred.contestId}/${inferred.taskId}`,
-          canonicalUrl: `https://atcoder.jp/contests/${inferred.contestId}/tasks/${inferred.taskId}`
-        };
-      }
+      return this.resolveTaskToken(prefixed[1], true);
     }
 
-    const inferred = this.inferContestAndTask(trimmed);
+    // Luogu-style AtCoder prefix, e.g. `AT_abc350_c`, `AT_practice2_a`
+    const atUnderscore = trimmed.match(/^AT_([a-z0-9_-]+)$/i);
+    if (atUnderscore?.[1]) {
+      return this.resolveTaskToken(atUnderscore[1], true);
+    }
+
+    return this.resolveTaskToken(trimmed, false);
+  }
+
+  private resolveTaskToken(
+    token: string,
+    explicitPrefix: boolean
+  ): { sourceId: string; canonicalUrl?: string } | null {
+    const inferred = this.inferContestAndTask(token);
     if (inferred) {
       return {
         sourceId: `${inferred.contestId}/${inferred.taskId}`,
@@ -286,18 +308,52 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
       };
     }
 
+    const lower = token.trim().toLowerCase();
+    // If Kenkoooo index is already cached in memory, resolve exact contest_id immediately
+    if (this.cachedProblems) {
+      const hit = this.cachedProblems.find((p) => p.id.toLowerCase() === lower);
+      if (hit) {
+        return {
+          sourceId: `${hit.contest_id}/${hit.id}`,
+          canonicalUrl: `https://atcoder.jp/contests/${hit.contest_id}/tasks/${hit.id}`
+        };
+      }
+    }
+
+    // Non-standard task IDs like `practice2_a`, `tessoku_book_a`, `panasonic2020_a`, `joi2024yo1a_a`
+    // -> defer exact `contest_id` lookup to lazy Kenkoooo `problems.json` in `fetchProblem()`
+    if (
+      /^[a-z][a-z0-9_-]*_[a-z0-9]{1,3}$/.test(lower) ||
+      (explicitPrefix && /^[a-z0-9][a-z0-9_-]*$/.test(lower))
+    ) {
+      return { sourceId: lower };
+    }
+
     return null;
   }
 
   private inferContestAndTask(token: string): { contestId: string; taskId: string } | null {
     const lower = token.trim().toLowerCase();
-    // Standard task screen names like abc300_a, arc160_b, agc050_a, dp_a
-    const match = lower.match(/^((?:abc|arc|agc|ahc|typical90|dp|edpc|tdpc)[a-z0-9-]*)_([a-z0-9]+)$/i);
-    if (!match?.[1] || !match?.[2]) {
-      return null;
+
+    // Standard task screen names like abc300_a, arc160_b, agc050_a, dp_a, typical90_a, abc350-c
+    const withSep = lower.match(
+      /^((?:abc|arc|agc|ahc)\d{1,4}|typical90|dp|edpc|tdpc)[_/-]([a-z0-9]+)$/
+    );
+    if (withSep?.[1] && withSep?.[2]) {
+      const contestId = withSep[1].replace(/_/g, "-");
+      const taskId = `${withSep[1]}_${withSep[2]}`;
+      return { contestId, taskId };
     }
-    const contestId = match[1].replace(/_/g, "-");
-    return { contestId, taskId: lower };
+
+    // No-underscore shorthand: `abc350c`, `ABC350C`, `arc160b`, `agc050a`, `ahc030a`, `abc350ex`
+    const compact = lower.match(/^((?:abc|arc|agc|ahc)\d{1,4})(ex|[a-h])$/);
+    if (compact?.[1] && compact?.[2]) {
+      const contestId = compact[1];
+      const taskId = `${compact[1]}_${compact[2]}`;
+      return { contestId, taskId };
+    }
+
+    return null;
   }
 
   async fetchProblem(
@@ -309,11 +365,31 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
       throw new ProblemAdapterError(
         "NOT_FOUND",
         "atcoder",
-        `Invalid AtCoder reference: "${ref}". Expected e.g. abc300_a or https://atcoder.jp/contests/abc300/tasks/abc300_a.`
+        `Invalid AtCoder reference: "${ref}". Expected e.g. abc350_c, abc350c, practice2_a, or https://atcoder.jp/contests/abc350/tasks/abc350_c.`
       );
     }
 
-    const [contestId, taskId] = resolved.sourceId.split("/");
+    let contestId: string;
+    let taskId: string;
+    if (resolved.sourceId.includes("/")) {
+      const parts = resolved.sourceId.split("/");
+      contestId = parts[0] ?? "";
+      taskId = parts[1] ?? "";
+    } else {
+      // Lazy Kenkoooo problems.json lookup for non-standard task IDs (e.g. practice2_a, tessoku_book_a)
+      const problems = await this.loadProblems(opts?.signal);
+      const entry = problems.find((p) => p.id.toLowerCase() === resolved.sourceId.toLowerCase());
+      if (!entry) {
+        throw new ProblemAdapterError(
+          "NOT_FOUND",
+          "atcoder",
+          `AtCoder task "${resolved.sourceId}" was not found in the Kenkoooo problem index.`
+        );
+      }
+      contestId = entry.contest_id;
+      taskId = entry.id;
+    }
+
     if (!contestId || !taskId) {
       throw new ProblemAdapterError("NOT_FOUND", "atcoder", `Malformed AtCoder task ref: "${ref}".`);
     }
@@ -321,13 +397,18 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
     const url = `https://atcoder.jp/contests/${encodeURIComponent(contestId)}/tasks/${encodeURIComponent(taskId)}`;
     let response: Response;
     try {
-      response = await this.fetchImpl(url, {
-        headers: {
-          "user-agent": this.userAgent,
-          accept: "text/html,application/xhtml+xml"
+      response = await fetchWithTimeout(
+        this.fetchImpl,
+        url,
+        {
+          headers: {
+            "user-agent": this.userAgent,
+            accept: "text/html,application/xhtml+xml"
+          },
+          signal: opts?.signal
         },
-        signal: opts?.signal
-      });
+        this.timeoutMs
+      );
     } catch (error) {
       throw new ProblemAdapterError(
         "NETWORK_ERROR",
@@ -336,37 +417,16 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
       );
     }
 
-    if (response.status === 404) {
-      throw new ProblemAdapterError("NOT_FOUND", "atcoder", `AtCoder task not found: ${taskId}`);
-    }
-    if (response.status === 403) {
-      throw new ProblemAdapterError(
-        "ANTIBOT_BLOCKED",
-        "atcoder",
-        "AtCoder returned HTTP 403. Please use Localhost Bridge (Competitive Companion) or Markdown/Clipboard import."
-      );
-    }
-    if (response.status === 429) {
-      throw new ProblemAdapterError(
-        "RATE_LIMITED",
-        "atcoder",
-        "AtCoder rate limited the request (HTTP 429). Please retry later."
-      );
-    }
     if (!response.ok) {
-      throw new ProblemAdapterError(
-        "NETWORK_ERROR",
-        "atcoder",
-        `AtCoder task fetch failed with HTTP ${response.status}.`
-      );
+      throw mapHttpStatusError("atcoder", response.status, url, ATCODER_GUIDANCE);
     }
 
     const html = await response.text();
-    if (/cf-turnstile|Just a moment|challenge-platform/i.test(html) && !html.includes("task-statement")) {
+    if (isAntiBotChallenge(response, html, ["task-statement"])) {
       throw new ProblemAdapterError(
         "ANTIBOT_BLOCKED",
         "atcoder",
-        "AtCoder returned a bot/Turnstile challenge page. Algo Coach will not bypass challenges; please use Competitive Companion or Clipboard import."
+        `AtCoder returned a bot/Turnstile challenge page. Algo Coach will not bypass challenges; ${ATCODER_GUIDANCE}`
       );
     }
     if (/\/login\?continue=/i.test(html) && !html.includes("task-statement")) {
@@ -444,7 +504,12 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
 
     const filtered = problems.filter((p) => {
       const title = (p.title ?? p.name ?? p.id).toLowerCase();
-      if (keyword && !title.includes(keyword) && !p.id.toLowerCase().includes(keyword) && !p.contest_id.toLowerCase().includes(keyword)) {
+      if (
+        keyword &&
+        !title.includes(keyword) &&
+        !p.id.toLowerCase().includes(keyword) &&
+        !p.contest_id.toLowerCase().includes(keyword)
+      ) {
         return false;
       }
       if (tagFilters.length > 0 && !tagFilters.some((t) => p.contest_id.toLowerCase().includes(t))) {
@@ -467,7 +532,8 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
 
     const items: ProblemDocument[] = slice.map((p) => {
       const rawDiff = models[p.id]?.difficulty;
-      const rating = typeof rawDiff === "number" && Number.isFinite(rawDiff) ? Math.round(rawDiff) : undefined;
+      const rating =
+        typeof rawDiff === "number" && Number.isFinite(rawDiff) ? Math.round(rawDiff) : undefined;
       const tier = atcoderDifficultyToTier(rating);
       return {
         schemaVersion: "problem-doc/v2",
@@ -522,15 +588,20 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
   }
 
   private async loadProblems(signal?: AbortSignal): Promise<KenkooooProblem[]> {
-    if (this.cachedProblems && Date.now() - this.cachedAt < this.indexTtlMs) {
+    if (this.cachedProblems && Date.now() - this.cachedProblemsAt < this.indexTtlMs) {
       return this.cachedProblems;
     }
     let response: Response;
     try {
-      response = await this.fetchImpl(KENKOOOO_PROBLEMS_URL, {
-        headers: { "user-agent": this.userAgent, accept: "application/json" },
-        signal
-      });
+      response = await fetchWithTimeout(
+        this.fetchImpl,
+        KENKOOOO_PROBLEMS_URL,
+        {
+          headers: { "user-agent": this.userAgent, accept: "application/json" },
+          signal
+        },
+        this.timeoutMs
+      );
     } catch (error) {
       throw new ProblemAdapterError(
         "NETWORK_ERROR",
@@ -539,11 +610,7 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
       );
     }
     if (!response.ok) {
-      throw new ProblemAdapterError(
-        "NETWORK_ERROR",
-        "atcoder",
-        `kenkoooo problems index returned HTTP ${response.status}.`
-      );
+      throw mapHttpStatusError("atcoder", response.status, KENKOOOO_PROBLEMS_URL);
     }
     const data = (await response.json()) as unknown;
     if (!Array.isArray(data)) {
@@ -554,24 +621,25 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
       );
     }
     this.cachedProblems = data as KenkooooProblem[];
-    this.cachedAt = Date.now();
+    this.cachedProblemsAt = Date.now();
     return this.cachedProblems;
   }
 
   private async loadModels(signal?: AbortSignal): Promise<Record<string, KenkooooProblemModel>> {
-    if (this.cachedModels && Date.now() - this.cachedAt < this.indexTtlMs) {
+    if (this.cachedModels && Date.now() - this.cachedModelsAt < this.indexTtlMs) {
       return this.cachedModels;
     }
-    const response = await this.fetchImpl(KENKOOOO_MODELS_URL, {
-      headers: { "user-agent": this.userAgent, accept: "application/json" },
-      signal
-    });
+    const response = await fetchWithTimeout(
+      this.fetchImpl,
+      KENKOOOO_MODELS_URL,
+      {
+        headers: { "user-agent": this.userAgent, accept: "application/json" },
+        signal
+      },
+      this.timeoutMs
+    );
     if (!response.ok) {
-      throw new ProblemAdapterError(
-        "NETWORK_ERROR",
-        "atcoder",
-        `kenkoooo problem-models.json returned HTTP ${response.status}.`
-      );
+      throw mapHttpStatusError("atcoder", response.status, KENKOOOO_MODELS_URL);
     }
     const data = (await response.json()) as unknown;
     if (!data || typeof data !== "object" || Array.isArray(data)) {
@@ -582,6 +650,7 @@ export class AtCoderAdapter implements ProblemSourceAdapter {
       );
     }
     this.cachedModels = data as Record<string, KenkooooProblemModel>;
+    this.cachedModelsAt = Date.now();
     return this.cachedModels;
   }
 }

@@ -2,9 +2,17 @@
   "name": "algo-coach",
   "displayName": "Algo Coach",
   "description": "Multi-OJ local runner, Socratic algorithm tutor, and anti-spoiler code completion.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "kaiserunix",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Kaiserunix/student-autocomplete-lab.git"
+  },
+  "homepage": "https://github.com/Kaiserunix/student-autocomplete-lab#readme",
+  "bugs": {
+    "url": "https://github.com/Kaiserunix/student-autocomplete-lab/issues"
+  },
   "keywords": [
     "algorithms",
     "leetcode",
@@ -88,6 +96,11 @@
       {
         "command": "algoCoach.importProblem",
         "title": "Import Problem (URL / ID / Markdown / Clipboard)",
+        "category": "Algo Coach"
+      },
+      {
+        "command": "algoCoach.openProblemReader",
+        "title": "Open Split Problem Reader",
         "category": "Algo Coach"
       },
       {

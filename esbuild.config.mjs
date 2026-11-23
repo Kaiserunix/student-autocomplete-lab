@@ -31,6 +31,18 @@ const webviewConfig = {
   logLevel: "info"
 };
 
+const readerConfig = {
+  entryPoints: ["src/webview/readerMain.ts"],
+  bundle: true,
+  outfile: "dist/reader.js",
+  format: "iife",
+  platform: "browser",
+  target: "es2022",
+  sourcemap: true,
+  minify: !watch,
+  logLevel: "info"
+};
+
 function copyCss() {
   const cssSrc = resolve("src/webview/styles.css");
   if (existsSync(cssSrc)) {
@@ -41,6 +53,7 @@ function copyCss() {
 async function main() {
   const extEntry = resolve("src/extension/extension.ts");
   const webEntry = resolve("src/webview/main.ts");
+  const readerEntry = resolve("src/webview/readerMain.ts");
 
   const builds = [];
   if (existsSync(extEntry)) {
@@ -48,6 +61,9 @@ async function main() {
   }
   if (existsSync(webEntry)) {
     builds.push(watch ? esbuild.context(webviewConfig) : esbuild.build(webviewConfig));
+  }
+  if (existsSync(readerEntry)) {
+    builds.push(watch ? esbuild.context(readerConfig) : esbuild.build(readerConfig));
   }
 
   const results = await Promise.all(builds);

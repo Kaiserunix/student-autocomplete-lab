@@ -1,4 +1,5 @@
 import type { OfficialVerdictEvent, OfficialVerdictStatus } from "../core/contracts";
+import { DEFAULT_HTTP_TIMEOUT_MS, fetchWithTimeout } from "../problems/adapters/httpClient";
 import { validateSubmissionUrl } from "./targetRegistry";
 
 export interface CodeforcesSubmissionTarget {
@@ -15,6 +16,7 @@ export interface CodeforcesPollOptions {
   submittedAfterSeconds: number;
   maxAttempts?: number;
   intervalMs?: number;
+  timeoutMs?: number;
   signal?: AbortSignal;
 }
 
@@ -187,7 +189,10 @@ function buildOfficialVerdictEvent(
  * Single-shot check against the zero-login public Codeforces `user.status` API.
  */
 export async function fetchLatestCodeforcesVerdict(
-  options: Pick<CodeforcesPollOptions, "handle" | "target" | "submittedAfterSeconds" | "signal">,
+  options: Pick<
+    CodeforcesPollOptions,
+    "handle" | "target" | "submittedAfterSeconds" | "timeoutMs" | "signal"
+  >,
   dependencies: Pick<CodeforcesPollDependencies, "fetchImpl"> = {}
 ): Promise<{ status: "judged"; submissionId: number; event: OfficialVerdictEvent } | { status: "pending" }> {
   const handle = options.handle.trim();
@@ -197,10 +202,15 @@ export async function fetchLatestCodeforcesVerdict(
 
   const fetchImpl = dependencies.fetchImpl ?? fetch;
   const endpoint = `https://codeforces.com/api/user.status?handle=${encodeURIComponent(handle)}&from=1&count=20`;
-  const response = await fetchImpl(endpoint, {
-    headers: { accept: "application/json" },
-    signal: options.signal
-  });
+  const response = await fetchWithTimeout(
+    fetchImpl,
+    endpoint,
+    {
+      headers: { accept: "application/json" },
+      signal: options.signal
+    },
+    options.timeoutMs ?? DEFAULT_HTTP_TIMEOUT_MS
+  );
 
   if (!response.ok) {
     throw new Error(`Codeforces user.status request failed with HTTP ${response.status}.`);
@@ -266,6 +276,7 @@ export async function pollCodeforcesOfficialVerdict(
         handle,
         target: options.target,
         submittedAfterSeconds: options.submittedAfterSeconds,
+        timeoutMs: options.timeoutMs,
         signal: options.signal
       },
       dependencies
