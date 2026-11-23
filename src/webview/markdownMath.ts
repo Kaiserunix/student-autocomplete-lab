@@ -1,7 +1,7 @@
+import { COPY_PATH, svgIc } from "./icons";
 import { escapeHtml, sanitizeExternalUrl } from "./state";
 
-const COPY_ICO =
-  '<svg class="ic" width="11" height="11" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.25" aria-hidden="true"><rect x="5" y="5" width="7" height="7"/><path d="M2 9V2h7"/></svg>';
+const COPY_ICO = svgIc(COPY_PATH, 11);
 
 const SYM: Record<string, string> = {};
 for (const k of "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi pi rho sigma tau upsilon phi chi psi omega Gamma Delta Theta Lambda Xi Pi Sigma Phi Psi Omega le ge ne equiv sim cong times div oplus otimes notin ni cup cap forall perp sum prod int nabla prime lfloor rfloor lceil rceil".split(" ")) {
@@ -120,8 +120,8 @@ export function renderLatex(raw: string): string {
   return o;
 }
 
-const KW = new Set("auto bool break case catch char class const constexpr continue def default do double elif else enum except false False float fn for from if impl import in inline int lambda let long match mut namespace new None not nullptr or pass private public return short sizeof static struct switch template true True try typedef typename unsigned use using void while yield and".split(" "));
-const TP = new Set("vector string map unordered_map set unordered_set pair queue priority_queue stack deque array list dict tuple int64_t size_t i32 i64 usize Vec HashMap HashSet String Option Result std cin cout ios".split(" "));
+const KW = new Set("auto bool break char class const continue def double elif else enum false False float fn for if impl import in int let long match mut new None not nullptr or public return static struct true True using void while".split(" "));
+const TP = new Set("vector string map set pair queue stack deque list dict tuple size_t i32 i64 usize Vec HashMap HashSet String Option Result std cin cout".split(" "));
 const TOK = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/|#[^\n]*|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\b0x[0-9a-fA-F]+\b|\b\d+(?:\.\d+)?(?:e[+-]?\d+)?\b|\b[A-Za-z_]\w*\b)/g;
 
 export function highlightCode(code: string, lang: string): string {

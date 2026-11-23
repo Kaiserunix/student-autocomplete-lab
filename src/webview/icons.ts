@@ -23,11 +23,15 @@ export type IconName =
   | "check"
   | "gear";
 
+export const COPY_PATH = '<rect x="5" y="5" width="7" height="7"/><path d="M2 9V2h7"/>';
+export const svgIc = (body: string, s = 12): string =>
+  `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.25" aria-hidden="true">${body}</svg>`;
+
 const P: Record<IconName, string> = {
   play: '<path d="M4 3v8l7-4z" fill="currentColor"/>',
   x: '<path d="M3.5 3.5l7 7m0-7l-7 7"/>',
   warn: '<path d="M7 2l5.5 10h-11zM7 6v3m0 1.4v.6"/>',
-  copy: '<rect x="5" y="5" width="7" height="7"/><path d="M2 9V2h7"/>',
+  copy: COPY_PATH,
   ext: '<path d="M8 2h4v4m0-4L6 8m4 0v4H2V4h4"/>',
   ref: '<path d="M11.5 7A4.5 4.5 0 1 1 10 3.8M11.5 2v2.5H9"/>',
   plus: '<path d="M7 2.5v9M2.5 7h9"/>',
@@ -48,5 +52,4 @@ const P: Record<IconName, string> = {
   gear: '<circle cx="7" cy="7" r="2"/><path d="M5.8 1.5h2.4l.3 1.4 1.2.7 1.4-.5 1.2 2.1-1.1 1v1.6l1.1 1-1.2 2.1-1.4-.5-1.2.7-.3 1.4H5.8l-.3-1.4-1.2-.7-1.4.5-1.2-2.1 1.1-1V6.2l-1.1-1 1.2-2.1 1.4.5 1.2-.7z"/>'
 };
 
-export const icon = (n: IconName, s = 12): string =>
-  `<svg class="ic" width="${s}" height="${s}" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.25" aria-hidden="true">${P[n]}</svg>`;
+export const icon = (n: IconName, s = 12): string => svgIc(P[n], s);

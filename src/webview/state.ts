@@ -1,8 +1,8 @@
-import type { SidebarStateSnapshot, StuckCategory } from "../core/contracts";
+import type { SidebarStateSnapshot, StuckCategory, ToastActionCta } from "../core/contracts";
 import type { AudioEngineState } from "./audioSynth";
 
 export type SidebarTab = "workspace" | "problems" | "coach" | "dossier" | "settings";
-export interface InlineToast { level: "info" | "warn" | "error"; text: string; undoEventId?: string; }
+export interface InlineToast { level: "info" | "warn" | "error"; text: string; undoEventId?: string; cta?: ToastActionCta; }
 export interface StreamBufferState { requestId: string; text: string; }
 
 export interface WebviewState {
@@ -70,7 +70,7 @@ export const applyStateSync = (p: WebviewState, next: SidebarStateSnapshot): Web
     stuck: sw ? "no_idea" : b.stuck,
     panels: sw ? { ...b.panels, sample: F, stmtFull: F } : b.panels,
     stream: next.coachBusy ? b.stream : null,
-    toast: nb && (nb.level !== pb?.level || nb.text !== pb?.text) ? { ...nb } : b.toast
+    toast: nb && (nb.level !== pb?.level || nb.text !== pb?.text || nb.cta?.label !== pb?.cta?.label || nb.undoEventId !== pb?.undoEventId) ? { ...nb } : b.toast
   };
 };
 

@@ -70,7 +70,6 @@ const BARE: Record<string, string> = {
   "submit-copy-open": "submit/copyAndOpen",
   "submit-copy-only": "submit/copyOnly",
   "submit-sync-verdict": "submit/syncVerdict",
-  "submit-sync-cf": "submit/syncCodeforces",
   "bridge-copy-userscript": "bridge/copyUserscript",
   "problem-clear-search": "problem/clearSearch",
   "starter-load-warmup": "starter/loadWarmupPack",
@@ -115,16 +114,23 @@ export function renderTabsNav(s: WebviewState): string {
 
 export function renderToastSlot(s: WebviewState): string {
   if (!s.toast) return "";
-  const l = s.snapshot.flags.uiLanguage;
+  const l = s.snapshot.flags.uiLanguage, c = s.toast.cta;
+  const cta = c
+    ? h(
+        "button",
+        "b b-t b-xs",
+        escapeHtml(c.label),
+        `type="button" data-action="toast-cta"${([["tab", c.tab], ["sub-key", c.subKey], ["sub-val", c.subVal], ["drawer-id", c.drawerId]] as const).map(([k, v]) => (v ? ` data-${k}="${escapeHtml(v)}"` : "")).join("")}`
+      )
+    : "";
   const undo = s.toast.undoEventId
     ? h("button", "b b-g b-xs", escapeHtml(t(l, "撤销", "Undo")), `type="button" data-action="learner-void-id" data-event-id="${escapeHtml(s.toast.undoEventId)}"`)
     : "";
   return h(
     "div",
     `toast toast-${escapeHtml(s.toast.level)}`,
-    `<span class="f1">${escapeHtml(s.toast.text)}</span>` +
-      undo +
-      h("button", "bi", icon("x", 11), `type="button" ${al(t(l, "关闭提示", "Dismiss"))} data-action="dismiss-toast"`)
+    `<span class="f1 toast-msg">${escapeHtml(s.toast.text)}</span>` +
+      h("div", "r g1 toast-acts", cta + undo + h("button", "bi", icon("x", 11), `type="button" ${al(t(l, "关闭提示", "Dismiss"))} data-action="dismiss-toast"`))
   );
 }
 
@@ -405,6 +411,16 @@ export function mountWebview(
 
   const unsub = store.subscribe(render);
 
+  const normSub = (k: string) => (k.startsWith("sub.") ? k : `sub.${k}`);
+  const jumpTab = (tab: SidebarTab, subKey?: string, subVal?: string, drawerId?: string) => {
+    upd((p) => {
+      let n = setActiveTab(p, tab);
+      if (subKey && subVal) n = setDraftValue(n, normSub(subKey), subVal);
+      return n;
+    });
+    if (drawerId) setOpenDrawers(root, [drawerId]);
+  };
+
   const handleHostMessage = (msg: HostToWebviewMessage): void => {
     if (!msg || typeof msg !== "object") return;
     if (msg.type === "state/sync") upd((p) => applyStateSync(p, msg.payload));
@@ -418,12 +434,16 @@ export function mountWebview(
       if (box && next.stream) box.innerHTML = escapeMultilineHtml(next.stream.text);
       else render();
     } else if (msg.type === "toast/inline") upd((p) => ({ ...p, toast: msg.payload }));
-    else if (msg.type === "ui/switchTab") upd((p) => setActiveTab(p, msg.payload.tab));
+    else if (msg.type === "ui/switchTab") {
+      const p = msg.payload;
+      jumpTab(p.tab, p.subKey, p.subVal, p.drawerId);
+    }
   };
 
   const onMsg: EventListener = (e) => handleHostMessage((e as MessageEvent).data as HostToWebviewMessage);
 
-  const fillPreset = (vals: Record<string, string>, zh: string, en: string) => {
+  const fillBoth = (pv: string, cu: string, fu: string, m: string, zh: string, en: string) => {
+    const vals = { "ai.chat.provider": pv, "ai.chat.baseUrl": cu, "ai.chat.model": m, "ai.fim.provider": pv, "ai.fim.baseUrl": fu, "ai.fim.model": m };
     setDraftDom(vals);
     upd((p) => ({ ...p, drafts: { ...p.drafts, ...vals }, toast: { level: "info", text: t(store.getState().snapshot.flags.uiLanguage, zh, en) } }));
   };
@@ -455,7 +475,16 @@ export function mountWebview(
   const ACT: Record<string, (d: DOMStringMap, s: WebviewState) => void> = {
     "switch-tab": (d) => d.tab && upd((p) => setActiveTab(p, d.tab as SidebarTab)),
     "sub-tab": (d) => { if (d.subKey && d.subVal) upd((p) => setDraftValue(p, `sub.${d.subKey}`, d.subVal!)); },
-    "settings-open-env": () => upd((p) => setDraftValue(setActiveTab(p, "settings"), "sub.settings", "env")),
+    "settings-open-env": () => jumpTab("settings", "sub.settings", "env"),
+    "settings-open-toolchain": () => {
+      jumpTab("settings", "sub.settings", "env", "settings-toolchain");
+      emit("runner/checkToolchains");
+    },
+    "toast-cta": (d) => {
+      if (d.tab) jumpTab(d.tab as SidebarTab, d.subKey, d.subVal, d.drawerId);
+      else if (d.subKey && d.subVal) upd((p) => setDraftValue(p, normSub(d.subKey!), d.subVal!));
+      upd((p) => ({ ...p, toast: null }));
+    },
     "dismiss-toast": () => upd((p) => ({ ...p, toast: null })),
     "toggle-panel": (d) => d.panel && upd((p) => ({ ...p, panels: { ...p.panels, [d.panel!]: !p.panels[d.panel!] } })),
     "problem-open-reader": (d, s) => emit("problem/openReader", { problemKey: d.problemKey ?? s.snapshot.activeProblem?.problemKey }),
@@ -506,7 +535,7 @@ export function mountWebview(
     "coach-pattern-map": () => coach("patternMap"),
     "coach-dry-run": (_, s) => {
       const run = s.snapshot.lastRun;
-      const isCe = Boolean(run && !run.compileOk);
+      const isCe = Boolean(run && !run.compileOk && !run.skippedReason);
       const fail = run?.cases.find((c) => c.verdict !== "AC" && c.verdict !== "SKIPPED");
       coach("dryRun", { stuckCategory: verdictToStuck(isCe ? "CE" : fail?.verdict) });
     },
@@ -544,11 +573,8 @@ export function mountWebview(
         emit("audio/testSound", { kind });
       });
     },
-    "ai-fill-deepseek": () => {
-      const oc = "openai-compatible", m = "deepseek-chat";
-      fillPreset({ "ai.chat.provider": oc, "ai.chat.baseUrl": `${DS}v1`, "ai.chat.model": m, "ai.fim.provider": oc, "ai.fim.baseUrl": `${DS}beta`, "ai.fim.model": m }, "已填 DeepSeek 预设，请保存。", "DeepSeek preset filled. Save.");
-    },
-    "ai-fill-ollama": () => fillPreset({ "ai.chat.provider": "ollama", "ai.chat.baseUrl": PROV_URLS.ollama!, "ai.chat.model": "qwen2.5-coder:7b" }, "已填 Ollama 本地预设，请保存。", "Ollama preset filled. Save."),
+    "ai-fill-deepseek": () => fillBoth("openai-compatible", `${DS}v1`, `${DS}beta`, "deepseek-chat", "已填 DeepSeek 预设，请保存。", "DeepSeek preset filled. Save."),
+    "ai-fill-ollama": () => fillBoth("ollama", PROV_URLS.ollama!, PROV_URLS.ollama!, "qwen2.5-coder:7b", "已填 Ollama 本地预设，请保存。", "Ollama preset filled. Save."),
     "ai-save-config": (_, s) => {
       const cfg = s.snapshot.aiConfig;
       const role = (r: "chat" | "fim") => {
@@ -626,6 +652,9 @@ export function mountWebview(
               ? Math.max(0, Math.min(1, Number(el.value) / 100))
               : el.value
         });
+      } else if (a === "lang-select" && el.value) {
+        const pk = d.problemKey ?? store.getState().snapshot.activeProblem?.problemKey;
+        if (pk) emit("problem/select", { problemKey: pk, language: el.value as SupportedLanguage, openFile: true });
       } else if (a === "pref-update" && d.prefKey) {
         emit("learner/updatePreferences", { [d.prefKey]: el.value } as Partial<TeachingPreferences>);
       } else if (a === "habit-toggle" && d.habitId) {

@@ -51,19 +51,19 @@ function renderPrefsDrawer(st: WebviewState, l: UiLang): string {
   const pRow = (lbl: string, k: string, list: ReadonlyArray<[string, string]>, cur: string) =>
     h("label", "fi", sp("lx", lbl) + sel(list, cur, `data-action="pref-update" data-pref-key="${k}"`, "sel sm"));
   const stricts = STRICTS.map(([m, zh, en]) => h("button", `seg-btn${snap.flags.coachStrictness === m ? " seg-btn-a" : ""}`, E(T(zh, en)), `type="button" ${ap(snap.flags.coachStrictness === m)} data-action="flag-update" data-key="coachStrictness" data-value="${m}"`)).join("");
-  const sum = `${T("风格与偏好", "Style")} · ${strictLbl(snap.flags.coachStrictness, l)} · ${styles.find(([v]) => v === pr.hintStyle)?.[1] ?? ""}`;
+  const sum = `${T("风格", "Style")} · ${strictLbl(snap.flags.coachStrictness, l)} · ${styles.find(([v]) => v === pr.hintStyle)?.[1] ?? ""}`;
   return h(
     "details",
     "dt",
     h("summary", "", `${icon("chev", 11)} ${E(sum)}`) +
       d(
         "c g2 mt1",
-        d("c g1", sp("lx", T("教练语气", "Tone")) + d("seg-track seg-3", stricts)) +
+        d("c g1", sp("lx", T("语气", "Tone")) + d("seg-track seg-3", stricts)) +
           d(
             "c g1",
-            pRow(T("提示风格", "Style"), "hintStyle", styles, pr.hintStyle) +
-              pRow(T("回复详略", "Detail"), "verbosity", verbs, pr.verbosity) +
-              pRow(T("训练目标", "Goal"), "targetGoal", goals, pr.targetGoal)
+            pRow(T("风格", "Style"), "hintStyle", styles, pr.hintStyle) +
+              pRow(T("详略", "Detail"), "verbosity", verbs, pr.verbosity) +
+              pRow(T("目标", "Goal"), "targetGoal", goals, pr.targetGoal)
           )
       ),
     'data-drawer="coach-prefs"'
@@ -79,8 +79,8 @@ function renderAudit(r: CoachResponsePayload, l: UiLang, idx: number): string {
           d("r g1 au", badge(t(l, KIND_LBL[it.kind][0], KIND_LBL[it.kind][1])) + sp("lt f1", E(it.label)) + (it.muteable ? btn(T("屏蔽", "Mute"), "learner-mute-misconception", "g", "xs", `data-misconception-id="${E(it.sourceKey ?? it.id)}" data-muted="true"`) : ""))
         )
         .join("")
-    : d("mu", E(T("未注入画像条目", "No profile items")));
-  const summaryText = T(`上下文审计 · ${its.length}/3 · ${r.audit.characterBudgetUsed}/${r.audit.characterBudgetMax}`, `Audit · ${its.length}/3 · ${r.audit.characterBudgetUsed}/${r.audit.characterBudgetMax}`);
+    : d("mu", E(T("未注入画像", "No profile items")));
+  const summaryText = `${T("审计", "Audit")} · ${its.length}/3 · ${r.audit.characterBudgetUsed}/${r.audit.characterBudgetMax}`;
   return h("details", "dt", h("summary", "", `${icon("shd", 11)} ${E(summaryText)}`) + d("ab", rows + d("fn mo", `${E(r.audit.route)} · ${E(r.audit.renderer)}`)), `data-drawer="audit-${idx}"`);
 }
 
@@ -104,7 +104,7 @@ export function renderCoachControlsCard(st: WebviewState): string {
   const T = tr(l);
   const lv = snap.hintLevel;
   const next = Math.min(5, lv + 1) as HintLevel;
-  const isCe = Boolean(snap.lastRun && !snap.lastRun.compileOk);
+  const isCe = Boolean(snap.lastRun && !snap.lastRun.compileOk && !snap.lastRun.skippedReason);
   const fail = snap.lastRun?.cases.find((c) => c.verdict !== "AC" && c.verdict !== "SKIPPED");
   const busy = snap.coachBusy;
   const noAi = !snap.aiConfig.chat.hasApiKey && snap.aiConfig.chat.provider !== "ollama";
@@ -116,15 +116,15 @@ export function renderCoachControlsCard(st: WebviewState): string {
   const giveUp = giveUpUnlocked
     ? ""
     : st.giveUpConfirmPending
-      ? d("al al-wn", d("at", `${icon("warn")} ${E(T("确认放弃并看完整讲解？", "Confirm Give Up?"))}`) + d("mu", E(T("本场段位封顶 C · 净码。", "Caps this problem's rank at C."))) + d("r g1 mt1", btn(T("确认放弃", "Confirm"), "coach-giveup-confirm", "d", "sm", "", busy) + btn(T("继续思考", "Cancel"), "coach-giveup-cancel")))
+      ? d("al al-wn", d("at", `${icon("warn")} ${E(T("确认放弃看完整讲解？", "Confirm Give Up?"))}`) + d("mu", E(T("段位封顶 C · 净码。", "Caps rank at C."))) + d("r g1 mt1", btn(T("确认", "Confirm"), "coach-giveup-confirm", "d", "sm", "", busy) + btn(T("取消", "Cancel"), "coach-giveup-cancel")))
       : btn(T("放弃并查看讲解", "Give Up & Guide"), "coach-giveup-arm", "g", "xs", "", busy);
 
-  const hintLbl = lv >= 5 ? T("已达最高提示 L5", "Max Hint L5") : T(`请求 L${next} 引导`, `Hint L${next}`);
-  const askPh = T("输入思路或追问...", "Share idea or ask...");
+  const hintLbl = lv >= 5 ? T("已达最高提示 L5", "Max Hint L5") : T(`提示 L${next}`, `Hint L${next}`);
+  const askPh = T("输入思路或追问...", "Ask or share idea...");
   const ctxTitle = snap.activeProblem
     ? d("coach-ctx r g1", badge(snap.activeProblem.sourceId, "m", true) + sp("lt f1 fw", E(snap.activeProblem.title)))
     : "";
-  const aiTip = noAi ? d("coach-offline r rb g1", sp("mu", E(T("离线基础提示（未配大模型）", "Offline mode (no AI key)"))) + btn(T("去配置 AI", "Setup AI"), "settings-open-env", "g", "xs")) : "";
+  const aiTip = noAi ? d("coach-offline r rb g1", sp("mu", E(T("离线模式（未配 AI）", "Offline (no AI key)"))) + btn(T("配置 AI", "Setup AI"), "settings-open-env", "g", "xs")) : "";
 
   const ctl = d(
     "c g2",

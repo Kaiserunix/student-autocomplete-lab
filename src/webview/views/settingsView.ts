@@ -1,6 +1,6 @@
 import type { FeatureFlags, PresetMode } from "../../core/contracts";
 import { al, ap, badge, btn, cnt, d, drawer, emptyBox, h, inp, sec, sel, sp, subTabs, tbl, toggleRow } from "../dom";
-import { tr, type UiLang } from "../i18n";
+import { LANG_OPTS, tr, type UiLang } from "../i18n";
 import { icon } from "../icons";
 import { DS, escapeHtml as E, getDraftOrFallback as dr, type WebviewState } from "../state";
 
@@ -36,7 +36,7 @@ export function renderSettingsView(st: WebviewState): string {
   };
 
   const presetCard = sec(
-    T("训练模式预设", "Mode Preset"),
+    T("模式预设", "Preset"),
     d(
       "seg-track pr-strip",
       PRESETS.map(([p, zh, en, dzh, den]) =>
@@ -59,28 +59,26 @@ export function renderSettingsView(st: WebviewState): string {
 
   if (sub === "exp") {
     const flagsList: ReadonlyArray<[keyof FeatureFlags, string, string]> = [
-      ["patternMapperEnabled", T("审题模式识别", "Pattern Mapper"), T("编码前定位题型与复杂度", "Pattern check")],
+      ["patternMapperEnabled", T("审题模式", "Pattern Map"), T("编码前识别题型", "Pre-code check")],
       ["mockInterviewEnabled", T("模拟面试复盘", "Mock Review"), T("教练页常驻复盘", "Show in Coach")],
       ["stylishRankEnabled", T("DMC 段位铭牌", "DMC Rank"), T("手写与样例实时评级", "Live gauge")],
-      ["starterPackEnabled", T("新手热身题包", "Starter Pack"), T("题单展示 3 题热身", "Warmup in Sheets")],
+      ["starterPackEnabled", T("新手热身题包", "Starter Pack"), T("题单展示热身包", "Warmup in Sheets")],
       ["shortcutHintsEnabled", T("快捷键提示", "Shortcut Tips"), T("学会后自动消失", "Auto-graduates")]
     ];
     const tl = (rows: ReadonlyArray<[string, string, string]>): Array<[string, string]> => rows.map(([k, z, e]) => [k, T(z, e)]);
-    const ghostModes = tl([["adaptive", "自适应防剧透", "Adaptive"], ["fast-syntax", "快速语法补全", "Fast Syntax"], ["manual", "手动 (Alt+\\)", "Manual (Alt+\\)"], ["off", "关闭", "Off"]]);
-    const frictionModes = tl([["off", "关闭", "Off"], ["multi-choice", "多选辨错", "Multi-Choice"], ["lead-and-reveal", "先引导后揭示", "Lead & Reveal"]]);
+    const ghostModes = tl([["adaptive", "自适应", "Adaptive"], ["fast-syntax", "快速语法", "Fast Syntax"], ["manual", "手动 (Alt+\\)", "Manual (Alt+\\)"], ["off", "关闭", "Off"]]);
     const soundPacks = tl([["muted-brown", "闷声茶轴", "Muted Brown"], ["crisp-blue", "清脆青轴", "Crisp Blue"], ["soft-drop", "轻柔雨滴", "Soft Drop"]]);
     const flagsCard = sec(
       T("防剧透与训练开关", "Training Flags"),
       d(
         "c g1",
-        fRow(T("行内代码提示", "Ghost Text"), "ghostTextMode", ghostModes, f.ghostTextMode, T("补全触发方式", "Trigger")) +
-          toggleRow("strictWordAccept", T("逐词接受补全", "Strict Word Accept"), T("Tab 逐词接受防盲按", "One word/Tab"), f.strictWordAccept) +
-          fRow(T("主动回忆微摩擦", "Micro-Friction"), "microFriction", frictionModes, f.microFriction, T("补全前回忆", "Recall check")) +
+        fRow(T("行内提示", "Ghost Text"), "ghostTextMode", ghostModes, f.ghostTextMode, T("触发方式", "Trigger")) +
+          toggleRow("strictWordAccept", T("逐词接受", "Strict Word Accept"), T("Tab 逐词防盲按", "One word/Tab"), f.strictWordAccept) +
           flagsList.map(([k, lb, de]) => toggleRow(k, lb, de, Boolean(f[k]))).join("")
       )
     );
 
-    const langs: ReadonlyArray<[string, string]> = [["cpp", "C++"], ["python", "Python"], ["c", "C"], ["rust", "Rust"], ["java", "Java"], ["generic", T("通用", "Any")]];
+    const langs: ReadonlyArray<[string, string]> = [...LANG_OPTS, ["generic", T("通用", "Any")]];
     const habs = snap.userOverrides.autocompleteCodeHabits;
     const delHabAttr = al(T("删除习惯", "Delete habit"));
     const habitsList = habs.length
@@ -93,10 +91,10 @@ export function renderSettingsView(st: WebviewState): string {
             )
           )
           .join("")
-      : emptyBox(T("暂无补全习惯，可在下方添加。", "No coding habits yet."));
+      : emptyBox(T("暂无习惯，可在下方添加。", "No habits yet."));
     const habitsDrawer = drawer(
       "settings-habits",
-      T("补全编码习惯", "Coding Habits"),
+      T("编码习惯", "Coding Habits"),
       habitsList +
         d(
           "field-bar mt1",
@@ -111,18 +109,18 @@ export function renderSettingsView(st: WebviewState): string {
     const audioStateLabel = st.audioState === "running" ? T("已解锁", "Ready") : st.audioState === "suspended" ? T("待解锁", "Paused") : T("未启动", "Idle");
     const audioDrawer = drawer(
       "settings-audio",
-      T("打字音与 AC 和弦", "Typing & AC Audio"),
+      T("打字音与和弦", "Audio"),
       d(
         "c g1",
-        toggleRow("typingSoundEnabled", T("机械打字音", "Typing Sound"), T("失焦自动静音", "Auto-mutes on blur"), f.typingSoundEnabled) +
-          fRow(T("轴体音效", "Sound Pack"), "typingSoundPack", soundPacks, f.typingSoundPack) +
+        toggleRow("typingSoundEnabled", T("打字音", "Typing Sound"), T("失焦自动静音", "Auto-mutes"), f.typingSoundEnabled) +
+          fRow(T("音效", "Pack"), "typingSoundPack", soundPacks, f.typingSoundPack) +
           slider("typingSoundVolume", T("打字音量", "Typing Vol"), f.typingSoundVolume) +
-          toggleRow("celebrationSoundEnabled", T("AC / 升段和弦", "AC Chime"), T("通过样例或升段轻鸣", "Chime on AC & rank-up"), f.celebrationSoundEnabled) +
+          toggleRow("celebrationSoundEnabled", T("AC 和弦", "AC Chime"), T("AC / 升段轻鸣", "Chime on AC"), f.celebrationSoundEnabled) +
           slider("celebrationSoundVolume", T("和弦音量", "Chime Vol"), f.celebrationSoundVolume) +
           d(
             "r rw g1 mt1",
-            btn(`${icon("vol")} ${T("试听解锁", "Test Sound")}`, "audio-preview-unlock", "t", "sm", 'data-sound-kind="key_normal"') +
-              btn(T("试听和弦", "Chime"), "audio-preview-unlock", "s", "sm", 'data-sound-kind="chime_pass"') +
+            btn(`${icon("vol")} ${T("试听", "Test")}`, "audio-preview-unlock", "t", "sm", 'data-sound-kind="key_normal"') +
+              btn(T("和弦", "Chime"), "audio-preview-unlock", "s", "sm", 'data-sound-kind="chime_pass"') +
               btn(`${icon(snap.audioMuted ? "mute" : "vol")} ${snap.audioMuted ? T("取消静音", "Unmute") : T("静音", "Mute")}`, "audio-toggle-mute", "g")
           )
       ),
@@ -131,8 +129,8 @@ export function renderSettingsView(st: WebviewState): string {
 
     const visualDrawer = drawer(
       "settings-visual",
-      T("新手视觉预设与教程", "Visual Preset & Guide"),
-      d("mu", E(T("彩虹括号与缩进线，随时还原。", "Rainbow brackets & guides, restorable."))) +
+      T("视觉预设与教程", "Visual & Guide"),
+      d("mu", E(T("彩虹括号与缩进线。", "Rainbow brackets & guides."))) +
         d(
           "r rw g1 mt1",
           btn(T("应用预设", "Apply"), "starter-apply-visual") +
@@ -154,7 +152,7 @@ export function renderSettingsView(st: WebviewState): string {
     const keyBadge = isLocal
       ? badge(T("免密本地", "Local"), "ok")
       : badge(c.hasApiKey ? T("密钥已存", "Saved") : T("未配置", "No Key"), c.hasApiKey ? "ok" : "m");
-    const keyPh = isLocal ? T("本地免 Key", "Optional") : c.hasApiKey ? T("留空保持密钥", "Keep key") : T("输入 API Key", "API Key");
+    const keyPh = isLocal ? T("免 Key", "Optional") : c.hasApiKey ? T("留空保持", "Keep key") : "API Key";
     return d(
       isSecond ? "ai-role ai-role-sep" : "ai-role",
       d("r rb g1", sp("ai-role-t", E(title)) + keyBadge) +
@@ -201,12 +199,12 @@ export function renderSettingsView(st: WebviewState): string {
   ];
   const cfField = d(
     "ai-role ai-role-sep",
-    sp("lx", T("OJ 公开用户名（免登录同步）", "Public OJ Handles")) +
+    sp("lx", T("OJ 公开用户名", "Public OJ Handles")) +
       ojRows.map(([k, lbl, ph, fb]) => fieldLine(lbl, inp(`ai.${k}`, g(`ai.${k}`, fb), ph, "in mo"))).join("")
   );
 
   const aiCard = sec(
-    T("AI 模型与平台配置", "AI & Platform"),
+    T("AI 与平台配置", "AI & Platform"),
     d(
       "c g2",
       roleBox("chat", T("教练对话模型", "Coaching Chat"), `${DS}v1`) +
@@ -240,7 +238,7 @@ export function renderSettingsView(st: WebviewState): string {
     : emptyBox(T("点击「检测」扫描编译器。", "Click Detect for compilers."));
   const toolchainDrawer = drawer(
     "settings-toolchain",
-    T("本地编译环境检测", "Toolchain Doctor"),
+    T("本地编译环境", "Toolchain Doctor"),
     d("r rb g1", sp("mu", E(T("扫描本地编译器。", "Probe compilers."))) + btn(`${icon("ref", 11)} ${T("检测", "Detect")}`, "runner-check-toolchains", "s", "xs")) + d("mt1", tcHtml),
     tcBadge,
     tcs.length > 0 || f.preset === "starter"

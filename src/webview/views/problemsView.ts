@@ -110,7 +110,7 @@ export function renderProblemsView(st: WebviewState): string {
           ...dueM.map((m) => dataRow(d("lt", E(m.title), `title="${E(m.title)}"`), d("mu mo", `${m.fsrsCard.due.slice(0, 10)} · ${E(mistakeStatusLabel(m.lastStatus, l))}`), openBtn(m.problemKey, revLbl))),
           ...dueR.map((r) => dataRow(d("lt", E(r.title), `title="${E(r.title)}"`), d("mu", E(r.rationale)), openBtn(r.problemKey, revLbl)))
         ].join("")
-      : emptyBox(T("今日暂无到期复习题。", "No reviews due today."));
+      : emptyBox(T("今日暂无到期复习。", "No reviews due."));
     const shown = new Set([...dueM.map((m) => m.problemKey), ...dueR.map((r) => r.problemKey)]);
     const deduped = snap.recommendations.filter((r) => !(r.bucket === "fsrs_due" && shown.has(r.problemKey)));
     const buckets: ReadonlyArray<[RecommendationBucket, string]> = [
@@ -127,13 +127,13 @@ export function renderProblemsView(st: WebviewState): string {
               : "";
           })
           .join("")
-      : emptyBox(T("回填更多结果后自动生成推荐。", "Record more verdicts to unlock recommendations."));
+      : emptyBox(T("回填结果后生成推荐。", "Record verdicts for recs."));
     body = sec(T("今日到期复习", "Due for Review"), dueHtml, cnt(dueN)) + sec(T("下一步推荐", "Recommended Next"), d("c g2", recHtml), cnt(deduped.length));
   } else if (sub === "sheets") {
     const starter = snap.flags.starterPackEnabled
       ? sec(
           T("新手热身包", "Starter Warmup"),
-          d("mu", E(T("离线体验标准 IO、函数模式与二分调试。", "Offline Stdio, function harness & binary search."))) +
+          d("mu", E(T("离线体验 IO、函数模式与调试。", "Offline IO, function & binary search."))) +
             d("r rw g1 mt1", btn(`${icon("play")} ${T("加载 3 题热身包", "Load 3-Problem Warmup")}`, "starter-load-warmup", "t") + btn(`${icon("book")} ${T("新手教程", "Walkthrough")}`, "starter-open-walkthrough"))
         )
       : "";
@@ -145,7 +145,7 @@ export function renderProblemsView(st: WebviewState): string {
   } else {
     const list = snap.problems.length
       ? d("lr-list", snap.problems.map((p) => problemRow(p, l, ak)).join(""))
-      : emptyBox(T("暂无已存题目，可在上方导入或去「题单」加载。", "No saved problems yet."));
+      : emptyBox(T("暂无已存题目。", "No saved problems."));
     body = sec(T("已存题目", "Saved Problems"), list, cnt(snap.problems.length));
   }
 
@@ -153,7 +153,7 @@ export function renderProblemsView(st: WebviewState): string {
   const clpLbl = T("粘贴题面（留空读剪贴板）", "Paste statement (or clipboard)");
   const advancedDrawer = drawer(
     "problems-advanced",
-    T("粘贴题面 / 插件同步", "Clipboard & Bridge"),
+    T("粘贴题面 / 6 平台同步", "Clipboard / 6-OJ Sync"),
     d(
       "c g2",
       d(
@@ -165,7 +165,7 @@ export function renderProblemsView(st: WebviewState): string {
         d(
           "sub-sep c g1",
           sp("lx fw", "Companion / 油猴") +
-            d("mu", E(T("支持插件推题与油猴 6 平台回传。", "Push problems or auto-sync 6 OJs via userscript."))) +
+            d("mu", E(T("推题 & 6 平台回传。", "Push & 6-OJ verdict sync."))) +
             d("r rw g1", btn(`${icon("copy", 11)} ${T("复制 6 平台油猴脚本", "Copy 6-OJ Userscript")}`, "bridge-copy-userscript", "g", "sm")) +
             (b.lastError ? d("fn er", E(b.lastError)) : "")
         )

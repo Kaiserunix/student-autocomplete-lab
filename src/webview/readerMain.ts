@@ -189,24 +189,37 @@ export function renderReaderSamplesSection(
   const caseMap = new Map<string, SampleCaseResult>((run?.cases ?? []).map((c) => [c.id, c]));
 
   const ceLbl = T("编译错误 CE", "Compile Error");
+  const skip = run?.skippedReason;
+  const skipLbl =
+    skip === "missing_toolchain"
+      ? T("缺少编译环境", "Missing Toolchain")
+      : skip === "unsupported_harness"
+        ? T("暂不支持包装", "Unsupported Harness")
+        : T("暂不支持该语言", "Unsupported Language");
   const ceBanner =
     run && !run.compileOk
-      ? d(
-          "al al-err mt1",
-          d("at", `${icon("x")} ${E(ceLbl)}`) +
-            h("pre", "pre well", E(run.compileStderr ?? "")) +
-            d(
-              "fail-dock",
-              btn(
-                `${icon("trace", 11)} ${T("让教练解读报错", "Explain Compile Error")}`,
-                "coach-dry-run-case",
-                "t",
-                "xs",
-                'data-case-id="compile-error" data-verdict="CE"',
-                coachBusy
+      ? skip
+        ? d(
+            "al al-wn mt1",
+            d("at", `${icon("warn")} ${E(skipLbl)}`) +
+              (run.compileStderr ? h("pre", "pre well", E(run.compileStderr)) : "")
+          )
+        : d(
+            "al al-err mt1",
+            d("at", `${icon("x")} ${E(ceLbl)}`) +
+              h("pre", "pre well", E(run.compileStderr ?? "")) +
+              d(
+                "fail-dock",
+                btn(
+                  `${icon("trace", 11)} ${T("让教练解读报错", "Explain Compile Error")}`,
+                  "coach-dry-run-case",
+                  "t",
+                  "xs",
+                  'data-case-id="compile-error" data-verdict="CE"',
+                  coachBusy
+                )
               )
-            )
-        )
+          )
       : "";
 
   const items = p.samples.length
@@ -237,7 +250,18 @@ export function renderReaderSamplesSection(
                   )
               ) +
               (s.explanation ? d("rd-exp mt1", sp("lx", E(T("样例说明", "Explanation"))) + renderMarkdownMath(s.explanation, l)) : "") +
-              (res && res.verdict !== "AC" && res.verdict !== "SKIPPED" ? renderReaderDiff(res, l, coachBusy) : "")
+              (res && res.verdict !== "AC" && res.verdict !== "SKIPPED"
+                ? renderReaderDiff(res, l, coachBusy)
+                : res && res.verdict === "SKIPPED" && (res.actual || res.stderr)
+                  ? d(
+                      "c g1 mt1",
+                      (res.actual
+                        ? d("r rb g1", sp("lx", E(T("实际输出", "Actual Output"))) + copyButton(res.actual, T(`样例 #${idx + 1} 实际输出`, `Sample #${idx + 1} actual`), l)) +
+                          h("pre", "rd-pre well mo", E(res.actual))
+                        : "") +
+                        (res.stderr ? sp("lx", "stderr") + h("pre", "rd-pre well mo", E(res.stderr)) : "")
+                    )
+                  : "")
           );
         })
         .join("")
@@ -263,11 +287,13 @@ export function renderReaderSamplesSection(
         (run && (!run.compileOk || liveTot > 0)
           ? badge(
               !run.compileOk
-                ? ceLbl
+                ? skip
+                  ? skipLbl
+                  : ceLbl
                 : allOk
                   ? T(`全部通过 ${sp_}/${st_}`, `Passed ${sp_}/${st_}`)
                   : T(`未通过 ${sp_}/${st_}`, `Failed ${sp_}/${st_}`),
-              allOk ? "ok" : "er",
+              skip ? "wn" : allOk ? "ok" : "er",
               true
             )
           : cnt(T(`共 ${p.samples.length} 组`, `${p.samples.length} total`)))

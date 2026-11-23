@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { SidebarStateSnapshot } from "../../src/core/contracts";
 import { ojIconImg, rankCrestImg, setAssetsBaseUri } from "../../src/webview/assets";
 import { buildRenderCache, mountWebview, planSidebarPatch, renderAppShell } from "../../src/webview/main";
@@ -1766,6 +1768,285 @@ describe("Round 1 UX, patching, draft lifecycle, and a11y fixes", () => {
           }
         }
       });
+
+      mounted.dispose();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("hardens UX/UI: language switcher, missing-toolchain warning+CTA, SKIPPED stdout/stderr, Dossier mastery %, Toast CTA & ui/switchTab, Ollama FIM, Luogu/NowCoder Submit userscript, and narrow CSS rules", () => {
+    const snap = makeRichSnapshot();
+    const countPrimary = (html: string) => (html.match(/\bb-p\b/g) ?? []).length;
+
+    // 1. Language switcher <select> & run.language summary
+    const wsHtml = renderWorkspaceView(createInitialWebviewState(snap));
+    expect(wsHtml).toContain('data-action="lang-select"');
+    for (const lang of ["cpp", "python", "c", "rust", "java"]) {
+      expect(wsHtml).toContain(`value="${lang}"`);
+    }
+    expect(wsHtml).toMatch(/<option value="cpp" selected>/);
+    expect(wsHtml).toContain("C++ · 标准输入输出");
+
+    // 2. Missing-toolchain & unsupported-harness warning boxes (never masquerading as red CE / Explain CE / Hint L1)
+    const missingSnap: SidebarStateSnapshot = {
+      ...snap,
+      activeLanguage: "rust",
+      lastRun: {
+        ...snap.lastRun!,
+        language: "rust",
+        compileOk: false,
+        skippedReason: "missing_toolchain",
+        compileStderr: "Toolchain for rust is not available (rustc not found).",
+        cases: [{ ...snap.lastRun!.cases[0]!, verdict: "SKIPPED", actual: "", stderr: "" }]
+      }
+    };
+    const missingWs = renderWorkspaceView(createInitialWebviewState(missingSnap));
+    expect(countPrimary(missingWs)).toBe(1);
+    expect(missingWs).toContain("al al-wn");
+    expect(missingWs).not.toContain("al al-err");
+    expect(missingWs).not.toContain("编译错误 CE");
+    expect(missingWs).not.toContain("Explain Compile Error");
+    expect(missingWs).not.toContain("Hint L1");
+    expect(missingWs).toContain('data-action="settings-open-toolchain"');
+    expect(missingWs).toContain("检测编译环境");
+
+    const missingCoach = renderCoachView(createInitialWebviewState(missingSnap));
+    expect(missingCoach).not.toContain("解读 CE 报错");
+
+    const missingReader = renderReaderShell({
+      problem: missingSnap.activeProblem,
+      uiLanguage: "en-US",
+      activeLanguage: "rust",
+      lastRun: missingSnap.lastRun,
+      hintLevel: 1,
+      runnerBusy: false,
+      coachBusy: false
+    });
+    expect(missingReader).toContain("al al-wn");
+    expect(missingReader).not.toContain("Explain Compile Error");
+
+    const harnessSnap: SidebarStateSnapshot = {
+      ...snap,
+      lastRun: {
+        ...snap.lastRun!,
+        compileOk: false,
+        skippedReason: "unsupported_harness",
+        compileStderr: "Design class harness unsupported."
+      }
+    };
+    const harnessWs = renderWorkspaceView(createInitialWebviewState(harnessSnap));
+    expect(harnessWs).toContain("al al-wn");
+    expect(harnessWs).not.toContain('data-action="settings-open-toolchain"');
+    expect(harnessWs).not.toContain("编译错误 CE");
+
+    // 3. Run-only (SKIPPED) samples render actual stdout & stderr in both Workspace and Reader
+    const runOnlySnap: SidebarStateSnapshot = {
+      ...snap,
+      activeProblem: {
+        ...snap.activeProblem!,
+        samples: [{ id: "ro1", input: "5\n", expectedOutput: "", isOriginal: false }]
+      },
+      lastRun: {
+        ...snap.lastRun!,
+        compileOk: true,
+        allPassed: true,
+        originalTotal: 0,
+        originalPassed: 0,
+        customTotal: 1,
+        customPassed: 0,
+        cases: [
+          {
+            id: "ro1",
+            isOriginal: false,
+            verdict: "SKIPPED",
+            durationMs: 12,
+            input: "5\n",
+            actual: "UNIQUE_RUNONLY_STDOUT_MARKER\n",
+            stderr: "UNIQUE_RUNONLY_STDERR_MARKER\n"
+          }
+        ]
+      }
+    };
+    const runOnlyWs = renderWorkspaceView(createInitialWebviewState(runOnlySnap));
+    expect(runOnlyWs).toContain("UNIQUE_RUNONLY_STDOUT_MARKER");
+    expect(runOnlyWs).toContain("UNIQUE_RUNONLY_STDERR_MARKER");
+    expect(runOnlyWs).toContain("实际输出");
+
+    const runOnlyReader = renderReaderShell({
+      problem: runOnlySnap.activeProblem,
+      uiLanguage: "en-US",
+      activeLanguage: "cpp",
+      lastRun: runOnlySnap.lastRun,
+      hintLevel: 0,
+      runnerBusy: false,
+      coachBusy: false
+    });
+    expect(runOnlyReader).toContain("UNIQUE_RUNONLY_STDOUT_MARKER");
+    expect(runOnlyReader).toContain("UNIQUE_RUNONLY_STDERR_MARKER");
+    expect(runOnlyReader).toContain("Actual Output");
+
+    // 4. Dossier masteryScore handles 0..100 integer scale without clamping >=1 to 100%
+    const masterySnap: SidebarStateSnapshot = {
+      ...snap,
+      learnerSnapshot: {
+        ...snap.learnerSnapshot,
+        conceptMastery: {
+          ...snap.learnerSnapshot.conceptMastery,
+          "dp.knapsack": {
+            ...snap.learnerSnapshot.conceptMastery["array.binary_search"]!,
+            conceptTag: "dp.knapsack",
+            masteryScore: 64
+          },
+          "graph.bfs": {
+            ...snap.learnerSnapshot.conceptMastery["array.binary_search"]!,
+            conceptTag: "graph.bfs",
+            masteryScore: 100
+          }
+        }
+      }
+    };
+    const dossierHtml = renderDossierView(createInitialWebviewState(masterySnap));
+    expect(dossierHtml).toContain("82%");
+    expect(dossierHtml).toContain("64%");
+    expect(dossierHtml).toContain("100%");
+
+    // 5. Luogu/NowCoder Submit card exposes bridge-copy-userscript; Problems drawer clarifies 6-platform sync
+    for (const src of ["luogu", "nowcoder"] as const) {
+      const html = renderWorkspaceView(
+        createInitialWebviewState({
+          ...snap,
+          activeProblem: { ...snap.activeProblem!, source: src, sourceId: src === "luogu" ? "P1001" : "acm-100" }
+        })
+      );
+      expect(html).toContain('data-action="bridge-copy-userscript"');
+    }
+    const probDrawerHtml = renderProblemsView(createInitialWebviewState(snap));
+    expect(probDrawerHtml).toContain("粘贴题面 / 6 平台同步");
+
+    // 6. Narrow sidebar CSS rules & non-occluding toast layout
+    const css = readFileSync(resolve("src/webview/styles.css"), "utf8");
+    expect(css).toMatch(/\.toast-slot\s*\{[^}]*order\s*:\s*3/s);
+    expect(css).toMatch(/@media\s*\(max-width:\s*360px\)\s*\{\s*\.kbd\s*\{\s*display:\s*none/s);
+    expect(css).toMatch(/@media\s*\(max-width:\s*320px\)[\s\S]*\.anchor-top[\s\S]*\.g2\s*\{[^}]*1fr/s);
+    expect(css).toMatch(/\.tb\s+th,\s*\.tb\s+td\s*\{[^}]*overflow-wrap\s*:\s*anywhere/s);
+
+    // 7. DOM interactions: lang-select, settings-open-toolchain, toast-cta, ui/switchTab subKey/subVal/drawerId, ai-fill-ollama FIM
+    class FakeEl {
+      tagName = "BUTTON";
+      dataset: Record<string, string> = {};
+      attrs = new Map<string, string>();
+      open = false;
+      getAttribute(k: string) { return this.attrs.get(k) ?? null; }
+      closest(sel: string) { return sel === "[data-action]" && this.dataset.action ? this : null; }
+      focus() { /* noop */ }
+    }
+    class FakeInput extends FakeEl { override tagName = "INPUT"; value = ""; }
+    class FakeSelect extends FakeEl { override tagName = "SELECT"; value = ""; }
+    class FakeDetails extends FakeEl { override tagName = "DETAILS"; }
+
+    vi.stubGlobal("Element", FakeEl);
+    vi.stubGlobal("HTMLInputElement", FakeInput);
+    vi.stubGlobal("HTMLTextAreaElement", FakeInput);
+    vi.stubGlobal("HTMLSelectElement", FakeSelect);
+    vi.stubGlobal("document", { activeElement: null, readyState: "complete", addEventListener: vi.fn() });
+    vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+
+    try {
+      const draftEls = new Map<string, FakeInput>();
+      for (const k of ["ai.chat.provider", "ai.chat.baseUrl", "ai.chat.model", "ai.fim.provider", "ai.fim.baseUrl", "ai.fim.model"]) {
+        const el = new FakeInput();
+        el.attrs.set("data-draft", k);
+        draftEls.set(k, el);
+      }
+      const toolchainDetails = new FakeDetails();
+      toolchainDetails.attrs.set("data-drawer", "settings-toolchain");
+      const listeners = new Map<string, EventListener>();
+      const mainSlot = { scrollTop: 0, innerHTML: "", querySelectorAll: () => [], querySelector: () => null };
+      const root = {
+        innerHTML: "",
+        addEventListener: (ev: string, fn: EventListener) => listeners.set(ev, fn),
+        removeEventListener: (ev: string) => listeners.delete(ev),
+        querySelector: (sel: string) => {
+          const dm = sel.match(/^\[data-draft="([^"]+)"\]$/);
+          if (dm) return draftEls.get(dm[1]!) ?? null;
+          if (sel === 'details[data-drawer="settings-toolchain"]') return toolchainDetails;
+          if (sel === '[data-patch="main"]') return mainSlot;
+          return null;
+        },
+        querySelectorAll: () => []
+      } as unknown as HTMLElement;
+
+      const posted: unknown[] = [];
+      const mounted = mountWebview(root, { postMessage: (m) => posted.push(m) });
+      mounted.handleHostMessage({ type: "state/sync", payload: missingSnap });
+
+      // Language selector change dispatches problem/select with { problemKey, language, openFile: true }
+      const langSel = new FakeSelect();
+      langSel.dataset.action = "lang-select";
+      langSel.dataset.problemKey = "codeforces:1900A";
+      langSel.value = "cpp";
+      listeners.get("change")?.({ target: langSel } as unknown as Event);
+      expect(posted.at(-1)).toEqual({
+        type: "problem/select",
+        payload: { problemKey: "codeforces:1900A", language: "cpp", openFile: true }
+      });
+
+      // Toast with CTA renders button and toast-cta jumps + clears toast
+      mounted.handleHostMessage({
+        type: "toast/inline",
+        payload: {
+          level: "warn",
+          text: "Configure handle",
+          cta: { label: "Open Env Settings", tab: "settings", subKey: "sub.settings", subVal: "env", drawerId: "settings-toolchain" }
+        }
+      });
+      const toastHtml = renderAppShell(mounted.store.getState());
+      expect(toastHtml).toContain('data-action="toast-cta"');
+      expect(toastHtml).toContain("Open Env Settings");
+
+      const ctaBtn = new FakeEl();
+      ctaBtn.dataset.action = "toast-cta";
+      ctaBtn.dataset.tab = "settings";
+      ctaBtn.dataset.subKey = "sub.settings";
+      ctaBtn.dataset.subVal = "env";
+      ctaBtn.dataset.drawerId = "settings-toolchain";
+      listeners.get("click")?.({ target: ctaBtn } as unknown as Event);
+      expect(mounted.store.getState().activeTab).toBe("settings");
+      expect(mounted.store.getState().drafts["sub.settings"]).toBe("env");
+      expect(toolchainDetails.open).toBe(true);
+      expect(mounted.store.getState().toast).toBeNull();
+
+      // ui/switchTab honors non-prefixed subKey + drawerId
+      toolchainDetails.open = false;
+      mounted.handleHostMessage({
+        type: "ui/switchTab",
+        payload: { tab: "settings", subKey: "settings", subVal: "env", drawerId: "settings-toolchain" }
+      });
+      expect(mounted.store.getState().activeTab).toBe("settings");
+      expect(mounted.store.getState().drafts["sub.settings"]).toBe("env");
+      expect(toolchainDetails.open).toBe(true);
+
+      // settings-open-toolchain jumps to settings env + opens drawer + runs checkToolchains
+      toolchainDetails.open = false;
+      mounted.store.update((p) => setActiveTab(p, "workspace"));
+      const tcBtn = new FakeEl();
+      tcBtn.dataset.action = "settings-open-toolchain";
+      listeners.get("click")?.({ target: tcBtn } as unknown as Event);
+      expect(mounted.store.getState().activeTab).toBe("settings");
+      expect(toolchainDetails.open).toBe(true);
+      expect(posted.at(-1)).toEqual({ type: "runner/checkToolchains" });
+
+      // ai-fill-ollama populates BOTH ai.chat.* and ai.fim.*
+      const ollamaBtn = new FakeEl();
+      ollamaBtn.dataset.action = "ai-fill-ollama";
+      listeners.get("click")?.({ target: ollamaBtn } as unknown as Event);
+      expect(draftEls.get("ai.chat.provider")?.value).toBe("ollama");
+      expect(draftEls.get("ai.chat.baseUrl")?.value).toBe("http://localhost:11434/v1");
+      expect(draftEls.get("ai.chat.model")?.value).toBe("qwen2.5-coder:7b");
+      expect(draftEls.get("ai.fim.provider")?.value).toBe("ollama");
+      expect(draftEls.get("ai.fim.baseUrl")?.value).toBe("http://localhost:11434/v1");
+      expect(draftEls.get("ai.fim.model")?.value).toBe("qwen2.5-coder:7b");
 
       mounted.dispose();
     } finally {

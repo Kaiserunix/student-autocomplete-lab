@@ -9,10 +9,11 @@ import type {
   StylishRankState
 } from "../../core/contracts";
 import { ojIconImg, rankCrestImg, workbenchArtImg } from "../assets";
-import { al, badge, btn, cnt, d, emptyBox, emptyCard, h, rbtn, sec, sp } from "../dom";
+import { al, badge, btn, cnt, d, emptyBox, emptyCard, h, rbtn, sec, sel, sp } from "../dom";
 import {
   completenessLabel,
   ioModeLabel,
+  LANG_OPTS,
   langLabel,
   localizeCeilingReason,
   localizeRankSummary,
@@ -37,14 +38,8 @@ function rankIndex(r: StylishRankLetter): number {
   return idx === -1 ? 0 : idx;
 }
 
-function copyMiniBtn(text: string, label: string, uiLabel: string): string {
-  return h(
-    "button",
-    "b b-g b-xs",
-    `${icon("copy", 10)} ${E(uiLabel)}`,
-    `type="button" data-action="copy-text" data-copy="${escapeAttr(text)}" data-copy-label="${escapeAttr(label)}"`
-  );
-}
+const copyMiniBtn = (text: string, label: string, uiLabel: string): string =>
+  btn(`${icon("copy", 10)} ${E(uiLabel)}`, "copy-text", "g", "xs", `data-copy="${escapeAttr(text)}" data-copy-label="${escapeAttr(label)}"`);
 
 function renderFailureActions(verdict: SampleCaseResult["verdict"], caseId: string, lv: HintLevel, nextHint: HintLevel, l: UiLang, coachBusy: boolean): string {
   const T = tr(l);
@@ -98,13 +93,14 @@ const caseRow = (orig: boolean, i: number, pk: string, id: string, l: UiLang, mi
   return d("si", d("r g1 rw", sp("si-t", E(title)) + mid + sp("sp", "") + delBtn(orig, pk, id, l)) + extra);
 };
 
-function ioBox(label: string, copyTitle: string, x: string, l: UiLang): string {
-  return d(
-    "f1 c g1",
-    d("r rb g1", sp("lx", E(label)) + (x ? copyMiniBtn(x, copyTitle, t(l, "复制", "Copy")) : "")) +
-      h("pre", "pre well", E(x || t(l, "(空)", "(empty)")))
-  );
-}
+const ioBox = (label: string, x: string, l: UiLang): string =>
+  d("f1 c g1", d("r rb g1", sp("lx", E(label)) + (x ? copyMiniBtn(x, label, t(l, "复制", "Copy")) : "")) + h("pre", "pre well", E(x || t(l, "(空)", "(empty)"))));
+
+const SKIP_INFO: Record<string, [string, string, string, string]> = {
+  missing_toolchain: ["缺少编译环境", "Missing Toolchain", "未检测到编译器，不计惩罚，请检测。", "Compiler missing (no penalty). Run Doctor."],
+  unsupported_harness: ["暂不支持包装", "Unsupported Harness", "暂不支持函数包装，可直接提交。", "Harness unsupported; submit directly."],
+  unsupported_language: ["暂不支持语言", "Unsupported Language", "请切换为 C++/Python/C/Rust/Java。", "Switch to C++/Python/C/Rust/Java."]
+};
 
 function renderUnifiedSamples(
   ss: readonly ProblemSample[],
@@ -131,22 +127,39 @@ function renderUnifiedSamples(
     ot ? (ct ? T(`原题 ${op}/${ot}`, `${op}/${ot} orig`) : T(`通过 ${op}/${ot}`, `${op}/${ot} passed`)) : "",
     ct ? T(`自建 ${cp}/${ct}`, `${cp}/${ct} custom`) : ""
   ].filter(Boolean).join(" · ");
+  const skip = run?.skippedReason;
+  const si = skip ? SKIP_INFO[skip] ?? SKIP_INFO.unsupported_language! : undefined;
   const showRun = Boolean(run && (!run.compileOk || liveTot > 0));
+  const summaryStatus = allOk
+    ? sp("fw ok", T("全部通过", "All Passed"))
+    : si
+      ? sp("fw wn", E(T(si[0], si[1])))
+      : sp("fw er", T("存在未通过样例", "Tests Failed"));
+  const alertBox = !run || run.compileOk
+    ? ""
+    : si
+      ? d(
+          "al al-wn",
+          d("at", `${icon("warn")} ${E(T(si[0], si[1]))}`) +
+            d("mu", E(T(si[2], si[3]))) +
+            (run.compileStderr ? h("pre", "pre well mt1", E(run.compileStderr)) : "") +
+            (skip === "missing_toolchain"
+              ? d("fail-dock", btn(`${icon("ref", 11)} ${T("检测编译环境", "Toolchain Doctor")}`, "settings-open-toolchain", "t", "xs"))
+              : "")
+        )
+      : d(
+          "al al-err",
+          d("at", `${icon("x")} ${T("编译错误 CE", "Compile Error")}`) +
+            h("pre", "pre well", E(run.compileStderr ?? "")) +
+            renderFailureActions("CE", "compile-error", lv, nextHint, l, coachBusy)
+        );
   const summary = showRun && run
     ? d(
         "rs",
-        sp(`fw ${allOk ? "ok" : "er"}`, allOk ? T("全部通过", "All Passed") : T("存在未通过样例", "Tests Failed")) +
-          (ratio ? cnt(ratio) : "") +
-          sp("mu", E(ioModeLabel(run.mode, l)))
-      ) +
-      (run.compileOk
-        ? ""
-        : d(
-            "al al-err",
-            d("at", `${icon("x")} ${T("编译错误 CE", "Compile Error")}`) +
-              h("pre", "pre well", E(run.compileStderr ?? "")) +
-              renderFailureActions("CE", "compile-error", lv, nextHint, l, coachBusy)
-          ))
+        summaryStatus +
+          (!skip && ratio ? cnt(ratio) : "") +
+          sp("mu", E(`${langLabel(run.language, l)} · ${ioModeLabel(run.mode, l)}`))
+      ) + alertBox
     : "";
 
   const rows = ss.length
@@ -161,18 +174,26 @@ function renderUnifiedSamples(
           const ioGrid = () =>
             d(
               "g2 mt1",
-              ioBox(T("输入", "Input"), T(`样例 #${i + 1} 输入`, `Sample #${i + 1} input`), s.input, l) +
-                ioBox(T("期望输出", "Expected"), T(`样例 #${i + 1} 输出`, `Sample #${i + 1} expected`), s.expectedOutput ?? "", l)
+              ioBox(T("输入", "Input"), s.input, l) +
+                ioBox(T("期望输出", "Expected"), s.expectedOutput ?? "", l)
             );
+          const skipOut =
+            res?.verdict === "SKIPPED" && (res.actual || res.stderr)
+              ? d(
+                  "c g1 mt1",
+                  (res.actual ? ioBox(T("实际输出", "Actual Output"), res.actual, l) : "") +
+                    (res.stderr ? ioBox("stderr", res.stderr, l) : "")
+                )
+              : "";
           const extra = !res
             ? ioGrid()
             : res.verdict !== "AC" && res.verdict !== "SKIPPED"
               ? renderDiff(res, lv, nextHint, l, coachBusy)
-              : h("details", "si-io", h("summary", "", E(T("查看输入/输出", "Inspect I/O"))) + ioGrid(), `data-drawer="si-${E(s.id)}"`);
+              : skipOut + h("details", "si-io", h("summary", "", E(T("查看输入/输出", "Inspect I/O"))) + ioGrid(), `data-drawer="si-${E(s.id)}"`);
           return caseRow(s.isOriginal, i, pk, s.id, l, mid, extra);
         })
         .join("")
-    : emptyBox(T("当前题目暂无样例，可点击上方按钮手动添加。", "No samples yet. Add a custom sample above."));
+    : emptyBox(T("当前题目暂无样例，可点上方添加。", "No samples yet. Add one above."));
 
   return summary + rows + (showRun && run?.memoryNote ? d("fn", E(run.memoryNote)) : "");
 }
@@ -225,11 +246,18 @@ export function renderWorkspaceProblemCard(st: WebviewState, p: ProblemDocument)
   const expanded = Boolean(st.panels.stmtFull);
 
   const specParts = [
-    langLabel(snap.activeLanguage, l),
     p.constraints?.timeLimitMs ? `${p.constraints.timeLimitMs}ms` : "",
     p.constraints?.memoryLimitMb ? `${p.constraints.memoryLimitMb}MB` : "",
     ioModeLabel(p.ioMode, l)
   ].filter(Boolean);
+  const langOpts: ReadonlyArray<[string, string]> =
+    snap.activeLanguage && snap.activeLanguage !== "generic" ? LANG_OPTS : [["", T("语言", "Lang")], ...LANG_OPTS];
+  const langSel = sel(
+    langOpts,
+    snap.activeLanguage ?? "",
+    `data-action="lang-select" data-problem-key="${E(p.problemKey)}" aria-label="${E(T("编程语言", "Language"))}"`,
+    "sel sc lang-sel"
+  );
 
   const topRow = d(
     "r g1 anchor-top",
@@ -248,6 +276,7 @@ export function renderWorkspaceProblemCard(st: WebviewState, p: ProblemDocument)
       h("span", "bg bg-m mo", E(p.sourceId), `title="${E(p.sourceId)}"`) +
         (p.difficulty?.rawLabel ? badge(p.difficulty.rawLabel) : "") +
         (p.completeness !== "full" ? badge(ct, cTone) : "") +
+        langSel +
         sp("mu mo", E(specParts.join(" · ")))
     ) +
       (p.statementMarkdown
@@ -267,7 +296,7 @@ export function renderWorkspaceProblemCard(st: WebviewState, p: ProblemDocument)
       : ""
     : d(
         "stmt-empty",
-        d("mu", E(T("仅含元信息，可从剪贴板补全。", "Metadata only. Paste from clipboard."))) +
+        d("mu", E(T("仅元信息，可剪贴板补全。", "Metadata only. Paste below."))) +
           d("r rw g1 mt1", btn(`${icon("imp", 11)} ${T("从剪贴板补全题面", "Paste Statement")}`, "problem-merge-clipboard", "t", "sm"))
       );
 
@@ -289,12 +318,12 @@ export function renderWorkspaceSamplesCard(st: WebviewState, p: ProblemDocument)
   const form = sampleOpen
     ? d(
         "sub-sep",
-        sp("lx", T("添加自建边界样例", "Add Custom Edge Sample")) +
+        sp("lx", T("添加自建样例", "Add Custom Sample")) +
           h("textarea", "ta mo", E(dr(st, "sin")), `rows="3" placeholder="${E(sinPh)}" aria-label="${E(sinPh)}" data-draft="sin"`) +
           h("textarea", "ta mo", E(dr(st, "sex")), `rows="2" placeholder="${E(sexPh)}" aria-label="${E(sexPh)}" data-draft="sex"`) +
           d(
             "r g1",
-            btn(T("保存样例", "Save Sample"), "sample-add-submit", "t", "sm", `data-problem-key="${E(p.problemKey)}"`) +
+            btn(T("保存", "Save"), "sample-add-submit", "t", "sm", `data-problem-key="${E(p.problemKey)}"`) +
               btn(T("取消", "Cancel"), "toggle-panel", "g", "sm", 'data-panel="sample"')
           )
       )
@@ -319,6 +348,7 @@ export function renderWorkspaceSamplesCard(st: WebviewState, p: ProblemDocument)
 export function renderWorkspaceSubmitCard(st: WebviewState, p: ProblemDocument): string {
   const [snap, l, T] = ctx(st);
   const showSync = ["codeforces", "leetcode-cn", "leetcode-global", "atcoder"].includes(p.source);
+  const showScript = ["luogu", "nowcoder"].includes(p.source);
   const showRev = Boolean((snap.lastRun?.problemKey === p.problemKey && snap.lastRun.allPassed) || snap.stylishRank?.effectiveRank === "SSS");
   const submitUrl = snap.activeSubmitUrl ? sanitizeExternalUrl(snap.activeSubmitUrl) : null;
   const vs: OfficialVerdictStatus[] = ["AC", "WA", "TLE", "RE"];
@@ -329,7 +359,7 @@ export function renderWorkspaceSubmitCard(st: WebviewState, p: ProblemDocument):
       "r rw g1",
       btn(`${icon("copy", 11)} ${T("复制并打开提交页", "Copy & Open")}`, "submit-copy-open", "s", "sm") +
         btn(`${icon("copy", 11)} ${T("仅复制代码", "Copy Code")}`, "submit-copy-only", "g", "sm") +
-        (submitUrl ? btn(`${icon("ext", 11)} ${T("复制链接", "Copy URL")}`, "copy-text", "g", "sm", `data-copy="${E(submitUrl)}" data-copy-label="${E(T("官方提交页链接", "Submit URL"))}"`) : "") +
+        (submitUrl ? btn(`${icon("ext", 11)} ${T("复制链接", "Copy URL")}`, "copy-text", "g", "sm", `data-copy="${E(submitUrl)}" data-copy-label="${E(T("提交链接", "Submit URL"))}"`) : "") +
         (showSync
           ? btn(
               `${icon("ref", 11)} ${snap.verdictSyncing ? T("同步中...", "Syncing...") : T("同步官方结果", "Sync OJ")}`,
@@ -339,14 +369,16 @@ export function renderWorkspaceSubmitCard(st: WebviewState, p: ProblemDocument):
               "",
               Boolean(snap.verdictSyncing)
             )
-          : "") +
+          : showScript
+            ? btn(`${icon("copy", 11)} ${T("复制油猴脚本", "Userscript")}`, "bridge-copy-userscript", "g", "sm")
+            : "") +
         (showRev ? btn(`${icon("bulb", 11)} ${T("面试复杂度复盘", "Complexity Review")}`, "coach-review-open", "t", "sm", "", snap.coachBusy) : "")
     ) +
-      d("fn", E(T("未在默认浏览器登录？点「复制链接」到常用浏览器，再「仅复制代码」粘贴。", "Not signed in? Copy URL for your browser, then Copy Code."))) +
+      d("fn", E(T("未在默认浏览器登录？用「复制链接」+「仅复制代码」。", "Not signed in? Copy URL, then Copy Code."))) +
       d(
         "vb",
         sp("lx", T("网页提交后记录结果", "Record OJ Result")) +
-          d("r g1", vs.map((v) => btn(v, "submit-verdict", v === "AC" ? "ok" : "s", "sm", `data-verdict="${v}"`)).join(""))
+          d("r rw g1", vs.map((v) => btn(v, "submit-verdict", v === "AC" ? "ok" : "s", "sm", `data-verdict="${v}"`)).join(""))
       )
   );
   return d("patch-slot", card, 'data-patch="submit-card"');

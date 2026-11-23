@@ -1,6 +1,6 @@
-import { badge, btn, cnt, d, dataRow, drawer, emptyBox, h, inp, meterSvg, openBtn, sec, sp, tbl } from "../dom";
+import { badge, btn, cnt, d, dataRow, drawer, emptyBox, h, meterSvg, openBtn, sec, sp, tbl } from "../dom";
 import { mistakeStatusLabel, tr, type UiLang } from "../i18n";
-import { escapeHtml as E, getDraftOrFallback as dr, type WebviewState } from "../state";
+import { escapeHtml as E, type WebviewState } from "../state";
 
 export function renderDossierView(st: WebviewState): string {
   const { snapshot: snap } = st;
@@ -17,7 +17,7 @@ export function renderDossierView(st: WebviewState): string {
         `<th>${E(T("知识点", "Concept"))}</th><th class="num">${E(T("掌握度", "Mastery"))}</th><th class="num">${E(T("独立", "AC"))}</th><th class="num">${E(T("难度", "Tier"))}</th>`,
         concepts
           .map((c) => {
-            const pct = Math.max(0, Math.min(100, Math.round(c.masteryScore * 100)));
+            const pct = Math.max(0, Math.min(100, Math.round(c.masteryScore <= 1 ? c.masteryScore * 100 : c.masteryScore)));
             return `<tr><td class="mo"><span class="tag-cell" title="${E(c.conceptTag)}">${E(c.conceptTag)}</span></td><td class="num mo">${sp("mc", meterSvg(pct) + sp("", `${pct}%`))}</td><td class="num mo">${c.independentAcCount}/${c.attemptedCount}</td><td class="num mo">T${c.highestIndependentTier}</td></tr>`;
           })
           .join("")
@@ -64,9 +64,7 @@ export function renderDossierView(st: WebviewState): string {
   const voidDrawer = drawer(
     "dossier-void",
     T("作废误填评测事件", "Void Event"),
-    d("mu", E(T("点最近记录作废，或输 ID 重算。", "Void a record or enter event ID."))) +
-      (recentList ? d("c g1 mt1", recentList) : "") +
-      d("r g1 mt1", inp("vid", dr(st, "vid"), T("事件 ID", "Event ID"), "in f1 mo", "text", ` aria-label="${E(T("事件 ID", "Event ID"))}"`) + btn(T("作废", "Void"), "learner-void-event")),
+    recentList ? d("c g1", recentList) : emptyBox(T("暂无近期可作废事件。", "No recent events to void.")),
     cnt(ov.voidedEventIds.length)
   );
 
