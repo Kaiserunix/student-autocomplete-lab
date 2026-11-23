@@ -11,7 +11,7 @@ import type {
   WebviewToHostMessage
 } from "../core/contracts";
 import { createAudioSynth, type AudioSynthEngine } from "./audioSynth";
-import { h } from "./dom";
+import { al, h } from "./dom";
 import { t, type UiLang } from "./i18n";
 import { icon } from "./icons";
 import {
@@ -35,7 +35,7 @@ import {
 } from "./state";
 import { renderCoachControlsCard, renderCoachHistoryCard, renderCoachView } from "./views/coachView";
 import { renderDossierView } from "./views/dossierView";
-import { renderProblemsView } from "./views/problemsView";
+import { DEF_SEARCH_SRCS, getSearchSrcs, renderProblemsView, SEARCH_SRCS } from "./views/problemsView";
 import { renderSettingsView } from "./views/settingsView";
 import {
   renderWorkspaceProblemCard,
@@ -56,12 +56,23 @@ const TABS: ReadonlyArray<[SidebarTab, string, string]> = [
 ];
 
 type FlagKey = Extract<WebviewToHostMessage, { type: "flag/update" }>["payload"]["key"];
+const DRAFT_ACTS: Record<string, string> = {
+  "problem-import-ref": "imp",
+  "problem-search": "qry",
+  "coach-followup": "ask",
+  "learner-void-event": "vid",
+  "habit-add": "hab"
+};
 
 const BARE: Record<string, string> = {
   "runner-run": "runner/runSamples",
   "runner-check-toolchains": "runner/checkToolchains",
   "submit-copy-open": "submit/copyAndOpen",
+  "submit-copy-only": "submit/copyOnly",
+  "submit-sync-verdict": "submit/syncVerdict",
   "submit-sync-cf": "submit/syncCodeforces",
+  "bridge-copy-userscript": "bridge/copyUserscript",
+  "problem-clear-search": "problem/clearSearch",
   "starter-load-warmup": "starter/loadWarmupPack",
   "starter-open-walkthrough": "starter/openWalkthrough",
   "starter-apply-visual": "starter/applyVisualPreset",
@@ -93,12 +104,11 @@ export function renderTabsNav(s: WebviewState): string {
       `type="button" role="tab" title="${lbl}" aria-selected="${s.activeTab === id}" data-action="switch-tab" data-tab="${id}"`
     );
   }).join("");
-  const setLbl = escapeHtml(t(l, "设置", "Settings"));
   const gear = h(
     "button",
     `tab tab-gear${s.activeTab === "settings" ? " tab-a" : ""}`,
     icon("gear", 14),
-    `type="button" role="tab" title="${setLbl}" aria-label="${setLbl}" aria-selected="${s.activeTab === "settings"}" data-action="switch-tab" data-tab="settings"`
+    `type="button" role="tab" ${al(t(l, "设置", "Settings"))} aria-selected="${s.activeTab === "settings"}" data-action="switch-tab" data-tab="settings"`
   );
   return h("nav", "nav-row", h("div", "tabs", tabs) + gear, `role="tablist" aria-label="${escapeHtml(t(l, "主导航", "Main navigation"))}"`);
 }
@@ -106,7 +116,6 @@ export function renderTabsNav(s: WebviewState): string {
 export function renderToastSlot(s: WebviewState): string {
   if (!s.toast) return "";
   const l = s.snapshot.flags.uiLanguage;
-  const cl = escapeHtml(t(l, "关闭提示", "Dismiss"));
   const undo = s.toast.undoEventId
     ? h("button", "b b-g b-xs", escapeHtml(t(l, "撤销", "Undo")), `type="button" data-action="learner-void-id" data-event-id="${escapeHtml(s.toast.undoEventId)}"`)
     : "";
@@ -115,7 +124,7 @@ export function renderToastSlot(s: WebviewState): string {
     `toast toast-${escapeHtml(s.toast.level)}`,
     `<span class="f1">${escapeHtml(s.toast.text)}</span>` +
       undo +
-      h("button", "bi", icon("x", 11), `type="button" title="${cl}" aria-label="${cl}" data-action="dismiss-toast"`)
+      h("button", "bi", icon("x", 11), `type="button" ${al(t(l, "关闭提示", "Dismiss"))} data-action="dismiss-toast"`)
   );
 }
 
@@ -241,7 +250,7 @@ const PROV_URLS: Record<string, string> = {
 };
 const DEF_URLS = new Set([...Object.values(PROV_URLS), `${DS}beta`]);
 const PROVS = Object.keys(PROV_URLS);
-const FA = "tab key value pref-key habit-id panel stuck preset verdict problem-key sheet-id misconception-id sound-kind sub-key sub-val event-id".split(" ");
+const FA = "tab key value pref-key habit-id panel stuck preset verdict problem-key sheet-id misconception-id sound-kind sub-key sub-val event-id src".split(" ");
 const esc = (v: string) => v.replace(/["\\]/g, "\\$&");
 type FieldEl = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
 const isIn = (el: unknown): el is HTMLInputElement => el instanceof HTMLInputElement;
@@ -294,10 +303,11 @@ export function mountWebview(
   const captureFocus = () => {
     const ae = document.activeElement;
     if (!(ae instanceof Element) || root.contains?.(ae) === false) return null;
+    const ret = (sel: string, s0: number | null = null, s1: number | null = null) => ({ sel, s0, s1 });
     const dk = isField(ae) ? ae.getAttribute("data-draft") : null;
-    if (dk) return { sel: `[data-draft="${esc(dk)}"]`, s0: (ae as HTMLInputElement).selectionStart ?? null, s1: (ae as HTMLInputElement).selectionEnd ?? null };
+    if (dk) return ret(`[data-draft="${esc(dk)}"]`, (ae as HTMLInputElement).selectionStart ?? null, (ae as HTMLInputElement).selectionEnd ?? null);
     const drw = ae.tagName === "SUMMARY" ? ae.parentElement?.getAttribute?.("data-drawer") : null;
-    if (drw) return { sel: `details[data-drawer="${esc(drw)}"]>summary`, s0: null as number | null, s1: null as number | null };
+    if (drw) return ret(`details[data-drawer="${esc(drw)}"]>summary`);
     const act = ae.getAttribute("data-action");
     if (!act) return null;
     let sel = `[data-action="${esc(act)}"]`;
@@ -305,7 +315,7 @@ export function mountWebview(
       const v = ae.getAttribute(`data-${a}`);
       if (v !== null) sel += `[data-${a}="${esc(v)}"]`;
     }
-    return { sel, s0: null as number | null, s1: null as number | null };
+    return ret(sel);
   };
 
   const restoreFocus = (f: ReturnType<typeof captureFocus>) => {
@@ -411,8 +421,21 @@ export function mountWebview(
     else if (msg.type === "ui/switchTab") upd((p) => setActiveTab(p, msg.payload.tab));
   };
 
-  const onMsg = (e: MessageEvent): void => handleHostMessage(e.data as HostToWebviewMessage);
+  const onMsg: EventListener = (e) => handleHostMessage((e as MessageEvent).data as HostToWebviewMessage);
 
+  const fillPreset = (vals: Record<string, string>, zh: string, en: string) => {
+    setDraftDom(vals);
+    upd((p) => ({ ...p, drafts: { ...p.drafts, ...vals }, toast: { level: "info", text: t(store.getState().snapshot.flags.uiLanguage, zh, en) } }));
+  };
+  const coachTab = (action: string, verdict: string | undefined, extra?: Record<string, unknown>) => {
+    const stuck = verdictToStuck(verdict);
+    upd((p) => ({ ...setActiveTab(p, "coach"), stuck }));
+    coach(action, { stuckCategory: stuck, ...extra });
+  };
+  const clr = (ks: readonly string[], panel?: string) => {
+    clearDraftDom(ks);
+    upd((p) => ({ ...clearDraftKeys(p, ks), ...(panel ? { panels: { ...p.panels, [panel]: false } } : {}) }));
+  };
   const submitDraft = (key: string): void => {
     const s = store.getState();
     const val = dv(s, key);
@@ -421,14 +444,12 @@ export function mountWebview(
       const src = dr(s, "isrc", "auto");
       emit("problem/importRef", { source: src === "auto" ? undefined : (src as ProblemSourceId), input: val, language: s.snapshot.activeLanguage });
     } else if (key === "qry") {
-      emit("problem/search", { source: dr(s, "ssrc", "leetcode-cn") as ProblemSourceId, keyword: val });
-      upd((p) => setDraftValue(p, "sub.problems", "saved"));
+      emit("problem/search", { sources: getSearchSrcs(s), keyword: val });
       return;
     } else if (key === "ask") coach("followUp", { stuckCategory: s.stuck, studentQuestion: val });
     else if (key === "hab") emit("learner/upsertCodeHabit", { id: `habit-${Date.now()}`, language: dr(s, "hlang", s.snapshot.activeLanguage ?? "cpp") as SupportedLanguage, ruleText: val, enabled: true });
     else if (key === "vid") emit("learner/voidEvent", { eventId: val });
-    clearDraftDom([key]);
-    upd((p) => clearDraftKeys(p, [key]));
+    clr([key]);
   };
 
   const ACT: Record<string, (d: DOMStringMap, s: WebviewState) => void> = {
@@ -447,8 +468,7 @@ export function mountWebview(
       const input = dr(s, "sin");
       if (pk && input.trim()) {
         emit("problem/addSample", { problemKey: pk, input, expectedOutput: dr(s, "sex") });
-        clearDraftDom(["sin", "sex"]);
-        upd((p) => ({ ...clearDraftKeys(p, ["sin", "sex"]), panels: { ...p.panels, sample: false } }));
+        clr(["sin", "sex"], "sample");
       } else q('[data-draft="sin"]')?.focus();
     },
     "sample-delete": (d) => d.problemKey && d.sampleId && emit("problem/deleteSample", { problemKey: d.problemKey, sampleId: d.sampleId }),
@@ -459,8 +479,17 @@ export function mountWebview(
         upd((p) => setActiveTab(p, "workspace"));
       }
     },
-    "problem-import-ref": () => submitDraft("imp"),
-    "problem-search": () => submitDraft("qry"),
+    "search-toggle-src": (d, s) => {
+      const id = d.src as ProblemSourceId | undefined;
+      if (!id || !SEARCH_SRCS.includes(id)) return;
+      const cur = getSearchSrcs(s);
+      const next = cur.includes(id) ? (cur.length > 1 ? cur.filter((x) => x !== id) : cur) : SEARCH_SRCS.filter((x) => cur.includes(x) || x === id);
+      upd((p) => setDraftValue(p, "ssrcs", next.join(",")));
+    },
+    "search-toggle-all": (_, s) => {
+      const cur = getSearchSrcs(s);
+      upd((p) => setDraftValue(p, "ssrcs", cur.length === SEARCH_SRCS.length ? DEF_SEARCH_SRCS : SEARCH_SRCS.join(",")));
+    },
     "problem-load-sheet": (d) => {
       if (d.sheetId) {
         emit("problem/loadSheet", { sheetId: d.sheetId });
@@ -469,10 +498,8 @@ export function mountWebview(
     },
     "problem-merge-clipboard": () => emit("problem/importClipboard", { text: "", mergeWithActive: true }),
     "problem-import-clipboard": (d, s) => {
-      const text = dv(s, "clp");
-      emit("problem/importClipboard", { text, mergeWithActive: d.merge === "true" });
-      clearDraftDom(["clp"]);
-      upd((p) => ({ ...clearDraftKeys(p, ["clp"]), panels: { ...p.panels, clip: false } }));
+      emit("problem/importClipboard", { text: dv(s, "clp"), mergeWithActive: d.merge === "true" });
+      clr(["clp"], "clip");
     },
     "coach-select-stuck": (d) => d.stuck && upd((p) => ({ ...p, stuck: d.stuck as StuckCategory })),
     "coach-hint": (_, s) => coach("hint", { stuckCategory: s.stuck }),
@@ -484,22 +511,12 @@ export function mountWebview(
       coach("dryRun", { stuckCategory: verdictToStuck(isCe ? "CE" : fail?.verdict) });
     },
     "coach-dry-run-case": (d, s) => {
-      const stuck = verdictToStuck(d.verdict);
-      const matched = s.snapshot.lastRun?.cases.find((c) => c.id === d.caseId);
-      const q = matched
-        ? `Dry-run failing sample (${matched.verdict}): input=${matched.input.slice(0, 120)}`
-        : undefined;
-      upd((p) => ({ ...setActiveTab(p, "coach"), stuck }));
-      coach("dryRun", { stuckCategory: stuck, ...(q ? { studentQuestion: q } : {}) });
+      const m = s.snapshot.lastRun?.cases.find((c) => c.id === d.caseId);
+      coachTab("dryRun", d.verdict, m ? { studentQuestion: `Dry-run failing sample (${m.verdict}): input=${m.input.slice(0, 120)}` } : undefined);
     },
-    "coach-hint-case": (d) => {
-      const stuck = verdictToStuck(d.verdict);
-      upd((p) => ({ ...setActiveTab(p, "coach"), stuck }));
-      coach("hint", { stuckCategory: stuck });
-    },
+    "coach-hint-case": (d) => coachTab("hint", d.verdict),
     "coach-review": () => coach("review"),
     "coach-review-open": () => { upd((p) => setActiveTab(p, "coach")); coach("review"); },
-    "coach-followup": () => submitDraft("ask"),
     "coach-giveup-arm": () => upd((p) => setGiveUpConfirmPending(p, true)),
     "coach-giveup-cancel": () => upd((p) => setGiveUpConfirmPending(p, false)),
     "coach-giveup-confirm": () => {
@@ -507,9 +524,7 @@ export function mountWebview(
       coach("giveUp", { confirmGiveUp: true });
     },
     "learner-mute-misconception": (d) => d.misconceptionId && emit("learner/muteMisconception", { misconceptionId: d.misconceptionId, muted: d.muted !== "false" }),
-    "learner-void-event": () => submitDraft("vid"),
     "learner-void-id": (d) => { if (d.eventId) { emit("learner/voidEvent", { eventId: d.eventId }); upd((p) => ({ ...p, toast: null })); } },
-    "habit-add": () => submitDraft("hab"),
     "habit-delete": (d) => d.habitId && emit("learner/deleteCodeHabit", { id: d.habitId }),
     "preset-select": (d) => d.preset && emit("preset/select", { preset: d.preset as PresetMode }),
     "flag-update": (d) => d.key && d.value !== undefined && emit("flag/update", { key: d.key as FlagKey, value: d.value }),
@@ -529,17 +544,11 @@ export function mountWebview(
         emit("audio/testSound", { kind });
       });
     },
-    "ai-fill-deepseek": (_, s) => {
+    "ai-fill-deepseek": () => {
       const oc = "openai-compatible", m = "deepseek-chat";
-      const vals = { "ai.chat.provider": oc, "ai.chat.baseUrl": `${DS}v1`, "ai.chat.model": m, "ai.fim.provider": oc, "ai.fim.baseUrl": `${DS}beta`, "ai.fim.model": m };
-      setDraftDom(vals);
-      upd((p) => ({ ...p, drafts: { ...p.drafts, ...vals }, toast: { level: "info", text: t(s.snapshot.flags.uiLanguage, "已填 DeepSeek 预设，请保存。", "DeepSeek preset filled. Save.") } }));
+      fillPreset({ "ai.chat.provider": oc, "ai.chat.baseUrl": `${DS}v1`, "ai.chat.model": m, "ai.fim.provider": oc, "ai.fim.baseUrl": `${DS}beta`, "ai.fim.model": m }, "已填 DeepSeek 预设，请保存。", "DeepSeek preset filled. Save.");
     },
-    "ai-fill-ollama": (_, s) => {
-      const vals = { "ai.chat.provider": "ollama", "ai.chat.baseUrl": PROV_URLS.ollama!, "ai.chat.model": "qwen2.5-coder:7b" };
-      setDraftDom(vals);
-      upd((p) => ({ ...p, drafts: { ...p.drafts, ...vals }, toast: { level: "info", text: t(s.snapshot.flags.uiLanguage, "已填 Ollama 本地预设，请保存。", "Ollama preset filled. Save.") } }));
-    },
+    "ai-fill-ollama": () => fillPreset({ "ai.chat.provider": "ollama", "ai.chat.baseUrl": PROV_URLS.ollama!, "ai.chat.model": "qwen2.5-coder:7b" }, "已填 Ollama 本地预设，请保存。", "Ollama preset filled. Save."),
     "ai-save-config": (_, s) => {
       const cfg = s.snapshot.aiConfig;
       const role = (r: "chat" | "fim") => {
@@ -553,10 +562,18 @@ export function mountWebview(
           ...(k ? { apiKey: k } : {})
         };
       };
+      const oj = cfg.ojHandles, goj = (k: string, fb = "") => dv(s, `ai.${k}`, fb);
+      const cfHandle = goj("codeforcesHandle", oj?.codeforces ?? cfg.codeforcesHandle);
       emit("ai/saveConfig", {
         chat: role("chat"),
         fim: role("fim"),
-        codeforcesHandle: dv(s, "ai.codeforcesHandle", cfg.codeforcesHandle)
+        codeforcesHandle: cfHandle,
+        ojHandles: {
+          codeforces: cfHandle,
+          leetcodeCn: goj("oj.leetcodeCn", oj?.leetcodeCn),
+          leetcodeGlobal: goj("oj.leetcodeGlobal", oj?.leetcodeGlobal),
+          atcoder: goj("oj.atcoder", oj?.atcoder)
+        }
       });
       clearDraftDom(["ai.chat.apiKey", "ai.fim.apiKey"]);
       upd(clearDirtyAiDrafts);
@@ -574,7 +591,7 @@ export function mountWebview(
     ["click", (e) => {
       const el = e.target instanceof Element ? e.target.closest<HTMLElement>("[data-action]") : null;
       const act = el?.dataset.action;
-      if (el && act) BARE[act] ? emit(BARE[act]) : ACT[act]?.(el.dataset, store.getState());
+      if (el && act) BARE[act] ? emit(BARE[act]) : DRAFT_ACTS[act] ? submitDraft(DRAFT_ACTS[act]) : ACT[act]?.(el.dataset, store.getState());
     }],
     ["input", (e) => {
       syncDraft(e.target);
@@ -600,12 +617,12 @@ export function mountWebview(
       }
       const d = el.dataset;
       const a = d.action;
-      if (d.key && (a === "flag-toggle" || a === "flag-select" || a === "flag-range")) {
+      if (d.key && a?.startsWith("flag-")) {
         emit("flag/update", {
           key: d.key as FlagKey,
-          value: a === "flag-toggle"
+          value: a[5] === "t"
             ? (el as HTMLInputElement).checked
-            : a === "flag-range"
+            : a[5] === "r"
               ? Math.max(0, Math.min(1, Number(el.value) / 100))
               : el.value
         });
@@ -627,8 +644,12 @@ export function mountWebview(
     }]
   ];
 
-  for (const [ev, fn] of listeners) root.addEventListener(ev, fn);
-  window.addEventListener("message", onMsg);
+  const bind = (add: boolean) => {
+    const m = add ? "addEventListener" : "removeEventListener";
+    for (const [ev, fn] of listeners) root[m](ev, fn);
+    window[m]("message", onMsg);
+  };
+  bind(true);
   render();
   emit("webview/ready");
 
@@ -638,8 +659,7 @@ export function mountWebview(
     dispose: () => {
       clearToastTimer();
       unsub();
-      for (const [ev, fn] of listeners) root.removeEventListener(ev, fn);
-      window.removeEventListener("message", onMsg);
+      bind(false);
       void audio.dispose();
     }
   };

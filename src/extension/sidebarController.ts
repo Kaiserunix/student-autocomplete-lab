@@ -24,6 +24,8 @@ import type {
   SampleVerdict,
   SidebarBridgeStatus,
   SidebarHealthCheckSummary,
+  SidebarRecentEvent,
+  SidebarSearchResults,
   SidebarStateSnapshot,
   SoundEventKind,
   StuckCategory,
@@ -72,14 +74,21 @@ import {
   curatedEntryToMetadataDocument,
   getCuratedSheet,
   listCuratedSheets,
-  parseCodeforcesRef,
+  type NormalizedBridgeVerdict,
   type ProblemRepository
 } from "../problems";
 import {
+  COMPANION_USERSCRIPT_FILENAME,
+  buildCompanionUserscript,
   createManualVerdictEvent,
-  fetchLatestCodeforcesVerdict,
+  fetchLatestPublicVerdict,
   isAllowedSubmitUrl,
-  prepareSubmitPayload
+  pollPublicOfficialVerdict,
+  prepareSubmitPayload,
+  resolveHandleForPlatform,
+  resolveSubmitTarget,
+  supportsPublicVerdictSync,
+  type OjPublicHandles
 } from "../submitBridge";
 import { syncStrictWordAcceptContext } from "./inlineProvider";
 import { ProblemReaderPanel } from "./problemReaderPanel";
@@ -250,6 +259,33 @@ function mapHealthCheckToSidebarSummary(
   };
 }
 
+const SEARCHABLE_SOURCES: readonly ProblemSourceId[] = [
+  "leetcode-cn",
+  "leetcode-global",
+  "luogu",
+  "codeforces",
+  "atcoder"
+];
+
+function shortSourceLabel(source: ProblemSourceId, isEn: boolean): string {
+  switch (source) {
+    case "leetcode-cn":
+      return isEn ? "LC-CN" : "力扣";
+    case "leetcode-global":
+      return "LC";
+    case "luogu":
+      return isEn ? "Luogu" : "洛谷";
+    case "codeforces":
+      return "CF";
+    case "atcoder":
+      return isEn ? "AC" : "AtCoder";
+    case "nowcoder":
+      return isEn ? "NC" : "牛客";
+    default:
+      return source;
+  }
+}
+
 /**
  * Lightweight VS Code WebviewViewProvider (`algoCoach.sidebar`) that renders the strict-CSP
  * webview shell and routes all `WebviewToHostMessage` actions to real domain services.
@@ -277,10 +313,14 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
 
   private coachBusy = false;
   private runnerBusy = false;
+  private verdictSyncing = false;
+  private verdictPollAbort: AbortController | undefined;
+  private searchBusy = false;
+  private searchResults: SidebarSearchResults | undefined;
   private userOverrides: UserOverridesV2;
   private learnerSnapshot: LearnerSnapshotV2;
   private recommendations: RecommendationItem[] = [];
-  private recentEvents: NonNullable<SidebarStateSnapshot["recentEvents"]> = [];
+  private recentEvents: SidebarRecentEvent[] = [];
   private lastHealthCheck: SidebarHealthCheckSummary | undefined;
   private toolchains: ToolchainProbe[] = [];
   private bridgeStatus: SidebarBridgeStatus = { listening: false };
@@ -510,15 +550,23 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
       source: sheet.defaultSource,
       count: sheet.items.length
     }));
+    const submitTarget = this.activeProblem ? resolveSubmitTarget(this.activeProblem) : null;
+    const activeSubmitUrl =
+      submitTarget && isAllowedSubmitUrl(submitTarget.submitUrl, submitTarget.platform)
+        ? submitTarget.submitUrl
+        : undefined;
 
     return {
       flags: this.flags,
       visualPresetApplied: this.deps.visualPresetManager.isPresetCurrentlyApplied(target),
       audioMuted: this.deps.getAudioMuted(),
       ...(activeProblemWithSamples ? { activeProblem: activeProblemWithSamples } : {}),
+      ...(activeSubmitUrl ? { activeSubmitUrl } : {}),
       ...(this.activeFilePath ? { activeFilePath: this.activeFilePath } : {}),
       activeLanguage: this.activeLanguage,
       problems: this.problemsCache,
+      ...(this.searchBusy ? { searchBusy: true } : {}),
+      ...(this.searchResults ? { searchResults: this.searchResults } : {}),
       ...(this.activeProblem && this.lastRunByProblem.get(this.activeProblem.problemKey)
         ? { lastRun: this.lastRunByProblem.get(this.activeProblem.problemKey) }
         : {}),
@@ -529,6 +577,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
         : [],
       coachBusy: this.coachBusy,
       runnerBusy: this.runnerBusy,
+      verdictSyncing: this.verdictSyncing,
       learnerSnapshot: this.learnerSnapshot,
       userOverrides: this.userOverrides,
       recommendations: this.recommendations,
@@ -602,7 +651,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
           await this.runActiveSamples(false);
           return;
         case "submit/copyAndOpen":
-          await this.copyAndOpenSubmit();
+          await this.copyAndOpenSubmit(true);
           return;
         case "coach/request":
           await vscode.commands.executeCommand("algoCoach.sidebar.focus");
@@ -708,7 +757,15 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
           return;
 
         case "problem/search":
-          await this.searchProblems(message.payload.source, message.payload.keyword);
+          await this.searchProblems(
+            message.payload.sources ?? message.payload.source,
+            message.payload.keyword
+          );
+          return;
+
+        case "problem/clearSearch":
+          this.searchResults = undefined;
+          await this.syncState();
           return;
 
         case "problem/addSample":
@@ -749,15 +806,24 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
           return;
 
         case "submit/copyAndOpen":
-          await this.copyAndOpenSubmit();
+          await this.copyAndOpenSubmit(true);
+          return;
+
+        case "submit/copyOnly":
+          await this.copyAndOpenSubmit(false);
           return;
 
         case "submit/reportVerdict":
           await this.reportManualVerdict(message.payload.verdict);
           return;
 
+        case "submit/syncVerdict":
         case "submit/syncCodeforces":
-          await this.syncCodeforcesVerdict();
+          await this.syncOfficialVerdict();
+          return;
+
+        case "bridge/copyUserscript":
+          await this.copyCompanionUserscript();
           return;
 
         case "coach/request":
@@ -917,6 +983,14 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
   ): Promise<void> {
     let doc = await this.deps.problemRepository.getCachedProblem(problemKey);
     if (!doc) {
+      const fromSearch = this.searchResults?.items.find((p) => p.problemKey === problemKey);
+      if (fromSearch) {
+        await this.deps.problemRepository.saveProblem(fromSearch);
+        this.problemsCache = await this.deps.problemRepository.listCachedProblems();
+        doc = fromSearch;
+      }
+    }
+    if (!doc) {
       this.postToast(
         "warn",
         this.isEn() ? `Problem not found: ${problemKey}` : `未找到题目：${problemKey}`
@@ -1056,6 +1130,81 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     await this.syncState();
   }
 
+  async handleBridgeVerdict(verdict: NormalizedBridgeVerdict): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+    this.cancelBackgroundVerdictPoll();
+
+    let problem: ProblemDocument | undefined;
+    const matchesProblem = (p: ProblemDocument): boolean =>
+      p.problemKey === verdict.event.problemKey ||
+      Boolean(
+        verdict.sourceId &&
+          p.source === verdict.event.platform &&
+          p.sourceId.toLowerCase() === verdict.sourceId.toLowerCase()
+      );
+
+    if (this.activeProblem && matchesProblem(this.activeProblem)) {
+      problem = this.activeProblem;
+    } else {
+      problem = this.problemsCache.find(matchesProblem);
+      if (!problem) {
+        this.problemsCache = await this.deps.problemRepository.listCachedProblems();
+        problem = this.problemsCache.find(matchesProblem);
+      }
+    }
+
+    if (!problem) {
+      problem = {
+        schemaVersion: "problem-doc/v2",
+        problemKey: verdict.event.problemKey,
+        source: verdict.event.platform,
+        sourceId: verdict.sourceId ?? verdict.event.problemKey,
+        ...(verdict.event.submissionUrl ? { canonicalUrl: verdict.event.submissionUrl } : {}),
+        title: verdict.sourceId ?? verdict.event.problemKey,
+        locale: "mixed",
+        completeness: "metadata_only",
+        ioMode: "stdio",
+        samples: [],
+        rawTags: [],
+        provenance: {
+          ingestChannel: "localhost-bridge",
+          fetchedAt: verdict.event.timestamp
+        }
+      };
+    }
+
+    const canonicalEvent =
+      problem.problemKey === verdict.event.problemKey
+        ? verdict.event
+        : { ...verdict.event, problemKey: problem.problemKey };
+
+    const eventId = await this.ingestOfficialVerdict(problem, canonicalEvent, verdict.dedupKey);
+    this.postToast(
+      canonicalEvent.verdict === "AC" ? "info" : "warn",
+      this.isEn()
+        ? `Auto-synced ${problem.title}: ${canonicalEvent.verdict}.`
+        : `已自动回传 ${problem.title} 官方结果：${canonicalEvent.verdict}。`,
+      eventId
+    );
+    await this.syncState();
+  }
+
+  async copyCompanionUserscript(): Promise<void> {
+    const token = await this.deps.secrets.ensureBridgeVerdictToken();
+    const configuredPort = this.deps.config.get<number>(AI_CONFIG_KEYS.bridgePort, 27121) ?? 27121;
+    const port = this.bridgeStatus.port ?? (configuredPort > 0 ? configuredPort : 27121);
+    const script = buildCompanionUserscript({ port, token });
+    await vscode.env.clipboard.writeText(script);
+    this.postToast(
+      "info",
+      this.isEn()
+        ? `Copied ${COMPANION_USERSCRIPT_FILENAME} (port ${port}). Paste into Tampermonkey / Violentmonkey to auto-sync verdicts across all 6 OJs.`
+        : `已复制 6 平台回传脚本 ${COMPANION_USERSCRIPT_FILENAME}（端口 ${port}）。在油猴 / Violentmonkey 新建脚本粘贴保存即可自动回传 6 平台结果。`
+    );
+  }
+
   async loadCuratedSheet(sheetId: string): Promise<void> {
     const sheet = getCuratedSheet(sheetId);
     if (!sheet) {
@@ -1089,27 +1238,91 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     await this.syncState();
   }
 
-  async searchProblems(source: ProblemSourceId, keyword: string): Promise<void> {
+  async searchProblems(
+    sourceOrSources: ProblemSourceId | readonly ProblemSourceId[] | undefined,
+    keyword: string
+  ): Promise<void> {
     const trimmed = keyword.trim();
     if (!trimmed) {
       await this.syncState();
       return;
     }
-    const res = await this.deps.problemRepository.search(source, { keyword: trimmed });
-    for (const item of res.items) {
-      const existing = await this.deps.problemRepository.getCachedProblem(item.problemKey);
-      if (!existing || existing.completeness === "metadata_only") {
-        await this.deps.problemRepository.saveProblem(item);
-      }
+
+    const rawList = Array.isArray(sourceOrSources)
+      ? sourceOrSources
+      : sourceOrSources
+        ? [sourceOrSources]
+        : [];
+    const targets = [...new Set(rawList.filter((s) => SEARCHABLE_SOURCES.includes(s)))];
+    if (targets.length === 0) {
+      targets.push("leetcode-cn", "luogu", "codeforces");
     }
-    this.problemsCache = await this.deps.problemRepository.listCachedProblems();
-    this.postToast(
-      "info",
-      this.isEn()
-        ? `Found ${res.items.length} result(s) from ${source}.`
-        : `从 ${source} 搜索到 ${res.items.length} 道题目。`
-    );
+
+    this.searchBusy = true;
     await this.syncState();
+
+    try {
+      const perSourceLimit = targets.length > 1 ? 6 : 12;
+      const settled = await Promise.allSettled(
+        targets.map((src) =>
+          this.deps.problemRepository
+            .search(src, { keyword: trimmed, page: 1 })
+            .then((res) => ({ src, items: res.items.slice(0, perSourceLimit) }))
+        )
+      );
+
+      const buckets: Array<{ src: ProblemSourceId; items: ProblemDocument[] }> = [];
+      const failedSources: ProblemSourceId[] = [];
+      for (let i = 0; i < targets.length; i++) {
+        const res = settled[i]!;
+        if (res.status === "fulfilled") {
+          buckets.push(res.value);
+        } else {
+          failedSources.push(targets[i]!);
+        }
+      }
+
+      // Interleave hits round-robin across platforms so every source shows up near the top
+      const interleaved: ProblemDocument[] = [];
+      const seenKeys = new Set<string>();
+      const maxLen = buckets.reduce((m, b) => Math.max(m, b.items.length), 0);
+      for (let idx = 0; idx < maxLen; idx++) {
+        for (const b of buckets) {
+          const item = b.items[idx];
+          if (item && !seenKeys.has(item.problemKey)) {
+            seenKeys.add(item.problemKey);
+            interleaved.push(item);
+          }
+        }
+      }
+
+      this.searchResults = {
+        keyword: trimmed,
+        sources: targets,
+        items: interleaved,
+        failedSources
+      };
+
+      const en = this.isEn();
+      const hitSummary = buckets
+        .filter((b) => b.items.length > 0)
+        .map((b) => `${shortSourceLabel(b.src, en)} ${b.items.length}`)
+        .join(" · ");
+      const failSummary = failedSources
+        .map((s) => shortSourceLabel(s, en))
+        .join(", ");
+
+      let msg = en
+        ? `Found ${interleaved.length} result(s)${hitSummary ? ` (${hitSummary})` : ""}.`
+        : `搜到 ${interleaved.length} 道题目${hitSummary ? `（${hitSummary}）` : ""}。`;
+      if (failedSources.length > 0) {
+        msg += en ? ` Unavailable: ${failSummary}.` : ` ${failSummary} 暂不可用。`;
+      }
+      this.postToast(interleaved.length === 0 ? "warn" : "info", msg);
+    } finally {
+      this.searchBusy = false;
+      await this.syncState();
+    }
   }
 
   async runActiveSamples(triggeredFromSidebar = false): Promise<LocalRunResult | undefined> {
@@ -1228,7 +1441,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     return this.toolchains;
   }
 
-  async copyAndOpenSubmit(): Promise<void> {
+  async copyAndOpenSubmit(openBrowser = true): Promise<void> {
     const problem = this.activeProblem;
     if (!problem) {
       this.postToast(
@@ -1251,15 +1464,40 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
 
     const prepared = prepareSubmitPayload(problem, codeSnapshot.code, codeSnapshot.language);
     await vscode.env.clipboard.writeText(prepared.cleanedCode);
-    this.lastSubmitSecByProblem.set(problem.problemKey, Math.floor(this.now() / 1000));
+    const submittedAfterSeconds = Math.floor(this.now() / 1000);
+    this.lastSubmitSecByProblem.set(problem.problemKey, submittedAfterSeconds);
 
-    if (prepared.target && isAllowedSubmitUrl(prepared.target.submitUrl, prepared.target.platform)) {
+    if (
+      openBrowser &&
+      prepared.target &&
+      isAllowedSubmitUrl(prepared.target.submitUrl, prepared.target.platform)
+    ) {
       await vscode.env.openExternal(vscode.Uri.parse(prepared.target.submitUrl));
+      const autoPollEnabled =
+        this.deps.config.get<boolean>(AI_CONFIG_KEYS.autoPollVerdict, true) !== false;
+      const configuredHandle = resolveHandleForPlatform(
+        this.readOjPublicHandles(),
+        problem.source
+      );
+      if (
+        autoPollEnabled &&
+        supportsPublicVerdictSync(problem.source) &&
+        configuredHandle
+      ) {
+        this.startBackgroundVerdictPoll(problem, submittedAfterSeconds);
+      }
       this.postToast(
         "info",
         this.isEn()
-          ? `Copied clean code (${prepared.removedBlocks} debug block(s) stripped) and opened ${prepared.target.platform} submit page.`
-          : `已复制纯净代码（自动清理 ${prepared.removedBlocks} 处本地调试块）并打开官方提交页。`
+          ? `Copied clean code (${prepared.removedBlocks} debug block(s) stripped) & opened submit page. Not signed in there? Use "Copy URL" in your logged-in browser.`
+          : `已复制纯净代码（清理 ${prepared.removedBlocks} 处调试块）并打开提交页。若未在默认浏览器登录，可点「复制链接」到常用浏览器打开。`
+      );
+    } else if (!openBrowser) {
+      this.postToast(
+        "info",
+        this.isEn()
+          ? `Copied clean code only (${prepared.removedBlocks} debug block(s) stripped). Paste in your logged-in browser.`
+          : `已仅复制纯净代码（清理 ${prepared.removedBlocks} 处调试块），请切到已登录浏览器粘贴提交。`
       );
     } else {
       this.postToast(
@@ -1278,6 +1516,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
     if (!problem) {
       return;
     }
+    this.cancelBackgroundVerdictPoll();
 
     const event = createManualVerdictEvent({
       problemKey: problem.problemKey,
@@ -1296,78 +1535,146 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   async syncCodeforcesVerdict(): Promise<void> {
+    return this.syncOfficialVerdict();
+  }
+
+  async syncOfficialVerdict(): Promise<void> {
     const problem = this.activeProblem;
-    if (!problem || problem.source !== "codeforces") {
+    if (!problem || !supportsPublicVerdictSync(problem.source)) {
       this.postToast(
         "warn",
         this.isEn()
-          ? "Codeforces public verdict sync applies to Codeforces problems."
-          : "仅 Codeforces 题目支持公开 user.status 评测结果同步。"
+          ? "Zero-login public verdict sync supports Codeforces, LeetCode CN/Global, and AtCoder. For Luogu/NowCoder, use the 6-OJ companion userscript or manual buttons."
+          : "免登录公开同步支持 Codeforces / 力扣中国 / LeetCode Global / AtCoder；洛谷与牛客请使用 6 平台回传脚本或手动回填。"
       );
       await this.syncState();
       return;
     }
 
-    const handle = (this.deps.config.get<string>(AI_CONFIG_KEYS.codeforcesHandle) ?? "").trim();
+    const handles = this.readOjPublicHandles();
+    const handle = resolveHandleForPlatform(handles, problem.source);
+    const label = shortSourceLabel(problem.source, this.isEn());
     if (!handle) {
       this.postToast(
         "warn",
         this.isEn()
-          ? "Configure your public Codeforces handle in Settings first."
-          : "请先在设置中填写公开 Codeforces Handle。"
+          ? `Configure your public ${label} handle in Settings first.`
+          : `请先在「设置」中填写公开 ${label} 用户名（Handle）。`
       );
       await this.syncState();
       return;
     }
 
-    const parsed =
-      parseCodeforcesRef(problem.canonicalUrl ?? "") ?? parseCodeforcesRef(problem.sourceId);
-    if (!parsed) {
-      this.postToast(
-        "warn",
-        this.isEn() ? "Unable to resolve Codeforces contest/index." : "无法解析该题的 Codeforces 场次与题号。"
-      );
-      await this.syncState();
-      return;
-    }
+    this.cancelBackgroundVerdictPoll();
+    this.verdictSyncing = true;
+    await this.syncState();
 
     const submittedAfterSeconds =
       this.lastSubmitSecByProblem.get(problem.problemKey) ??
       Math.floor(this.now() / 1000) - 3600;
 
-    const result = await fetchLatestCodeforcesVerdict(
-      {
-        handle,
-        target: {
-          contestId: parsed.contestId,
-          problemIndex: parsed.index,
-          contestKind: parsed.isGym ? "gym" : "contest",
-          problemKey: problem.problemKey
+    try {
+      const result = await fetchLatestPublicVerdict(
+        {
+          problem,
+          handle,
+          submittedAfterSeconds
         },
-        submittedAfterSeconds
-      },
-      { fetchImpl: this.deps.fetchImpl }
-    );
-
-    if (result.status === "pending") {
-      this.postToast(
-        "info",
-        this.isEn()
-          ? `No newly judged Codeforces submission found yet for @${handle}.`
-          : `暂未在 @${handle} 的公开提交记录中查到新的已判结果，请稍后再试。`
+        { fetchImpl: this.deps.fetchImpl }
       );
-      await this.syncState();
-      return;
-    }
 
-    await this.ingestOfficialVerdict(problem, result.event, `cf-sub-${result.submissionId}`);
-    this.postToast(
-      result.event.verdict === "AC" ? "info" : "warn",
-      this.isEn()
-        ? `Synced Codeforces #${result.submissionId}: ${result.event.verdict}.`
-        : `已同步 Codeforces 提交 #${result.submissionId}：${result.event.verdict}。`
-    );
-    await this.syncState();
+      if (result.status === "pending") {
+        this.postToast(
+          "info",
+          this.isEn()
+            ? `No newly judged ${label} submission found yet for @${handle}.`
+            : `暂未在 @${handle} 的 ${label} 公开记录中查到新的已判结果，请稍后再试。`
+        );
+        return;
+      }
+
+      const eventId = await this.ingestOfficialVerdict(problem, result.event, result.dedupKey);
+      this.postToast(
+        result.event.verdict === "AC" ? "info" : "warn",
+        this.isEn()
+          ? `Synced ${label} #${result.submissionId}: ${result.event.verdict}.`
+          : `已同步 ${label} 提交 #${result.submissionId}：${result.event.verdict}。`,
+        eventId
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      this.postToast(
+        "warn",
+        this.isEn() ? `${label} verdict sync failed: ${msg}` : `${label} 结果同步失败：${msg}`
+      );
+    } finally {
+      this.verdictSyncing = false;
+      await this.syncState();
+    }
+  }
+
+  private readOjPublicHandles(): OjPublicHandles {
+    return {
+      codeforces: (this.deps.config.get<string>(AI_CONFIG_KEYS.codeforcesHandle) ?? "").trim(),
+      leetcodeCn: (this.deps.config.get<string>(AI_CONFIG_KEYS.leetcodeCnHandle) ?? "").trim(),
+      leetcodeGlobal: (
+        this.deps.config.get<string>(AI_CONFIG_KEYS.leetcodeGlobalHandle) ?? ""
+      ).trim(),
+      atcoder: (this.deps.config.get<string>(AI_CONFIG_KEYS.atcoderHandle) ?? "").trim()
+    };
+  }
+
+  private cancelBackgroundVerdictPoll(): void {
+    if (this.verdictPollAbort) {
+      this.verdictPollAbort.abort();
+      this.verdictPollAbort = undefined;
+    }
+  }
+
+  private startBackgroundVerdictPoll(
+    problem: ProblemDocument,
+    submittedAfterSeconds: number
+  ): void {
+    this.cancelBackgroundVerdictPoll();
+    const controller = new AbortController();
+    this.verdictPollAbort = controller;
+    const handles = this.readOjPublicHandles();
+    const label = shortSourceLabel(problem.source, this.isEn());
+
+    void (async () => {
+      try {
+        const result = await pollPublicOfficialVerdict(
+          {
+            problem,
+            handles,
+            submittedAfterSeconds,
+            signal: controller.signal
+          },
+          { fetchImpl: this.deps.fetchImpl }
+        );
+        if (this.disposed || controller.signal.aborted || result.status !== "judged") {
+          return;
+        }
+        if (this.verdictPollAbort === controller) {
+          this.verdictPollAbort = undefined;
+        }
+        const eventId = await this.ingestOfficialVerdict(problem, result.event, result.dedupKey);
+        this.postToast(
+          result.event.verdict === "AC" ? "info" : "warn",
+          this.isEn()
+            ? `Auto-synced ${label} #${result.submissionId}: ${result.event.verdict}.`
+            : `已自动同步 ${label} 提交 #${result.submissionId}：${result.event.verdict}。`,
+          eventId
+        );
+        await this.syncState();
+      } catch {
+        // Background polling fails silently so manual sync/report remain unimpeded.
+      } finally {
+        if (this.verdictPollAbort === controller) {
+          this.verdictPollAbort = undefined;
+        }
+      }
+    })();
   }
 
   async requestCoach(
@@ -1603,6 +1910,9 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
   }
 
   private setActiveProblemInternal(doc: ProblemDocument): void {
+    if (this.activeProblem?.problemKey !== doc.problemKey) {
+      this.cancelBackgroundVerdictPoll();
+    }
     this.activeProblem = doc;
     if (!this.sessionStartMsByProblem.has(doc.problemKey)) {
       this.sessionStartMsByProblem.set(doc.problemKey, this.now());
@@ -1649,7 +1959,10 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
       language: this.activeLanguage,
       kind: "attempt_completed",
       verdict,
-      verdictSource: event.observedVia === "public_api" ? "official_oj" : "manual_report",
+      verdictSource:
+        event.observedVia === "public_api" || event.observedVia === "browser_extension"
+          ? "official_oj"
+          : "manual_report",
       revealedSolution: false,
       misconceptionIds: verdict === "AC" ? [] : misconceptions,
       summary: `Official ${event.verdict} via ${event.observedVia}`,
@@ -1797,6 +2110,7 @@ export class SidebarController implements vscode.WebviewViewProvider, vscode.Dis
 
   dispose(): void {
     this.disposed = true;
+    this.cancelBackgroundVerdictPoll();
     this.disposeViewListeners();
     this.readerPanel.dispose();
     this.view = undefined;

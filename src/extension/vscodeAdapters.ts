@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import * as vscode from "vscode";
 import type {
   AiProviderKind,
@@ -24,6 +25,10 @@ export const AI_CONFIG_KEYS = {
   fimBaseUrl: "algoCoach.ai.fim.baseUrl",
   fimModel: "algoCoach.ai.fim.model",
   codeforcesHandle: "algoCoach.oj.codeforcesHandle",
+  leetcodeCnHandle: "algoCoach.oj.leetcodeCnHandle",
+  leetcodeGlobalHandle: "algoCoach.oj.leetcodeGlobalHandle",
+  atcoderHandle: "algoCoach.oj.atcoderHandle",
+  autoPollVerdict: "algoCoach.oj.autoPollVerdict",
   bridgePort: "algoCoach.oj.bridgePort",
   runnerTimeoutMs: "algoCoach.runner.timeoutMs"
 } as const;
@@ -120,8 +125,26 @@ export class VscodeMementoAdapter implements MementoPort {
  * Encapsulates VS Code `SecretStorage` with strict isolation between
  * `algoCoach.secret.chatApiKey` and `algoCoach.secret.fimApiKey`.
  */
+const BRIDGE_VERDICT_TOKEN_SECRET = "algoCoach.bridge.verdictToken.v1";
+
 export class SecretKeyStore {
   constructor(private readonly secrets: SecretStorageLike) {}
+
+  async getBridgeVerdictToken(): Promise<string | undefined> {
+    const raw = await this.secrets.get(BRIDGE_VERDICT_TOKEN_SECRET);
+    const trimmed = raw?.trim();
+    return trimmed ? trimmed : undefined;
+  }
+
+  async ensureBridgeVerdictToken(): Promise<string> {
+    const existing = await this.getBridgeVerdictToken();
+    if (existing) {
+      return existing;
+    }
+    const generated = randomBytes(24).toString("hex");
+    await this.secrets.store(BRIDGE_VERDICT_TOKEN_SECRET, generated);
+    return generated;
+  }
 
   async getChatApiKey(): Promise<string | undefined> {
     const raw = await this.secrets.get(CHAT_API_KEY_SECRET);
@@ -256,6 +279,9 @@ export async function buildSidebarAiConfigView(
   ]);
 
   const codeforcesHandle = (config.get<string>(AI_CONFIG_KEYS.codeforcesHandle) ?? "").trim();
+  const leetcodeCnHandle = (config.get<string>(AI_CONFIG_KEYS.leetcodeCnHandle) ?? "").trim();
+  const leetcodeGlobalHandle = (config.get<string>(AI_CONFIG_KEYS.leetcodeGlobalHandle) ?? "").trim();
+  const atcoderHandle = (config.get<string>(AI_CONFIG_KEYS.atcoderHandle) ?? "").trim();
 
   return {
     chat: {
@@ -270,7 +296,13 @@ export async function buildSidebarAiConfigView(
       model: routerConfig.fim.model,
       hasApiKey: hasFimKey
     },
-    codeforcesHandle
+    codeforcesHandle,
+    ojHandles: {
+      codeforces: codeforcesHandle,
+      leetcodeCn: leetcodeCnHandle,
+      leetcodeGlobal: leetcodeGlobalHandle,
+      atcoder: atcoderHandle
+    }
   };
 }
 
@@ -278,6 +310,12 @@ export interface SaveAiConfigInput {
   chat: { provider: AiProviderKind; baseUrl: string; model: string; apiKey?: string };
   fim: { provider: AiProviderKind; baseUrl: string; model: string; apiKey?: string };
   codeforcesHandle?: string;
+  ojHandles?: {
+    codeforces?: string;
+    leetcodeCn?: string;
+    leetcodeGlobal?: string;
+    atcoder?: string;
+  };
 }
 
 /**
@@ -306,8 +344,22 @@ export async function saveAiConfigSafely(
   await config.update(AI_CONFIG_KEYS.fimBaseUrl, input.fim.baseUrl.trim(), target);
   await config.update(AI_CONFIG_KEYS.fimModel, input.fim.model.trim(), target);
 
-  if (input.codeforcesHandle !== undefined) {
-    await config.update(AI_CONFIG_KEYS.codeforcesHandle, input.codeforcesHandle.trim(), target);
+  const nextCf = input.ojHandles?.codeforces ?? input.codeforcesHandle;
+  if (nextCf !== undefined) {
+    await config.update(AI_CONFIG_KEYS.codeforcesHandle, nextCf.trim(), target);
+  }
+  if (input.ojHandles?.leetcodeCn !== undefined) {
+    await config.update(AI_CONFIG_KEYS.leetcodeCnHandle, input.ojHandles.leetcodeCn.trim(), target);
+  }
+  if (input.ojHandles?.leetcodeGlobal !== undefined) {
+    await config.update(
+      AI_CONFIG_KEYS.leetcodeGlobalHandle,
+      input.ojHandles.leetcodeGlobal.trim(),
+      target
+    );
+  }
+  if (input.ojHandles?.atcoder !== undefined) {
+    await config.update(AI_CONFIG_KEYS.atcoderHandle, input.ojHandles.atcoder.trim(), target);
   }
 
   // Only overwrite stored secret when user actually entered a non-empty key

@@ -11,6 +11,7 @@ export const d = (cls: string, body: string, attrs = ""): string =>
 
 export const sp = (cls: string, body: string): string => `<span class="${cls}">${body}</span>`;
 export const cnt = (n: number | string): string => `<span class="mn mo">${n}</span>`;
+export const ap = (b: boolean): string => `aria-pressed="${b}"`;
 
 export const sec = (title: string, body: string, right = "", patchKey = "", extraCls = ""): string =>
   `<section class="card${extraCls ? ` ${extraCls}` : ""}"${patchKey ? ` data-patch="${patchKey}"` : ""}><div class="sh"><span class="st">${title}</span>${right}</div>${body}</section>`;
@@ -23,6 +24,14 @@ export const badge = (text: string, tone = "m", mono = false): string =>
 
 export const btn = (label: string, action: string, v = "s", sz = "sm", attrs = "", dis = false): string =>
   `<button class="b b-${v}${sz ? ` b-${sz}` : ""}" type="button" data-action="${action}"${attrs ? ` ${attrs}` : ""}${dis ? " disabled" : ""}>${label}</button>`;
+export const openBtn = (pk: string, lbl: string): string =>
+  btn(lbl, "problem-select", "s", "xs", `data-problem-key="${escapeHtml(pk)}"`);
+export const al = (x: string): string => {
+  const e = escapeHtml(x);
+  return `title="${e}" aria-label="${e}"`;
+};
+export const rbtn = (cls: string, body: string, attrs = ""): string =>
+  `<button class="${cls}" type="button" ${attrs}>${body}</button>`;
 
 export const sel = (items: ReadonlyArray<[string, string]>, cur: string, attrs: string, cls = "sel"): string =>
   `<select class="${cls}" ${attrs}>${items.map(([v, l]) => `<option value="${escapeHtml(v)}"${v === cur ? " selected" : ""}>${escapeHtml(l)}</option>`).join("")}</select>`;
@@ -37,6 +46,8 @@ export const dataRow = (top: string, sub: string, right: string): string =>
   `<div class="row"><div class="f1">${top}${sub}</div>${right}</div>`;
 
 export const emptyBox = (text: string): string => `<div class="em">${escapeHtml(text)}</div>`;
+export const emptyCard = (art: string, title: string, desc: string, acts: string, extra = ""): string =>
+  h("section", "card", d("c g2", art + h("h2", "pt", escapeHtml(title)) + d("mu", escapeHtml(desc)) + d("r rw g1 mt1", acts) + extra));
 export const tbl = (head: string, body: string): string =>
   `<div class="tb-wrap"><table class="tb"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 export const meterSvg = (pct: number): string =>

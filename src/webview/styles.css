@@ -46,7 +46,7 @@ body.rd-page {
 
 /* ---------- Universal Native Keyboard Focus Rings ---------- */
 
-:is(.b, .bi, .tab, .lk, .sg, .seg-btn, .pr, .ck, .rg, .in, .sel, .ta, .dt > summary, .si-io > summary):focus-visible {
+:is(.b, .bi, .tab, .lk, .sg, .seg-btn, .chip, .pr, .ck, .rg, .in, .sel, .ta, .dt > summary, .si-io > summary):focus-visible {
   outline: 1px solid var(--vscode-focusBorder);
   outline-offset: 1px;
 }
@@ -1132,6 +1132,28 @@ body.rd-page {
   background: color-mix(in srgb, var(--vscode-charts-blue) 14%, transparent);
   font-weight: 600;
 }
+
+.src-picks { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip {
+  appearance: none;
+  padding: 2px 7px;
+  font-family: inherit;
+  font-size: 11px;
+  border: 1px solid color-mix(in srgb, var(--vscode-panel-border) 50%, transparent);
+  border-radius: 4px;
+  background: var(--vscode-textCodeBlock-background);
+  color: var(--vscode-descriptionForeground);
+  cursor: pointer;
+  transition: border-color 100ms ease, color 100ms ease, background-color 100ms ease;
+}
+.chip:hover { color: var(--vscode-foreground); background: var(--vscode-list-hoverBackground); }
+.chip-a {
+  border-color: color-mix(in srgb, var(--vscode-charts-blue) 50%, transparent);
+  color: var(--vscode-textLink-foreground);
+  background: color-mix(in srgb, var(--vscode-charts-blue) 14%, transparent);
+  font-weight: 600;
+}
+.sr-list { max-height: 260px; overflow-y: auto; }
 
 .ce {
   padding: 12px 0;

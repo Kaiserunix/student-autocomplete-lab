@@ -1,7 +1,13 @@
 import { createServer as createNetServer, request as httpRequest } from "node:http";
 import type { ProblemDocument } from "../../src/core/contracts";
 import { afterEach, describe, expect, it } from "vitest";
-import { LocalhostBridge, isAllowedLoopbackHost } from "../../src/problems";
+import {
+  LocalhostBridge,
+  isAllowedLoopbackHost,
+  isAllowedVerdictCorsOrigin,
+  normalizeBridgeVerdictPayload,
+  normalizeBridgeVerdictText
+} from "../../src/problems";
 
 const activeClosers: Array<() => Promise<void>> = [];
 
@@ -186,5 +192,105 @@ describe("LocalhostBridge", () => {
       body: JSON.stringify({ name: "Test", tests: [{ input: "1", output: "1" }] })
     });
     expect(authorized.status).toBe(200);
+  });
+
+  it("enforces strict CORS origin allowlist and token authentication on POST /verdict across 6 OJs while keeping POST / compatible", async () => {
+    expect(isAllowedVerdictCorsOrigin("https://leetcode.cn")).toBe(true);
+    expect(isAllowedVerdictCorsOrigin("https://www.luogu.com.cn")).toBe(true);
+    expect(isAllowedVerdictCorsOrigin("https://codeforces.com")).toBe(true);
+    expect(isAllowedVerdictCorsOrigin("https://atcoder.jp")).toBe(true);
+    expect(isAllowedVerdictCorsOrigin("https://ac.nowcoder.com")).toBe(true);
+    expect(isAllowedVerdictCorsOrigin("https://leetcode.com")).toBe(true);
+    expect(isAllowedVerdictCorsOrigin("chrome-extension://abcdefghijklmnop")).toBe(true);
+    expect(isAllowedVerdictCorsOrigin("moz-extension://ext-uuid-1234")).toBe(true);
+
+    expect(isAllowedVerdictCorsOrigin("https://evil.example")).toBe(false);
+    expect(isAllowedVerdictCorsOrigin("http://leetcode.cn")).toBe(false);
+    expect(isAllowedVerdictCorsOrigin("https://leetcode.cn/problems/two-sum")).toBe(false);
+    expect(isAllowedVerdictCorsOrigin("https://leetcode.cn:8443")).toBe(false);
+    expect(isAllowedVerdictCorsOrigin(undefined)).toBe(false);
+
+    expect(normalizeBridgeVerdictText("通过")).toBe("AC");
+    expect(normalizeBridgeVerdictText("解答错误")).toBe("WA");
+    expect(normalizeBridgeVerdictText("答案正确")).toBe("AC");
+    expect(normalizeBridgeVerdictText("Judging")).toBeUndefined();
+
+    const luoguNorm = normalizeBridgeVerdictPayload({
+      platform: "luogu",
+      problemUrl: "https://www.luogu.com.cn/problem/P1001",
+      submissionUrl: "https://www.luogu.com.cn/record/123456",
+      submissionId: "123456",
+      verdict: "Accepted"
+    });
+    expect(luoguNorm?.event.problemKey).toBe("luogu:P1001");
+    expect(luoguNorm?.event.verdict).toBe("AC");
+    expect(luoguNorm?.event.observedVia).toBe("browser_extension");
+    expect(luoguNorm?.dedupKey).toBe("bridge-luogu-123456");
+
+    const receivedVerdicts: Array<{ problemKey: string; verdict: string }> = [];
+    const bridge = new LocalhostBridge({
+      preferredPort: 0,
+      verdictToken: "verdict-token-xyz",
+      onVerdict: (v) => {
+        receivedVerdicts.push({ problemKey: v.event.problemKey, verdict: v.event.verdict });
+      }
+    });
+    const port = await bridge.start();
+    activeClosers.push(() => bridge.stop());
+
+    // OPTIONS preflight allows Luogu origin without wildcard and rejects evil origin
+    const preflightOk = await fetch(`http://127.0.0.1:${port}/verdict`, {
+      method: "OPTIONS",
+      headers: { Origin: "https://www.luogu.com.cn" }
+    });
+    expect(preflightOk.status).toBe(204);
+    expect(preflightOk.headers.get("access-control-allow-origin")).toBe("https://www.luogu.com.cn");
+
+    const preflightBad = await fetch(`http://127.0.0.1:${port}/verdict`, {
+      method: "OPTIONS",
+      headers: { Origin: "https://evil.example" }
+    });
+    expect(preflightBad.status).toBe(403);
+    expect(preflightBad.headers.get("access-control-allow-origin")).toBeNull();
+
+    // POST /verdict rejects unauthenticated requests, accepts valid token
+    const noToken = await fetch(`http://127.0.0.1:${port}/verdict`, {
+      method: "POST",
+      headers: { "content-type": "application/json", Origin: "https://www.luogu.com.cn" },
+      body: JSON.stringify({ platform: "luogu", sourceId: "P1001", verdict: "AC" })
+    });
+    expect(noToken.status).toBe(401);
+
+    const validVerdictRes = await fetch(`http://127.0.0.1:${port}/verdict`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        Origin: "https://www.luogu.com.cn",
+        "x-algo-coach-token": "verdict-token-xyz"
+      },
+      body: JSON.stringify({
+        platform: "luogu",
+        sourceId: "P1001",
+        submissionId: "9988",
+        verdict: "通过"
+      })
+    });
+    expect(validVerdictRes.status).toBe(200);
+    expect(validVerdictRes.headers.get("access-control-allow-origin")).toBe("https://www.luogu.com.cn");
+    expect(receivedVerdicts).toEqual([{ problemKey: "luogu:P1001", verdict: "AC" }]);
+    expect(bridge.getReceivedVerdicts()).toHaveLength(1);
+
+    // Existing POST / Competitive Companion push stays backward-compatible without verdictToken header
+    const ccPush = await fetch(`http://127.0.0.1:${port}/`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        name: "A+B Problem",
+        url: "https://www.luogu.com.cn/problem/P1001",
+        tests: [{ input: "1 2\n", output: "3\n" }]
+      })
+    });
+    expect(ccPush.status).toBe(200);
+    expect(bridge.getReceivedProblems()).toHaveLength(1);
   });
 });

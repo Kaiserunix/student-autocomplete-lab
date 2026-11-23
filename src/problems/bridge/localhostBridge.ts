@@ -9,6 +9,14 @@ import type {
 } from "../../core/contracts";
 import { parseCodeforcesRef } from "../adapters/codeforcesAdapter";
 import { normalizeLuoguPid } from "../adapters/luoguAdapter";
+import type {
+  OfficialVerdictEvent,
+  OfficialVerdictStatus
+} from "../../core/contracts";
+import {
+  PLATFORM_HTTPS_HOST_WHITELIST,
+  validateSubmissionUrl
+} from "../../submitBridge/targetRegistry";
 
 /**
  * Standard Competitive Companion JSON payload plus optional Algo Coach extension fields
@@ -44,7 +52,276 @@ export interface LocalhostBridgeOptions {
   maxBodyBytes?: number;
   /** Optional pairing token; if set, POST requests must include header `x-algo-coach-token`. */
   pairingToken?: string;
+  /** Dedicated token for authenticated POST /verdict requests (falls back to pairingToken if unset). */
+  verdictToken?: string;
   onProblem?: (doc: ProblemDocument, raw: CompetitiveCompanionPayload) => void | Promise<void>;
+  onVerdict?: (verdict: NormalizedBridgeVerdict) => void | Promise<void>;
+}
+
+export interface BridgeVerdictPayload {
+  platform?: ProblemSourceId | string;
+  sourceId?: string;
+  problemKey?: string;
+  problemUrl?: string;
+  submissionUrl?: string;
+  submissionId?: string | number;
+  verdict: string;
+  passedTests?: number;
+  runtimeMs?: number;
+  memoryKb?: number;
+  timestamp?: string;
+}
+
+export interface NormalizedBridgeVerdict {
+  event: OfficialVerdictEvent;
+  sourceId?: string;
+  submissionId?: string;
+  dedupKey?: string;
+}
+
+const VERDICT_OJ_HOSTS = new Set<string>(
+  Object.values(PLATFORM_HTTPS_HOST_WHITELIST).flat()
+);
+
+function isSupportedVerdictPlatform(
+  platform: string
+): platform is keyof typeof PLATFORM_HTTPS_HOST_WHITELIST {
+  return Object.prototype.hasOwnProperty.call(PLATFORM_HTTPS_HOST_WHITELIST, platform);
+}
+
+/**
+ * Validates browser `Origin` headers for `/verdict` preflight and POST requests.
+ * Only exact HTTPS origins of the 6 supported OJs or browser extension origins are allowed.
+ */
+export function isAllowedVerdictCorsOrigin(origin: string | undefined): boolean {
+  if (!origin || typeof origin !== "string") {
+    return false;
+  }
+  const trimmed = origin.trim();
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return false;
+  }
+
+  if (parsed.protocol === "chrome-extension:" || parsed.protocol === "moz-extension:") {
+    return (
+      /^[a-z0-9-]+$/i.test(parsed.hostname) &&
+      (parsed.pathname === "" || parsed.pathname === "/") &&
+      !parsed.search &&
+      !parsed.hash &&
+      !parsed.port &&
+      trimmed === `${parsed.protocol}//${parsed.hostname}`
+    );
+  }
+
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username ||
+    parsed.password ||
+    parsed.port ||
+    parsed.origin !== trimmed
+  ) {
+    return false;
+  }
+
+  return VERDICT_OJ_HOSTS.has(parsed.hostname.toLowerCase());
+}
+
+/**
+ * Normalizes human-readable OJ verdict labels sent by the companion userscript
+ * into `OfficialVerdictStatus`. Returns `undefined` for blank or pending states.
+ */
+export function normalizeBridgeVerdictText(rawVerdict: unknown): OfficialVerdictStatus | undefined {
+  if (typeof rawVerdict !== "string") {
+    return undefined;
+  }
+  const trimmed = rawVerdict.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const upper = trimmed.toUpperCase();
+  if (
+    upper === "PENDING" ||
+    upper === "JUDGING" ||
+    upper === "WAITING" ||
+    upper === "WJ" ||
+    upper === "TESTING" ||
+    upper === "SUBMITTED" ||
+    trimmed.includes("评测中") ||
+    trimmed.includes("等待评测")
+  ) {
+    return undefined;
+  }
+
+  if (
+    upper === "AC" ||
+    upper === "OK" ||
+    upper === "ACCEPTED" ||
+    trimmed.includes("通过") ||
+    trimmed.includes("答案正确")
+  ) {
+    return "AC";
+  }
+  if (
+    upper === "WA" ||
+    upper === "WRONG ANSWER" ||
+    upper === "WRONG_ANSWER" ||
+    trimmed.includes("解答错误") ||
+    trimmed.includes("答案错误")
+  ) {
+    return "WA";
+  }
+  if (
+    upper === "TLE" ||
+    upper === "TIME LIMIT EXCEEDED" ||
+    upper === "TIME_LIMIT_EXCEEDED" ||
+    trimmed.includes("超出时间限制") ||
+    trimmed.includes("运行超时")
+  ) {
+    return "TLE";
+  }
+  if (
+    upper === "MLE" ||
+    upper === "MEMORY LIMIT EXCEEDED" ||
+    upper === "MEMORY_LIMIT_EXCEEDED" ||
+    trimmed.includes("超出内存限制") ||
+    trimmed.includes("内存超限")
+  ) {
+    return "MLE";
+  }
+  if (
+    upper === "RE" ||
+    upper === "RUNTIME ERROR" ||
+    upper === "RUNTIME_ERROR" ||
+    trimmed.includes("执行出错") ||
+    trimmed.includes("运行错误")
+  ) {
+    return "RE";
+  }
+  if (
+    upper === "CE" ||
+    upper === "COMPILE ERROR" ||
+    upper === "COMPILER ERROR" ||
+    upper === "COMPILATION ERROR" ||
+    upper === "COMPILATION_ERROR" ||
+    trimmed.includes("编译出错") ||
+    trimmed.includes("编译错误")
+  ) {
+    return "CE";
+  }
+  if (upper === "OTHER" || upper === "OLE" || upper === "PRESENTATION ERROR") {
+    return "OTHER";
+  }
+  return undefined;
+}
+
+function normalizeNonNegativeInt(raw: unknown): number | undefined {
+  if (typeof raw !== "number" || !Number.isFinite(raw) || raw < 0) {
+    return undefined;
+  }
+  return Math.floor(raw);
+}
+
+/**
+ * Validates and normalizes an incoming browser companion payload into an `OfficialVerdictEvent`.
+ */
+export function normalizeBridgeVerdictPayload(raw: unknown): NormalizedBridgeVerdict | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return null;
+  }
+  const item = raw as Record<string, unknown>;
+  const verdict = normalizeBridgeVerdictText(item.verdict);
+  if (!verdict) {
+    return null;
+  }
+
+  const rawUrl =
+    typeof item.problemUrl === "string" && item.problemUrl.trim()
+      ? item.problemUrl.trim()
+      : typeof item.submissionUrl === "string" && item.submissionUrl.trim()
+        ? item.submissionUrl.trim()
+        : undefined;
+  const inferred = rawUrl ? inferProblemIdentityFromUrl(rawUrl, "") : undefined;
+
+  const explicitPlatform =
+    typeof item.platform === "string" ? item.platform.trim().toLowerCase() : "";
+  const platformCandidate = explicitPlatform || (inferred?.source ?? "");
+  if (!isSupportedVerdictPlatform(platformCandidate)) {
+    return null;
+  }
+  const platform: ProblemSourceId = platformCandidate;
+
+  const explicitProblemKey =
+    typeof item.problemKey === "string" &&
+    item.problemKey.trim().startsWith(`${platform}:`) &&
+    !/\s/.test(item.problemKey.trim())
+      ? item.problemKey.trim()
+      : undefined;
+
+  const rawSourceId =
+    typeof item.sourceId === "string" && item.sourceId.trim() && !/\s/.test(item.sourceId.trim())
+      ? item.sourceId.trim()
+      : undefined;
+
+  const inferredSourceId =
+    inferred && inferred.source === platform && inferred.sourceId ? inferred.sourceId : undefined;
+  const keyDerivedSourceId = explicitProblemKey
+    ? explicitProblemKey.slice(platform.length + 1)
+    : undefined;
+  const sourceId = rawSourceId ?? inferredSourceId ?? keyDerivedSourceId;
+
+  const problemKey =
+    explicitProblemKey ??
+    (inferred && inferred.source === platform ? inferred.problemKey : undefined) ??
+    (sourceId ? `${platform}:${sourceId}` : undefined);
+
+  if (!problemKey) {
+    return null;
+  }
+
+  const submissionUrl =
+    typeof item.submissionUrl === "string" &&
+    validateSubmissionUrl(item.submissionUrl.trim(), platform)
+      ? item.submissionUrl.trim()
+      : undefined;
+
+  let submissionId: string | undefined;
+  if (typeof item.submissionId === "number" && Number.isSafeInteger(item.submissionId) && item.submissionId > 0) {
+    submissionId = String(item.submissionId);
+  } else if (
+    typeof item.submissionId === "string" &&
+    /^[A-Za-z0-9_-]{1,64}$/.test(item.submissionId.trim())
+  ) {
+    submissionId = item.submissionId.trim();
+  }
+
+  const passedTests = normalizeNonNegativeInt(item.passedTests);
+  const runtimeMs = normalizeNonNegativeInt(item.runtimeMs);
+  const memoryKb = normalizeNonNegativeInt(item.memoryKb);
+  const timestamp =
+    typeof item.timestamp === "string" && !Number.isNaN(Date.parse(item.timestamp))
+      ? new Date(item.timestamp).toISOString()
+      : new Date().toISOString();
+
+  return {
+    event: {
+      schemaVersion: "official-verdict/v2",
+      source: "official_oj",
+      problemKey,
+      platform,
+      ...(submissionUrl ? { submissionUrl } : {}),
+      verdict,
+      ...(passedTests !== undefined ? { passedTests } : {}),
+      ...(runtimeMs !== undefined ? { runtimeMs } : {}),
+      ...(memoryKb !== undefined ? { memoryKb } : {}),
+      observedVia: "browser_extension",
+      timestamp
+    },
+    ...(sourceId ? { sourceId } : {}),
+    ...(submissionId ? { submissionId, dedupKey: `bridge-${platform}-${submissionId}` } : {})
+  };
 }
 
 const DEFAULT_BRIDGE_PORT = 27121;
@@ -280,21 +557,26 @@ export class LocalhostBridge {
   private readonly maxPortAttempts: number;
   private readonly maxBodyBytes: number;
   private readonly pairingToken?: string;
+  private readonly verdictToken?: string;
   private readonly onProblem?: (
     doc: ProblemDocument,
     raw: CompetitiveCompanionPayload
   ) => void | Promise<void>;
+  private readonly onVerdict?: (verdict: NormalizedBridgeVerdict) => void | Promise<void>;
 
   private server: Server | null = null;
   private boundPort: number | null = null;
   private readonly receivedProblems: ProblemDocument[] = [];
+  private readonly receivedVerdicts: OfficialVerdictEvent[] = [];
 
   constructor(options: LocalhostBridgeOptions = {}) {
     this.preferredPort = options.preferredPort ?? DEFAULT_BRIDGE_PORT;
     this.maxPortAttempts = Math.max(1, options.maxPortAttempts ?? DEFAULT_MAX_PORT_ATTEMPTS);
     this.maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
     this.pairingToken = options.pairingToken;
+    this.verdictToken = options.verdictToken;
     this.onProblem = options.onProblem;
+    this.onVerdict = options.onVerdict;
   }
 
   getPort(): number | null {
@@ -307,6 +589,10 @@ export class LocalhostBridge {
 
   getReceivedProblems(): ProblemDocument[] {
     return [...this.receivedProblems];
+  }
+
+  getReceivedVerdicts(): OfficialVerdictEvent[] {
+    return [...this.receivedVerdicts];
   }
 
   async start(): Promise<number> {
@@ -378,6 +664,68 @@ export class LocalhostBridge {
     });
   }
 
+  private applyVerdictCorsHeaders(res: ServerResponse, origin: string | undefined): boolean {
+    if (!origin) {
+      return true;
+    }
+    if (!isAllowedVerdictCorsOrigin(origin)) {
+      return false;
+    }
+    res.setHeader("access-control-allow-origin", origin);
+    res.setHeader("vary", "Origin");
+    res.setHeader("access-control-allow-methods", "POST, OPTIONS");
+    res.setHeader("access-control-allow-headers", "content-type, x-algo-coach-token");
+    return true;
+  }
+
+  private async handleVerdictPost(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const rawOrigin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
+    if (!this.applyVerdictCorsHeaders(res, rawOrigin)) {
+      this.sendJson(res, 403, { ok: false, error: "Forbidden: untrusted Origin for /verdict." });
+      return;
+    }
+
+    const expectedToken = this.verdictToken ?? this.pairingToken;
+    const suppliedToken = req.headers["x-algo-coach-token"];
+    if (!expectedToken || suppliedToken !== expectedToken) {
+      this.sendJson(res, 401, { ok: false, error: "Unauthorized: invalid verdict token." });
+      return;
+    }
+
+    let rawBody: string;
+    try {
+      rawBody = await this.readBodyWithLimit(req);
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      const status = /limit|large|413/i.test(msg) ? 413 : 400;
+      this.sendJson(res, status, { ok: false, error: msg });
+      return;
+    }
+
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(rawBody);
+    } catch {
+      this.sendJson(res, 400, { ok: false, error: "Invalid JSON payload." });
+      return;
+    }
+
+    const normalized = normalizeBridgeVerdictPayload(parsed);
+    if (!normalized) {
+      this.sendJson(res, 400, { ok: false, error: "Unsupported or incomplete verdict payload." });
+      return;
+    }
+
+    this.receivedVerdicts.push(normalized.event);
+    await this.onVerdict?.(normalized);
+    this.sendJson(res, 200, {
+      ok: true,
+      route: "/verdict",
+      problemKey: normalized.event.problemKey,
+      verdict: normalized.event.verdict
+    });
+  }
+
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     // 1. Strict DNS Rebinding & loopback defense
     if (!isAllowedLoopbackHost(req.headers.host) || !isLoopbackRemoteAddress(req.socket.remoteAddress)) {
@@ -385,17 +733,41 @@ export class LocalhostBridge {
       return;
     }
 
-    if (req.method === "GET" && (req.url === "/health" || req.url === "/")) {
+    const pathname = (req.url ?? "/").split("?")[0] || "/";
+
+    if (req.method === "OPTIONS" && pathname === "/verdict") {
+      const rawOrigin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
+      if (!this.applyVerdictCorsHeaders(res, rawOrigin)) {
+        this.sendJson(res, 403, { ok: false, error: "Forbidden: untrusted Origin." });
+        return;
+      }
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    if (req.method === "GET" && (pathname === "/health" || pathname === "/")) {
       this.sendJson(res, 200, {
         ok: true,
         service: "algo-coach-localhost-bridge",
-        port: this.boundPort
+        port: this.boundPort,
+        verdictEndpoint: Boolean(this.verdictToken ?? this.pairingToken)
       });
       return;
     }
 
     if (req.method !== "POST") {
       this.sendJson(res, 405, { ok: false, error: "Method Not Allowed. Send POST JSON payload." });
+      return;
+    }
+
+    if (pathname === "/verdict") {
+      await this.handleVerdictPost(req, res);
+      return;
+    }
+
+    if (pathname !== "/") {
+      this.sendJson(res, 404, { ok: false, error: "Not Found." });
       return;
     }
 

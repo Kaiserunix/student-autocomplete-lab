@@ -1,10 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ProblemDocument } from "../../src/core/contracts";
 import {
+  buildCompanionUserscript,
   createManualVerdictEvent,
+  fetchLatestAtCoderVerdict,
+  fetchLatestLeetCodeCnVerdict,
+  fetchLatestLeetCodeGlobalVerdict,
+  fetchLatestPublicVerdict,
   isAllowedSubmitUrl,
+  normalizeAtCoderResult,
   normalizeCodeforcesVerdict,
+  normalizeLeetCodeCnStatus,
+  normalizeLeetCodeGlobalStatus,
   pollCodeforcesOfficialVerdict,
+  pollPublicOfficialVerdict,
   prepareSubmitPayload,
   resolveSubmitTarget,
   stripLocalDebugAndHarness,
@@ -285,5 +294,181 @@ describe("codeforcesPublicPoller", () => {
       { fetchImpl: emptyFetch, sleep: async () => {} }
     );
     expect(abortedRes.status).toBe("aborted");
+  });
+});
+
+describe("publicVerdictPollers & companionUserscript", () => {
+  it("normalizes LeetCode CN, LeetCode Global, and AtCoder statuses accurately", () => {
+    expect(normalizeLeetCodeCnStatus("A_10")).toBe("AC");
+    expect(normalizeLeetCodeCnStatus("A_11")).toBe("WA");
+    expect(normalizeLeetCodeCnStatus("A_12")).toBe("MLE");
+    expect(normalizeLeetCodeCnStatus("A_14")).toBe("TLE");
+    expect(normalizeLeetCodeCnStatus("A_15")).toBe("RE");
+    expect(normalizeLeetCodeCnStatus("A_20")).toBe("CE");
+    expect(normalizeLeetCodeCnStatus("PENDING")).toBeUndefined();
+
+    expect(normalizeLeetCodeGlobalStatus("Accepted")).toBe("AC");
+    expect(normalizeLeetCodeGlobalStatus("Wrong Answer")).toBe("WA");
+    expect(normalizeLeetCodeGlobalStatus("Time Limit Exceeded")).toBe("TLE");
+    expect(normalizeLeetCodeGlobalStatus("Pending")).toBeUndefined();
+
+    expect(normalizeAtCoderResult("AC")).toBe("AC");
+    expect(normalizeAtCoderResult("WA")).toBe("WA");
+    expect(normalizeAtCoderResult("WJ")).toBeUndefined();
+    expect(normalizeAtCoderResult("12/40")).toBeUndefined();
+  });
+
+  it("fetches LeetCode CN recentSubmissions via GraphQL without login", async () => {
+    const mockFetch = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: {
+            recentSubmissions: [
+              {
+                id: "550011",
+                status: "A_10",
+                lang: "cpp",
+                submitTime: 1700000020,
+                question: { questionFrontendId: "1", titleSlug: "two-sum" }
+              }
+            ]
+          }
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )
+    );
+
+    const res = await fetchLatestLeetCodeCnVerdict(
+      { handle: "endlesscheng", titleSlug: "two-sum", submittedAfterSeconds: 1700000000 },
+      { fetchImpl: mockFetch }
+    );
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://leetcode.cn/graphql/",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ origin: "https://leetcode.cn" })
+      })
+    );
+    expect(res.status).toBe("judged");
+    if (res.status === "judged") {
+      expect(res.dedupKey).toBe("lccn-sub-550011");
+      expect(res.event.verdict).toBe("AC");
+      expect(res.event.observedVia).toBe("public_api");
+      expect(res.event.submissionUrl).toBe("https://leetcode.cn/problems/two-sum/submissions/");
+    }
+  });
+
+  it("fetches LeetCode Global & AtCoder verdicts and polls with timeout/abort support", async () => {
+    const lcGlobalFetch = vi.fn<typeof fetch>().mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          data: {
+            recentSubmissionList: [
+              {
+                id: "998877",
+                title: "Two Sum",
+                titleSlug: "two-sum",
+                statusDisplay: "Wrong Answer",
+                lang: "python3",
+                timestamp: "1700000030"
+              }
+            ]
+          }
+        }),
+        { status: 200 }
+      )
+    );
+    const gl = await fetchLatestLeetCodeGlobalVerdict(
+      { handle: "lee215", titleSlug: "two-sum", submittedAfterSeconds: 1700000000 },
+      { fetchImpl: lcGlobalFetch }
+    );
+    expect(gl.status).toBe("judged");
+    if (gl.status === "judged") {
+      expect(gl.dedupKey).toBe("lc-sub-998877");
+      expect(gl.event.verdict).toBe("WA");
+      expect(gl.event.submissionUrl).toBe("https://leetcode.com/submissions/detail/998877/");
+    }
+
+    const atFetch = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: 7771,
+              epoch_second: 1700000010,
+              problem_id: "abc300_a",
+              contest_id: "abc300",
+              result: "WJ",
+              execution_time: null
+            }
+          ]),
+          { status: 200 }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify([
+            {
+              id: 7771,
+              epoch_second: 1700000010,
+              problem_id: "abc300_a",
+              contest_id: "abc300",
+              result: "AC",
+              execution_time: 18
+            }
+          ]),
+          { status: 200 }
+        )
+      );
+
+    const directAt = await fetchLatestAtCoderVerdict(
+      { handle: "chokudai", taskId: "abc300_a", submittedAfterSeconds: 1700000000 },
+      { fetchImpl: atFetch }
+    );
+    expect(directAt.status).toBe("pending");
+    expect(atFetch.mock.calls[0]?.[0]).toContain("from_second=1699999995");
+
+    const polled = await pollPublicOfficialVerdict(
+      {
+        problem: docFor("atcoder", "abc300/abc300_a", {
+          canonicalUrl: "https://atcoder.jp/contests/abc300/tasks/abc300_a"
+        }),
+        handles: { atcoder: "chokudai" },
+        submittedAfterSeconds: 1700000000,
+        maxAttempts: 2,
+        intervalMs: 1
+      },
+      { fetchImpl: atFetch, sleep: async () => {} }
+    );
+    expect(polled.status).toBe("judged");
+    if (polled.status === "judged") {
+      expect(polled.dedupKey).toBe("ac-sub-7771");
+      expect(polled.event.verdict).toBe("AC");
+      expect(polled.event.runtimeMs).toBe(18);
+      expect(polled.event.submissionUrl).toBe("https://atcoder.jp/contests/abc300/submissions/7771");
+    }
+
+    await expect(
+      fetchLatestPublicVerdict({
+        problem: docFor("luogu", "P1001"),
+        handle: "user",
+        submittedAfterSeconds: 1700000000
+      })
+    ).rejects.toThrow("not supported");
+  });
+
+  it("builds a zero-cookie 6-OJ companion userscript targeting localhost /verdict", () => {
+    const script = buildCompanionUserscript({ port: 27888, token: "tok-secret-42" });
+    expect(script).toContain("https://leetcode.cn/problems/*");
+    expect(script).toContain("https://leetcode.com/problems/*");
+    expect(script).toContain("https://www.luogu.com.cn/record/*");
+    expect(script).toContain("https://codeforces.com/*/submission/*");
+    expect(script).toContain("https://atcoder.jp/contests/*/submissions/*");
+    expect(script).toContain("https://ac.nowcoder.com/acm/contest/view-submission*");
+    expect(script).toContain('"http://127.0.0.1:27888/verdict"');
+    expect(script).toContain('"tok-secret-42"');
+    expect(script).toContain("x-algo-coach-token");
+    expect(script).not.toContain("document.cookie");
   });
 });

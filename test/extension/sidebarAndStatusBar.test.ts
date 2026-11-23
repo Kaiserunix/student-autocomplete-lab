@@ -19,7 +19,7 @@ import {
   StarterVisualPresetManager,
   StylishRankEngine
 } from "../../src/experience";
-import { ProblemRepository } from "../../src/problems";
+import { normalizeBridgeVerdictPayload, ProblemRepository } from "../../src/problems";
 import {
   createMockExtensionContext,
   createMockTextDocument,
@@ -49,6 +49,7 @@ import {
 } from "../../src/extension/sidebarController";
 import { StatusBarController } from "../../src/extension/statusBarController";
 import {
+  AI_CONFIG_KEYS,
   SecretKeyStore,
   VscodeMementoAdapter,
   VscodeWorkspaceConfigAdapter
@@ -218,8 +219,46 @@ describe("SidebarController HTML CSP security, StatusBarController & host messag
     const secrets = new SecretKeyStore(context.secrets);
     const visualPresetManager = new StarterVisualPresetManager(config, memento);
     const managedModules = new ManagedModuleController();
-    const mockFetch = vi.fn(async (input: string | URL) => {
+    const mockFetch = vi.fn(async (input: string | URL, init?: RequestInit) => {
       const url = String(input);
+      if (url.includes("leetcode.cn/graphql")) {
+        const body = JSON.parse(String(init?.body ?? "{}")) as { query?: string };
+        if (body.query?.includes("problemsetQuestionList")) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                problemsetQuestionList: {
+                  total: 1,
+                  questions: [
+                    {
+                      frontendQuestionId: "1",
+                      title: "Two Sum",
+                      titleCn: "两数之和",
+                      titleSlug: "two-sum",
+                      difficulty: "EASY"
+                    }
+                  ]
+                }
+              }
+            }),
+            { status: 200, headers: { "content-type": "application/json" } }
+          );
+        }
+      }
+      if (url.includes("codeforces.com/api/problemset.problems")) {
+        return new Response(
+          JSON.stringify({
+            status: "OK",
+            result: {
+              problems: [
+                { contestId: 1999, index: "B", name: "Two Screens", rating: 800, tags: ["greedy"] }
+              ],
+              problemStatistics: []
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
       if (url.includes("codeforces.com/api/user.status")) {
         return new Response(
           JSON.stringify({
@@ -582,6 +621,16 @@ describe("SidebarController HTML CSP security, StatusBarController & host messag
 
     expect(mockState.harness!.getClipboard()).not.toContain("__main__");
     expect(mockState.harness!.openedExternalUrls).toContain("https://leetcode.cn/problems/two-sum/");
+    expect(lastSyncedState().activeSubmitUrl).toBe("https://leetcode.cn/problems/two-sum/");
+    expect(lastSyncedState().statusBanner?.text).toContain("复制链接");
+
+    // 11b. submit/copyOnly strips debug code WITHOUT launching default browser
+    const openCountBeforeCopyOnly = mockState.harness!.openedExternalUrls.length;
+    await mockState.harness!.vscodeMock.env.clipboard.writeText("stale");
+    await sidebar.handleMessage({ type: "submit/copyOnly" });
+    expect(mockState.harness!.getClipboard()).not.toContain("__main__");
+    expect(mockState.harness!.getClipboard()).toContain("def twoSum");
+    expect(mockState.harness!.openedExternalUrls.length).toBe(openCountBeforeCopyOnly);
 
     // 12. Audio mute toggle & test sound
     await sidebar.handleMessage({ type: "audio/toggleMute" });
@@ -710,6 +759,30 @@ describe("SidebarController HTML CSP security, StatusBarController & host messag
     // Explicit problem/openReader re-opens a fresh panel beside the editor
     await sidebar.handleMessage({ type: "problem/openReader" });
     expect(mockState.harness!.webviewPanels.length).toBe(countAfterClose + 1);
+
+    // 17. Selectable multi-platform concurrent search interleaves results, isolates failures, allows direct select & clearSearch
+    const savedCountBeforeSearch = lastSyncedState().problems.length;
+    await sidebar.handleMessage({
+      type: "problem/search",
+      payload: { sources: ["leetcode-cn", "codeforces", "luogu"], keyword: "two" }
+    });
+    const afterSearch = lastSyncedState();
+    expect(afterSearch.searchResults?.items.map((p) => p.problemKey)).toEqual([
+      "lc-cn:two-sum",
+      "cf:1999B"
+    ]);
+    expect(afterSearch.searchResults?.failedSources).toEqual(["luogu"]);
+    // Search stubs do NOT pollute Saved Problems list until user selects one
+    expect(afterSearch.problems.length).toBe(savedCountBeforeSearch);
+
+    await sidebar.handleMessage({
+      type: "problem/select",
+      payload: { problemKey: "cf:1999B", openFile: false }
+    });
+    expect(lastSyncedState().activeProblem?.problemKey).toBe("cf:1999B");
+
+    await sidebar.handleMessage({ type: "problem/clearSearch" });
+    expect(lastSyncedState().searchResults).toBeUndefined();
 
     sidebar.dispose();
     workspaceFiles.dispose();
@@ -872,6 +945,242 @@ describe("SidebarController HTML CSP security, StatusBarController & host messag
     const fullToastEn = toasts().at(-1);
     expect(fullToastEn?.payload.level).toBe("info");
     expect(fullToastEn?.payload.text).toContain("Imported: A+B Problem");
+
+    sidebar.dispose();
+    workspaceFiles.dispose();
+    statusBar.dispose();
+    managedModules.dispose();
+  });
+
+  it("supports 4-OJ syncOfficialVerdict, Copy&Open background polling (with cancel), Phase B bridge verdicts, and userscript copy", async () => {
+    const context = createMockExtensionContext(tempDir, resolve("."));
+    mockState.harness!.setWorkspaceFolders([tempDir]);
+    mockState.harness!.globalConfig.set(AI_CONFIG_KEYS.leetcodeCnHandle, "endlesscheng");
+    mockState.harness!.globalConfig.set(AI_CONFIG_KEYS.atcoderHandle, "chokudai");
+
+    const config = new VscodeWorkspaceConfigAdapter();
+    const memento = new VscodeMementoAdapter(
+      context.globalState as unknown as import("vscode").Memento
+    );
+    const secrets = new SecretKeyStore(context.secrets);
+    const visualPresetManager = new StarterVisualPresetManager(config, memento);
+    const managedModules = new ManagedModuleController();
+    const problemRepository = new ProblemRepository({
+      cacheDir: join(tempDir, "problems-verdict")
+    });
+    const workspaceFiles = new WorkspaceFileController({ storageDir: tempDir, memento });
+    await workspaceFiles.init();
+    const statusBar = new StatusBarController();
+    const eventStore = new InMemoryLearningEventStore();
+
+    let fixedNowMs = 1_700_000_100_000;
+    const postedMessages: HostToWebviewMessage[] = [];
+    let lcPollCalls = 0;
+
+    const mockFetch = vi.fn(async (input: string | URL) => {
+      const url = String(input);
+      if (url === "https://leetcode.cn/graphql/") {
+        lcPollCalls += 1;
+        // Call 1: direct sync -> AC; Call 2 (bg poll attempt 1): PENDING; Call 3 (bg poll attempt 2): AC; Call 4+: PENDING
+        const status = lcPollCalls === 1 || lcPollCalls === 3 ? "A_10" : "PENDING";
+        const subId = lcPollCalls === 1 ? "771234" : lcPollCalls === 3 ? "990022" : "990033";
+        return new Response(
+          JSON.stringify({
+            data: {
+              recentSubmissions: [
+                {
+                  id: subId,
+                  status,
+                  lang: "python3",
+                  submitTime: 1_700_000_105,
+                  question: { questionFrontendId: "1", titleSlug: "two-sum" }
+                }
+              ]
+            }
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      if (url.startsWith("https://kenkoooo.com/atcoder/atcoder-api/v3/user/submissions")) {
+        return new Response(
+          JSON.stringify([
+            {
+              id: 880011,
+              epoch_second: 1_700_000_108,
+              problem_id: "abc300_a",
+              contest_id: "abc300",
+              result: "AC",
+              execution_time: 12
+            }
+          ]),
+          { status: 200, headers: { "content-type": "application/json" } }
+        );
+      }
+
+      return new Response("{}", { status: 404 });
+    }) as unknown as typeof fetch;
+
+    const sidebar = new SidebarController({
+      extensionUri: MockUri.file(resolve(".")) as unknown as import("vscode").Uri,
+      storageDir: tempDir,
+      config,
+      secrets,
+      visualPresetManager,
+      managedModules,
+      problemRepository,
+      runnerEngine: {
+        engineId: "noop",
+        runSamples: vi.fn(),
+        probeToolchains: vi.fn(async () => [])
+      },
+      modelRouter: new ModelRouter(DEFAULT_AI_ROUTER_CONFIG),
+      coachService: new CoachService({
+        hintLadder: new HintLadderMachine({ store: new InMemoryHintLadderStore() }),
+        modelRouter: new ModelRouter(DEFAULT_AI_ROUTER_CONFIG)
+      }),
+      eventStore,
+      overridesStore: new InMemoryUserOverridesStore(),
+      triggerTracker: new TriggerSignalTracker(),
+      workspaceFiles,
+      statusBar,
+      getShortcutCoach: () => undefined,
+      getSoundController: () => undefined,
+      getAudioMuted: () => false,
+      setAudioMuted: () => undefined,
+      fetchImpl: mockFetch,
+      now: () => fixedNowMs
+    });
+    await sidebar.init();
+
+    const mockWebviewView = {
+      webview: {
+        cspSource: "vscode-webview://unit-test",
+        options: {},
+        html: "",
+        asWebviewUri: (u: MockUri) => u,
+        postMessage: vi.fn(async (msg: HostToWebviewMessage) => {
+          postedMessages.push(msg);
+          return true;
+        }),
+        onDidReceiveMessage: vi.fn(() => ({ dispose: () => undefined }))
+      },
+      onDidDispose: vi.fn(() => ({ dispose: () => undefined }))
+    };
+    sidebar.resolveWebviewView(mockWebviewView as unknown as import("vscode").WebviewView);
+
+    const lastSyncedState = (): SidebarStateSnapshot => {
+      const states = postedMessages.filter(
+        (m): m is Extract<HostToWebviewMessage, { type: "state/sync" }> => m.type === "state/sync"
+      );
+      return states[states.length - 1]!.payload;
+    };
+
+    await problemRepository.saveProblem({
+      schemaVersion: "problem-doc/v2",
+      problemKey: "lc-cn:two-sum",
+      source: "leetcode-cn",
+      sourceId: "two-sum",
+      canonicalUrl: "https://leetcode.cn/problems/two-sum/",
+      title: "两数之和",
+      locale: "zh-CN",
+      completeness: "full",
+      ioMode: "function",
+      samples: [],
+      rawTags: ["array"],
+      provenance: { ingestChannel: "builtin-adapter", fetchedAt: "2026-11-23T00:00:00Z" }
+    });
+    await problemRepository.saveProblem({
+      schemaVersion: "problem-doc/v2",
+      problemKey: "atcoder:abc300_a",
+      source: "atcoder",
+      sourceId: "abc300/abc300_a",
+      canonicalUrl: "https://atcoder.jp/contests/abc300/tasks/abc300_a",
+      title: "N-choice question",
+      locale: "en-US",
+      completeness: "full",
+      ioMode: "stdio",
+      samples: [],
+      rawTags: [],
+      provenance: { ingestChannel: "builtin-adapter", fetchedAt: "2026-11-23T00:00:00Z" }
+    });
+
+    // 1. Direct syncOfficialVerdict on LeetCode CN
+    await sidebar.handleMessage({
+      type: "problem/select",
+      payload: { problemKey: "lc-cn:two-sum", openFile: false }
+    });
+    const pyDoc = createMockTextDocument({
+      fsPath: join(tempDir, "practice", "lc-cn_two-sum.py"),
+      languageId: "python",
+      content: "class Solution:\n    def twoSum(self, nums, target):\n        return [0, 1]\n"
+    });
+    mockState.harness!.setActiveTextEditor(createMockTextEditor(pyDoc));
+
+    await sidebar.handleMessage({ type: "submit/syncVerdict" });
+    const lccnEvents = (await eventStore.readAll()).filter((e) => e.eventId === "lccn-sub-771234");
+    expect(lccnEvents).toHaveLength(1);
+    expect(lccnEvents[0]?.verdictSource).toBe("official_oj");
+    expect(lastSyncedState().verdictSyncing).toBe(false);
+
+    // 2. Direct syncOfficialVerdict on AtCoder
+    await sidebar.handleMessage({
+      type: "problem/select",
+      payload: { problemKey: "atcoder:abc300_a", openFile: false }
+    });
+    await sidebar.handleMessage({ type: "submit/syncVerdict" });
+    const acEvents = (await eventStore.readAll()).filter((e) => e.eventId === "ac-sub-880011");
+    expect(acEvents).toHaveLength(1);
+    expect(acEvents[0]?.verdictSource).toBe("official_oj");
+
+    // 3. Background auto-poll after copyAndOpenSubmit on LeetCode CN, plus cancellation on manual verdict
+    await sidebar.handleMessage({
+      type: "problem/select",
+      payload: { problemKey: "lc-cn:two-sum", openFile: false }
+    });
+    mockState.harness!.setActiveTextEditor(createMockTextEditor(pyDoc));
+
+    vi.useFakeTimers();
+    await sidebar.handleMessage({ type: "submit/copyAndOpen" });
+    // Flush initial poll attempt (attempt 1 -> PENDING), then advance 5s timer -> attempt 2 -> AC
+    await vi.advanceTimersByTimeAsync(10);
+    await vi.advanceTimersByTimeAsync(5_050);
+    const bgEvents = (await eventStore.readAll()).filter((e) => e.eventId === "lccn-sub-990022");
+    expect(bgEvents).toHaveLength(1);
+    expect(bgEvents[0]?.verdictSource).toBe("official_oj");
+
+    // Manual verdict report immediately cancels an active background poll timer
+    await sidebar.handleMessage({ type: "submit/copyAndOpen" });
+    await vi.advanceTimersByTimeAsync(10); // Call 4 -> PENDING, arms 5s timer
+    const callsAfterStart = lcPollCalls;
+    await sidebar.handleMessage({ type: "submit/reportVerdict", payload: { verdict: "WA" } });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(lcPollCalls).toBe(callsAfterStart);
+    vi.useRealTimers();
+
+    // 4. Phase B: handleBridgeVerdict records browser_extension official verdict cleanly
+    const luoguBridgeVerdict = normalizeBridgeVerdictPayload({
+      platform: "luogu",
+      problemUrl: "https://www.luogu.com.cn/problem/P1001",
+      submissionUrl: "https://www.luogu.com.cn/record/777666",
+      submissionId: "777666",
+      verdict: "Accepted"
+    })!;
+    await sidebar.handleBridgeVerdict(luoguBridgeVerdict);
+    const luoguEvents = (await eventStore.readAll()).filter((e) => e.eventId === "bridge-luogu-777666");
+    expect(luoguEvents).toHaveLength(1);
+    expect(luoguEvents[0]?.verdictSource).toBe("official_oj");
+    expect(luoguEvents[0]?.verdict).toBe("AC");
+
+    // 5. copyCompanionUserscript embeds live bridge port & persistent verdictToken
+    sidebar.setBridgeStatus({ listening: true, port: 27456 });
+    await sidebar.handleMessage({ type: "bridge/copyUserscript" });
+    const token = await secrets.getBridgeVerdictToken();
+    expect(token).toBeTruthy();
+    const copiedScript = mockState.harness!.getClipboard();
+    expect(copiedScript).toContain("http://127.0.0.1:27456/verdict");
+    expect(copiedScript).toContain(token!);
+    expect(copiedScript).toContain("x-algo-coach-token");
 
     sidebar.dispose();
     workspaceFiles.dispose();

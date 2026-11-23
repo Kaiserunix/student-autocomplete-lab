@@ -1,13 +1,11 @@
-import { badge, btn, cnt, d, dataRow, drawer, emptyBox, h, inp, meterSvg, sec, sp, tbl } from "../dom";
-import { mistakeStatusLabel, t, type UiLang } from "../i18n";
+import { badge, btn, cnt, d, dataRow, drawer, emptyBox, h, inp, meterSvg, openBtn, sec, sp, tbl } from "../dom";
+import { mistakeStatusLabel, tr, type UiLang } from "../i18n";
 import { escapeHtml as E, getDraftOrFallback as dr, type WebviewState } from "../state";
-
-const openBtn = (pk: string, lbl: string): string => btn(lbl, "problem-select", "s", "xs", `data-problem-key="${E(pk)}"`);
 
 export function renderDossierView(st: WebviewState): string {
   const { snapshot: snap } = st;
   const l: UiLang = snap.flags.uiLanguage;
-  const T = (zh: string, en: string) => t(l, zh, en);
+  const T = tr(l);
   const lr = snap.learnerSnapshot;
   const ov = snap.userOverrides;
   const vals = Object.values;
@@ -66,7 +64,7 @@ export function renderDossierView(st: WebviewState): string {
   const voidDrawer = drawer(
     "dossier-void",
     T("作废误填评测事件", "Void Event"),
-    d("mu", E(T("点击最近记录作废，或输入事件 ID 重算掌握度。", "Void a recent record below or enter an event ID."))) +
+    d("mu", E(T("点最近记录作废，或输 ID 重算。", "Void a record or enter event ID."))) +
       (recentList ? d("c g1 mt1", recentList) : "") +
       d("r g1 mt1", inp("vid", dr(st, "vid"), T("事件 ID", "Event ID"), "in f1 mo", "text", ` aria-label="${E(T("事件 ID", "Event ID"))}"`) + btn(T("作废", "Void"), "learner-void-event")),
     cnt(ov.voidedEventIds.length)

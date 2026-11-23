@@ -1,7 +1,7 @@
 import type { CoachResponsePayload, CoachStrictness, HintLevel, ProjectedContextItem, StuckCategory } from "../../core/contracts";
 import { workbenchArtImg } from "../assets";
-import { badge, btn, cnt, d, emptyBox, h, inp, sec, sel, sp } from "../dom";
-import { t, type UiLang } from "../i18n";
+import { ap, badge, btn, cnt, d, emptyBox, emptyCard, h, inp, sec, sel, sp } from "../dom";
+import { t, tr, type UiLang } from "../i18n";
 import { icon } from "../icons";
 import { renderMarkdownMath } from "../markdownMath";
 import { escapeHtml as E, escapeMultilineHtml as EM, getDraftOrFallback as dr, type WebviewState } from "../state";
@@ -35,17 +35,22 @@ const KIND_LBL: Record<ProjectedContextItem["kind"], [string, string]> = {
   preference: ["偏好", "Pref"]
 };
 
-const strictLbl = (s: CoachStrictness, l: UiLang) => (s === "gentle" ? t(l, "温和", "Gentle") : s === "strict" ? t(l, "严厉", "Strict") : t(l, "标准", "Standard"));
+const strictLbl = (s: CoachStrictness, l: UiLang) => {
+  const x = STRICTS.find(([m]) => m === s);
+  return x ? t(l, x[1], x[2]) : s;
+};
 
 function renderPrefsDrawer(st: WebviewState, l: UiLang): string {
   const { snapshot: snap } = st;
-  const T = (zh: string, en: string) => t(l, zh, en);
+  const T = tr(l);
   const pr = snap.userOverrides.teachingPreferences;
-  const styles: ReadonlyArray<[string, string]> = [["socratic", T("苏格拉底", "Socratic")], ["direct_minimal", T("极简要点", "Direct")], ["dry_run_first", T("错例优先", "Trace First")]];
-  const verbs: ReadonlyArray<[string, string]> = [["concise", T("精炼", "Concise")], ["detailed", T("详细", "Detailed")]];
-  const goals: ReadonlyArray<[string, string]> = [["beginner_cs", T("基础入门", "CS Basics")], ["interview_leetcode", T("面试刷题", "Interview")], ["contest_icpc_oi", T("算法竞赛", "Contest")]];
-  const pSel = (k: string, list: ReadonlyArray<[string, string]>, cur: string) => sel(list, cur, `data-action="pref-update" data-pref-key="${k}"`, "sel sm");
-  const stricts = STRICTS.map(([m, zh, en]) => h("button", `seg-btn${snap.flags.coachStrictness === m ? " seg-btn-a" : ""}`, E(T(zh, en)), `type="button" aria-pressed="${snap.flags.coachStrictness === m}" data-action="flag-update" data-key="coachStrictness" data-value="${m}"`)).join("");
+  const opt = (rs: ReadonlyArray<[string, string, string]>): Array<[string, string]> => rs.map(([k, z, e]) => [k, T(z, e)]);
+  const styles = opt([["socratic", "苏格拉底", "Socratic"], ["direct_minimal", "极简要点", "Direct"], ["dry_run_first", "错例优先", "Trace First"]]);
+  const verbs = opt([["concise", "精炼", "Concise"], ["detailed", "详细", "Detailed"]]);
+  const goals = opt([["beginner_cs", "基础入门", "CS Basics"], ["interview_leetcode", "面试刷题", "Interview"], ["contest_icpc_oi", "算法竞赛", "Contest"]]);
+  const pRow = (lbl: string, k: string, list: ReadonlyArray<[string, string]>, cur: string) =>
+    h("label", "fi", sp("lx", lbl) + sel(list, cur, `data-action="pref-update" data-pref-key="${k}"`, "sel sm"));
+  const stricts = STRICTS.map(([m, zh, en]) => h("button", `seg-btn${snap.flags.coachStrictness === m ? " seg-btn-a" : ""}`, E(T(zh, en)), `type="button" ${ap(snap.flags.coachStrictness === m)} data-action="flag-update" data-key="coachStrictness" data-value="${m}"`)).join("");
   const sum = `${T("风格与偏好", "Style")} · ${strictLbl(snap.flags.coachStrictness, l)} · ${styles.find(([v]) => v === pr.hintStyle)?.[1] ?? ""}`;
   return h(
     "details",
@@ -56,9 +61,9 @@ function renderPrefsDrawer(st: WebviewState, l: UiLang): string {
         d("c g1", sp("lx", T("教练语气", "Tone")) + d("seg-track seg-3", stricts)) +
           d(
             "c g1",
-            h("label", "fi", sp("lx", T("提示风格", "Style")) + pSel("hintStyle", styles, pr.hintStyle)) +
-              h("label", "fi", sp("lx", T("回复详略", "Detail")) + pSel("verbosity", verbs, pr.verbosity)) +
-              h("label", "fi", sp("lx", T("训练目标", "Goal")) + pSel("targetGoal", goals, pr.targetGoal))
+            pRow(T("提示风格", "Style"), "hintStyle", styles, pr.hintStyle) +
+              pRow(T("回复详略", "Detail"), "verbosity", verbs, pr.verbosity) +
+              pRow(T("训练目标", "Goal"), "targetGoal", goals, pr.targetGoal)
           )
       ),
     'data-drawer="coach-prefs"'
@@ -66,7 +71,7 @@ function renderPrefsDrawer(st: WebviewState, l: UiLang): string {
 }
 
 function renderAudit(r: CoachResponsePayload, l: UiLang, idx: number): string {
-  const T = (zh: string, en: string) => t(l, zh, en);
+  const T = tr(l);
   const its = r.audit.projectedItems.slice(0, 3);
   const rows = its.length
     ? its
@@ -96,17 +101,17 @@ const renderEntry = (r: CoachResponsePayload, l: UiLang, idx: number): string =>
 export function renderCoachControlsCard(st: WebviewState): string {
   const { snapshot: snap } = st;
   const l: UiLang = snap.flags.uiLanguage;
-  const T = (zh: string, en: string) => t(l, zh, en);
+  const T = tr(l);
   const lv = snap.hintLevel;
   const next = Math.min(5, lv + 1) as HintLevel;
   const isCe = Boolean(snap.lastRun && !snap.lastRun.compileOk);
   const fail = snap.lastRun?.cases.find((c) => c.verdict !== "AC" && c.verdict !== "SKIPPED");
   const busy = snap.coachBusy;
   const noAi = !snap.aiConfig.chat.hasApiKey && snap.aiConfig.chat.provider !== "ollama";
-  const giveUpUnlocked = Boolean(snap.giveUpUnlocked || snap.coachHistory.some((e) => e.action === "giveUp" && e.headline && !e.headline.includes("尚未解锁") && !e.headline.includes("Locked")));
+  const giveUpUnlocked = Boolean(snap.giveUpUnlocked || snap.coachHistory.some((e) => e.action === "giveUp" && e.headline && !/尚未解锁|Locked/.test(e.headline)));
 
   const ladder = ([1, 2, 3, 4, 5] as const).map((s) => sp(`ld-s mo${s < lv ? " ld-d" : s === lv ? " ld-a" : ""}`, `L${s}`)).join("");
-  const stucks = STUCKS.map(([c, zh, en]) => h("button", `sg${st.stuck === c ? " sg-a" : ""}`, E(T(zh, en)), `type="button" aria-pressed="${st.stuck === c}" data-action="coach-select-stuck" data-stuck="${c}"`)).join("");
+  const stucks = STUCKS.map(([c, zh, en]) => h("button", `sg${st.stuck === c ? " sg-a" : ""}`, E(T(zh, en)), `type="button" ${ap(st.stuck === c)} data-action="coach-select-stuck" data-stuck="${c}"`)).join("");
 
   const giveUp = giveUpUnlocked
     ? ""
@@ -145,28 +150,24 @@ export function renderCoachControlsCard(st: WebviewState): string {
 export function renderCoachHistoryCard(st: WebviewState): string {
   const { snapshot: snap } = st;
   const l: UiLang = snap.flags.uiLanguage;
-  const T = (zh: string, en: string) => t(l, zh, en);
-  const stream = snap.coachBusy || st.stream ? d("sub-sep", badge(T("思考中", "Streaming"), "a") + h("div", "cb mt1", EM(st.stream?.text ?? T("正在分析...", "Analyzing...")), 'data-stream-target="true"')) : "";
-  const log = snap.coachHistory.length || stream ? snap.coachHistory.map((e, i) => renderEntry(e, l, i)).reverse().join("") : emptyBox(T("点击上方按钮发起渐进引导或错例手推。", "Request a hint or trace above."));
+  const T = tr(l);
+  const stream = snap.coachBusy || st.stream ? d("sub-sep", badge(T("思考中", "Thinking"), "a") + h("div", "cb mt1", EM(st.stream?.text ?? T("分析中...", "Analyzing...")), 'data-stream-target="true"')) : "";
+  const log = snap.coachHistory.length || stream ? snap.coachHistory.map((e, i) => renderEntry(e, l, i)).reverse().join("") : emptyBox(T("点上方按钮发起引导或手推错例。", "Pick Hint or Trace above."));
   return d("patch-slot", sec(T("对话记录", "History"), stream + log, cnt(snap.coachHistory.length)), 'data-patch="coach-history"');
 }
 
 export function renderCoachView(st: WebviewState): string {
   const { snapshot: snap } = st;
   const l: UiLang = snap.flags.uiLanguage;
-  const T = (zh: string, en: string) => t(l, zh, en);
+  const T = tr(l);
   if (!snap.activeProblem) {
-    return h(
-      "section",
-      "card",
-      d(
-        "c g2",
-        workbenchArtImg() +
-          h("h2", "pt", E(T("尚未选择题目", "No Active Problem"))) +
-          d("mu", E(T("先在「选题」导题或加载热身包。", "Pick a problem in Browse or load warmup."))) +
-          d("r rw g1 mt1", btn(`${icon("book")} ${T("前往选题", "Browse")}`, "switch-tab", "p", "sm", 'data-tab="problems"') + btn(`${icon("play")} ${T("加载 3 题热身包", "Load 3-Problem Warmup")}`, "starter-load-warmup")) +
-          renderPrefsDrawer(st, l)
-      )
+    return emptyCard(
+      workbenchArtImg(),
+      T("尚未选择题目", "No Active Problem"),
+      T("先在「选题」导题或加载热身包。", "Pick a problem in Bank or load warmup."),
+      btn(`${icon("book")} ${T("前往选题", "Browse")}`, "switch-tab", "p", "sm", 'data-tab="problems"') +
+        btn(`${icon("play")} ${T("加载 3 题热身包", "Load 3-Problem Warmup")}`, "starter-load-warmup"),
+      renderPrefsDrawer(st, l)
     );
   }
   return renderCoachControlsCard(st) + renderCoachHistoryCard(st);

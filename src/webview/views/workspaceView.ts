@@ -9,7 +9,7 @@ import type {
   StylishRankState
 } from "../../core/contracts";
 import { ojIconImg, rankCrestImg, workbenchArtImg } from "../assets";
-import { badge, btn, cnt, d, emptyBox, h, sec, sp } from "../dom";
+import { al, badge, btn, cnt, d, emptyBox, emptyCard, h, rbtn, sec, sp } from "../dom";
 import {
   completenessLabel,
   ioModeLabel,
@@ -18,6 +18,7 @@ import {
   localizeRankSummary,
   sourceLabel,
   t,
+  tr,
   verdictBadgeLabel,
   type UiLang
 } from "../i18n";
@@ -26,6 +27,10 @@ import { escapeAttr, renderMarkdownMath } from "../markdownMath";
 import { escapeHtml as E, getDraftOrFallback as dr, sanitizeExternalUrl, type WebviewState } from "../state";
 
 const RANK_ORDER: readonly StylishRankLetter[] = ["D", "C", "B", "A", "S", "SS", "SSS"];
+const ctx = (st: WebviewState) => {
+  const snap = st.snapshot, l: UiLang = snap.flags.uiLanguage;
+  return [snap, l, tr(l)] as const;
+};
 
 function rankIndex(r: StylishRankLetter): number {
   const idx = RANK_ORDER.indexOf(r);
@@ -42,7 +47,7 @@ function copyMiniBtn(text: string, label: string, uiLabel: string): string {
 }
 
 function renderFailureActions(verdict: SampleCaseResult["verdict"], caseId: string, lv: HintLevel, nextHint: HintLevel, l: UiLang, coachBusy: boolean): string {
-  const T = (zh: string, en: string) => t(l, zh, en);
+  const T = tr(l);
   const dryRunLbl = verdict === "CE"
     ? T("让教练解读报错", "Explain Compile Error")
     : T("手推这组错例", "Trace Counterexample");
@@ -54,10 +59,12 @@ function renderFailureActions(verdict: SampleCaseResult["verdict"], caseId: stri
   );
 }
 
+const lines = (s: string) => s.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n");
+
 function renderDiff(c: SampleCaseResult, lv: HintLevel, nextHint: HintLevel, l: UiLang, coachBusy: boolean): string {
-  const T = (zh: string, en: string) => t(l, zh, en);
-  const e = (c.expected ?? "").replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n");
-  const a = c.actual.replace(/\r\n/g, "\n").replace(/\n$/, "").split("\n");
+  const T = tr(l);
+  const e = lines(c.expected ?? "");
+  const a = lines(c.actual);
   const n = Math.min(Math.max(e.length, a.length), 24);
   let rows = "";
   for (let i = 0; i < n; i++) {
@@ -83,16 +90,8 @@ function renderDiff(c: SampleCaseResult, lv: HintLevel, nextHint: HintLevel, l: 
   );
 }
 
-const delBtn = (orig: boolean, pk: string, id: string, l: UiLang): string => {
-  if (orig) return "";
-  const lbl = E(t(l, "删除自建样例", "Delete custom sample"));
-  return h(
-    "button",
-    "bi",
-    icon("del"),
-    `type="button" title="${lbl}" aria-label="${lbl}" data-action="sample-delete" data-problem-key="${E(pk)}" data-sample-id="${E(id)}"`
-  );
-};
+const delBtn = (orig: boolean, pk: string, id: string, l: UiLang): string =>
+  orig ? "" : rbtn("bi", icon("del"), `${al(t(l, "删除自建样例", "Delete custom sample"))} data-action="sample-delete" data-problem-key="${E(pk)}" data-sample-id="${E(id)}"`);
 
 const caseRow = (orig: boolean, i: number, pk: string, id: string, l: UiLang, mid: string, extra = ""): string => {
   const title = orig ? t(l, `原题样例 #${i + 1}`, `Sample #${i + 1}`) : t(l, `自建样例 #${i + 1}`, `Custom #${i + 1}`);
@@ -116,7 +115,7 @@ function renderUnifiedSamples(
   l: UiLang,
   coachBusy: boolean
 ): string {
-  const T = (zh: string, en: string) => t(l, zh, en);
+  const T = tr(l);
   const caseMap = new Map<string, SampleCaseResult>((run?.cases ?? []).map((c) => [c.id, c]));
   let op = 0, ot = 0, cp = 0, ct = 0;
   for (const s of ss) {
@@ -179,26 +178,17 @@ function renderUnifiedSamples(
 }
 
 export function renderWorkspaceRankCard(st: WebviewState): string {
-  const { snapshot: snap } = st;
-  const l: UiLang = snap.flags.uiLanguage;
+  const [snap, l, T] = ctx(st);
   const rk: StylishRankState | undefined = snap.flags.stylishRankEnabled ? snap.stylishRank : undefined;
   if (!rk) return d("patch-slot", "", 'data-patch="rank-card"');
 
-  const T = (zh: string, en: string) => t(l, zh, en);
   const curIdx = rankIndex(rk.effectiveRank);
   const effectiveCapIdx = Math.min(rankIndex(rk.hintCeiling), rankIndex(rk.pasteCeiling), rankIndex(rk.gateCeiling));
   const pct = Math.max(0, Math.min(100, Math.round((rk.score / 1000) * 100)));
 
   const segs = RANK_ORDER.map((letter, idx) => {
-    const cls =
-      idx === curIdx
-        ? "rk-seg rk-seg-cur"
-        : idx < curIdx
-          ? "rk-seg rk-seg-done"
-          : idx > effectiveCapIdx
-            ? "rk-seg rk-seg-lock"
-            : "rk-seg";
-    return sp(cls, letter);
+    const s = idx === curIdx ? "cur" : idx < curIdx ? "done" : idx > effectiveCapIdx ? "lock" : "";
+    return sp(s ? `rk-seg rk-seg-${s}` : "rk-seg", letter);
   }).join("");
 
   const barSvg = `<svg class="rk-bar" viewBox="0 0 100 3" preserveAspectRatio="none" aria-hidden="true"><rect width="100" height="3" rx="1.5" class="rk-bar-bg"/><rect width="${pct}" height="3" rx="1.5" class="rk-bar-fg"/></svg>`;
@@ -229,9 +219,7 @@ export function renderWorkspaceRankCard(st: WebviewState): string {
 }
 
 export function renderWorkspaceProblemCard(st: WebviewState, p: ProblemDocument): string {
-  const { snapshot: snap } = st;
-  const l: UiLang = snap.flags.uiLanguage;
-  const T = (zh: string, en: string) => t(l, zh, en);
+  const [snap, l, T] = ctx(st);
   const [ct, cTone] = completenessLabel(p.completeness, l);
   const url = sanitizeExternalUrl(p.canonicalUrl);
   const expanded = Boolean(st.panels.stmtFull);
@@ -243,14 +231,13 @@ export function renderWorkspaceProblemCard(st: WebviewState, p: ProblemDocument)
     ioModeLabel(p.ioMode, l)
   ].filter(Boolean);
 
-  const origLbl = E(T("原题页", "Original"));
   const topRow = d(
     "r g1 anchor-top",
     h("span", "bg bg-a oj-chip", ojIconImg(p.source) + E(sourceLabel(p.source, l))) +
       h("h2", "pt pt-c f1", E(p.title), `title="${E(p.title)}"`) +
       btn(`${icon("split", 11)} ${T("分屏读题", "Split")}`, "problem-open-reader", "t", "sm") +
       (url
-        ? h("a", "b b-g b-xs lk-btn", icon("ext", 11), `href="${E(url)}" rel="noopener noreferrer" title="${origLbl}" aria-label="${origLbl}"`)
+        ? h("a", "b b-g b-xs lk-btn", icon("ext", 11), `href="${E(url)}" rel="noopener noreferrer" ${al(T("原题页", "Original"))}`)
         : "")
   );
 
@@ -289,9 +276,7 @@ export function renderWorkspaceProblemCard(st: WebviewState, p: ProblemDocument)
 }
 
 export function renderWorkspaceSamplesCard(st: WebviewState, p: ProblemDocument): string {
-  const { snapshot: snap } = st;
-  const l: UiLang = snap.flags.uiLanguage;
-  const T = (zh: string, en: string) => t(l, zh, en);
+  const [snap, l, T] = ctx(st);
   const run = snap.lastRun?.problemKey === p.problemKey ? snap.lastRun : undefined;
   const nextHint = Math.min(5, snap.hintLevel + 1) as HintLevel;
   const sampleOpen = Boolean(st.panels.sample);
@@ -332,24 +317,35 @@ export function renderWorkspaceSamplesCard(st: WebviewState, p: ProblemDocument)
 }
 
 export function renderWorkspaceSubmitCard(st: WebviewState, p: ProblemDocument): string {
-  const { snapshot: snap } = st;
-  const l: UiLang = snap.flags.uiLanguage;
-  const T = (zh: string, en: string) => t(l, zh, en);
-  const showCf = p.source === "codeforces";
+  const [snap, l, T] = ctx(st);
+  const showSync = ["codeforces", "leetcode-cn", "leetcode-global", "atcoder"].includes(p.source);
   const showRev = Boolean((snap.lastRun?.problemKey === p.problemKey && snap.lastRun.allPassed) || snap.stylishRank?.effectiveRank === "SSS");
+  const submitUrl = snap.activeSubmitUrl ? sanitizeExternalUrl(snap.activeSubmitUrl) : null;
   const vs: OfficialVerdictStatus[] = ["AC", "WA", "TLE", "RE"];
 
   const card = sec(
     T("提交与回填", "Submit & Verdict"),
     d(
       "r rw g1",
-      btn(`${icon("copy", 11)} ${T("复制代码并打开提交页", "Copy Code & Submit")}`, "submit-copy-open", "s", "sm") +
-        (showCf ? btn(`${icon("ref", 11)} ${T("同步 CF 结果", "Sync CF")}`, "submit-sync-cf", "s", "sm") : "") +
+      btn(`${icon("copy", 11)} ${T("复制并打开提交页", "Copy & Open")}`, "submit-copy-open", "s", "sm") +
+        btn(`${icon("copy", 11)} ${T("仅复制代码", "Copy Code")}`, "submit-copy-only", "g", "sm") +
+        (submitUrl ? btn(`${icon("ext", 11)} ${T("复制链接", "Copy URL")}`, "copy-text", "g", "sm", `data-copy="${E(submitUrl)}" data-copy-label="${E(T("官方提交页链接", "Submit URL"))}"`) : "") +
+        (showSync
+          ? btn(
+              `${icon("ref", 11)} ${snap.verdictSyncing ? T("同步中...", "Syncing...") : T("同步官方结果", "Sync OJ")}`,
+              "submit-sync-verdict",
+              "s",
+              "sm",
+              "",
+              Boolean(snap.verdictSyncing)
+            )
+          : "") +
         (showRev ? btn(`${icon("bulb", 11)} ${T("面试复杂度复盘", "Complexity Review")}`, "coach-review-open", "t", "sm", "", snap.coachBusy) : "")
     ) +
+      d("fn", E(T("未在默认浏览器登录？点「复制链接」到常用浏览器，再「仅复制代码」粘贴。", "Not signed in? Copy URL for your browser, then Copy Code."))) +
       d(
         "vb",
-        sp("lx", T("官方结果", "Official")) +
+        sp("lx", T("网页提交后记录结果", "Record OJ Result")) +
           d("r g1", vs.map((v) => btn(v, "submit-verdict", v === "AC" ? "ok" : "s", "sm", `data-verdict="${v}"`)).join(""))
       )
   );
@@ -357,26 +353,16 @@ export function renderWorkspaceSubmitCard(st: WebviewState, p: ProblemDocument):
 }
 
 export function renderWorkspaceView(st: WebviewState): string {
-  const { snapshot: snap } = st;
-  const l: UiLang = snap.flags.uiLanguage;
-  const T = (zh: string, en: string) => t(l, zh, en);
+  const [snap, l, T] = ctx(st);
   const p = snap.activeProblem;
   if (!p) {
-    return h(
-      "section",
-      "card",
-      d(
-        "c g2",
-        workbenchArtImg() +
-          h("h2", "pt", E(T("尚未选择题目", "No Active Problem"))) +
-          d("mu", E(T("在「选题」导入链接/题号，或加载 3 题离线热身包（无需 AI）。", "Import in Browse or load the 3-problem offline warmup (no AI needed)."))) +
-          d(
-            "r rw g1 mt1",
-            btn(`${icon("book")} ${T("前往选题", "Browse Problems")}`, "switch-tab", "p", "sm", 'data-tab="problems"') +
-              btn(`${icon("play")} ${T("加载 3 题热身包", "Load 3-Problem Warmup")}`, "starter-load-warmup") +
-              btn(`${icon("book")} ${T("新手教程", "Walkthrough")}`, "starter-open-walkthrough", "g", "sm")
-          )
-      )
+    return emptyCard(
+      workbenchArtImg(),
+      T("尚未选择题目", "No Active Problem"),
+      T("在「选题」导题，或加载 3 题离线热身包。", "Import in Bank or load 3-problem warmup."),
+      btn(`${icon("book")} ${T("前往选题", "Browse Problems")}`, "switch-tab", "p", "sm", 'data-tab="problems"') +
+        btn(`${icon("play")} ${T("加载 3 题热身包", "Load 3-Problem Warmup")}`, "starter-load-warmup") +
+        btn(`${icon("book")} ${T("新手教程", "Walkthrough")}`, "starter-open-walkthrough", "g", "sm")
     );
   }
 

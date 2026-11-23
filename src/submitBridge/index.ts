@@ -23,3 +23,31 @@ export {
   type CodeforcesPollResult,
   type CodeforcesSubmissionTarget
 } from "./codeforcesPublicPoller";
+
+export {
+  PUBLIC_VERDICT_PLATFORMS,
+  extractAtCoderTask,
+  extractLeetCodeSlug,
+  fetchLatestAtCoderVerdict,
+  fetchLatestLeetCodeCnVerdict,
+  fetchLatestLeetCodeGlobalVerdict,
+  fetchLatestPublicVerdict,
+  normalizeAtCoderResult,
+  normalizeLeetCodeCnStatus,
+  normalizeLeetCodeGlobalStatus,
+  pollPublicOfficialVerdict,
+  resolveHandleForPlatform,
+  supportsPublicVerdictSync,
+  type OjPublicHandles,
+  type PublicVerdictFetchDependencies,
+  type PublicVerdictFetchOptions,
+  type PublicVerdictFetchResult,
+  type PublicVerdictPollOptions,
+  type PublicVerdictPollResult
+} from "./publicVerdictPollers";
+
+export {
+  COMPANION_USERSCRIPT_FILENAME,
+  buildCompanionUserscript,
+  type CompanionUserscriptConfig
+} from "./companionUserscript";

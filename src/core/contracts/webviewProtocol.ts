@@ -48,6 +48,12 @@ export interface SidebarAiConfigView {
     hasApiKey: boolean;
   };
   codeforcesHandle: string;
+  ojHandles?: {
+    codeforces: string;
+    leetcodeCn: string;
+    leetcodeGlobal: string;
+    atcoder: string;
+  };
 }
 
 export interface SidebarBridgeStatus {
@@ -63,20 +69,31 @@ export interface SidebarRecentEvent {
   timestamp: string;
 }
 
+export interface SidebarSearchResults {
+  keyword: string;
+  sources: ProblemSourceId[];
+  items: ProblemDocument[];
+  failedSources: ProblemSourceId[];
+}
+
 export interface SidebarStateSnapshot {
   flags: FeatureFlags;
   visualPresetApplied: boolean;
   audioMuted: boolean;
   activeProblem?: ProblemDocument;
+  activeSubmitUrl?: string;
   activeFilePath?: string;
   activeLanguage?: SupportedLanguage;
   problems: ProblemDocument[];
+  searchBusy?: boolean;
+  searchResults?: SidebarSearchResults;
   lastRun?: LocalRunResult;
   hintLevel: HintLevel;
   giveUpUnlocked?: boolean;
   coachHistory: CoachResponsePayload[];
   coachBusy: boolean;
   runnerBusy: boolean;
+  verdictSyncing?: boolean;
   learnerSnapshot: LearnerSnapshotV2;
   userOverrides: UserOverridesV2;
   recommendations: RecommendationItem[];
@@ -152,7 +169,8 @@ export type WebviewToHostMessage =
     }
   | { type: "problem/importClipboard"; payload: { text: string; mergeWithActive?: boolean } }
   | { type: "problem/loadSheet"; payload: { sheetId: string } }
-  | { type: "problem/search"; payload: { source: ProblemSourceId; keyword: string } }
+  | { type: "problem/search"; payload: { source?: ProblemSourceId; sources?: ProblemSourceId[]; keyword: string } }
+  | { type: "problem/clearSearch" }
   | { type: "problem/addSample"; payload: { problemKey: string; input: string; expectedOutput: string } }
   | { type: "problem/deleteSample"; payload: { problemKey: string; sampleId: string } }
   | { type: "problem/openReader"; payload?: { problemKey?: string } }
@@ -160,8 +178,11 @@ export type WebviewToHostMessage =
   | { type: "runner/runSamples" }
   | { type: "runner/checkToolchains" }
   | { type: "submit/copyAndOpen" }
+  | { type: "submit/copyOnly" }
   | { type: "submit/reportVerdict"; payload: { verdict: OfficialVerdictStatus } }
+  | { type: "submit/syncVerdict" }
   | { type: "submit/syncCodeforces" }
+  | { type: "bridge/copyUserscript" }
   | {
       type: "coach/request";
       payload: {
@@ -182,6 +203,12 @@ export type WebviewToHostMessage =
         chat: { provider: AiProviderKind; baseUrl: string; model: string; apiKey?: string };
         fim: { provider: AiProviderKind; baseUrl: string; model: string; apiKey?: string };
         codeforcesHandle?: string;
+        ojHandles?: {
+          codeforces?: string;
+          leetcodeCn?: string;
+          leetcodeGlobal?: string;
+          atcoder?: string;
+        };
       };
     }
   | { type: "ai/runHealthCheck" }

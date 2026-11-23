@@ -354,7 +354,7 @@ describe("5 sidebar views rendering, feature gating, and XSS safety", () => {
     expect(html).toContain("ac-diff-del");
     expect(html).toContain("ac-diff-add");
     expect(html).toContain('data-action="submit-verdict" data-verdict="AC"');
-    expect(html).toContain('data-action="submit-sync-cf"');
+    expect(html).toContain('data-action="submit-sync-verdict"');
     expect(html).not.toContain("<script>alert");
     expect(html).not.toContain("<script>bad()");
     expect(html).toContain("&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;");
@@ -1375,17 +1375,18 @@ describe("Round 1 UX, patching, draft lifecycle, and a11y fixes", () => {
     expect(wsNoAssets).toContain('<div class="rk-emblem mo">S</div>');
     expect(readerEmptyNoAssets).toContain("rd-empty-ic");
 
-    // Problems view: import mode select includes nowcoder, search mode select omits non-searchable nowcoder
+    // Problems view: import mode select includes nowcoder, search mode exposes 5 selectable OJ chips (excluding nowcoder)
     const probSearchNoAssets = renderProblemsView({
       ...createInitialWebviewState(snap),
       drafts: { "sub.pmode": "qry" }
     });
     const importSel = probNoAssets.match(/<select[^>]*data-draft="isrc"[^>]*>[\s\S]*?<\/select>/)?.[0] ?? "";
-    const searchSel = probSearchNoAssets.match(/<select[^>]*data-draft="ssrc"[^>]*>[\s\S]*?<\/select>/)?.[0] ?? "";
     expect(importSel).toContain('value="nowcoder"');
-    expect(searchSel).not.toContain('value="nowcoder"');
-    expect(searchSel).toContain('value="leetcode-cn"');
-    expect(searchSel).toContain('value="codeforces"');
+    for (const id of ["leetcode-cn", "leetcode-global", "luogu", "codeforces", "atcoder"]) {
+      expect(probSearchNoAssets).toContain(`data-action="search-toggle-src" data-src="${id}"`);
+    }
+    expect(probSearchNoAssets).not.toContain('data-src="nowcoder"');
+    expect(probSearchNoAssets).toContain('data-action="search-toggle-all"');
 
     // 2. With <meta name="ac-assets"> in document: renders WebP crests, vignettes, and SVG OJ icons
     vi.stubGlobal("document", {
@@ -1528,5 +1529,247 @@ describe("Round 1 UX, patching, draft lifecycle, and a11y fixes", () => {
       toast: { level: "info", text: "Recorded AC", undoEventId: "ev-manual-9" }
     });
     expect(undoShell).toContain('data-action="learner-void-id" data-event-id="ev-manual-9"');
+  });
+
+  it("renders fool-proof Submit fallback controls (Copy Code Only, Copy URL, non-default browser note) and multi-platform Search chips & inline hits", () => {
+    const countPrimary = (html: string) => (html.match(/\bb-p\b/g) ?? []).length;
+    const snap = makeRichSnapshot();
+    snap.activeSubmitUrl = "https://codeforces.com/contest/1900/submit?problemIndex=A";
+    const wsHtml = renderWorkspaceView(createInitialWebviewState(snap));
+    expect(countPrimary(wsHtml)).toBe(1);
+    expect(wsHtml).toContain('data-action="submit-copy-open"');
+    expect(wsHtml).toContain('data-action="submit-copy-only"');
+    expect(wsHtml).toContain('data-action="copy-text" data-copy="https://codeforces.com/contest/1900/submit?problemIndex=A"');
+    expect(wsHtml).toContain("未在默认浏览器登录");
+    expect(wsHtml).toContain("网页提交后记录结果");
+
+    const searchSnap: SidebarStateSnapshot = {
+      ...snap,
+      searchResults: {
+        keyword: "two sum",
+        sources: ["leetcode-cn", "luogu", "atcoder"],
+        items: [
+          {
+            schemaVersion: "problem-doc/v2",
+            problemKey: "lc-cn:two-sum",
+            source: "leetcode-cn",
+            sourceId: "#1",
+            title: "两数之和",
+            locale: "zh-CN",
+            completeness: "metadata_only",
+            ioMode: "function",
+            samples: [],
+            rawTags: [],
+            provenance: { ingestChannel: "builtin-adapter", fetchedAt: "2026-11-23T00:00:00Z" }
+          }
+        ],
+        failedSources: ["atcoder"]
+      }
+    };
+    const searchHtml = renderProblemsView({
+      ...createInitialWebviewState(searchSnap),
+      drafts: { "sub.pmode": "qry", ssrcs: "leetcode-cn,luogu,atcoder", qry: "two sum" }
+    });
+    expect(countPrimary(searchHtml)).toBe(1);
+    expect(searchHtml).toContain("两数之和");
+    expect(searchHtml).toContain("暂不可用：AtCoder");
+    expect(searchHtml).toContain('data-action="problem-clear-search"');
+
+    // Live DOM: search chips toggle & never drop below 1, search-toggle-all toggles 5 <-> default 3, problem-search dispatches sources[]
+    class FakeEl {
+      dataset: Record<string, string> = {};
+      attrs = new Map<string, string>();
+      getAttribute(k: string) { return this.attrs.get(k) ?? null; }
+      closest(sel: string) { return sel === "[data-action]" && this.dataset.action ? this : null; }
+      focus() { /* noop */ }
+    }
+    class FakeInput extends FakeEl { value = ""; }
+    vi.stubGlobal("Element", FakeEl);
+    vi.stubGlobal("HTMLInputElement", FakeInput);
+    vi.stubGlobal("HTMLTextAreaElement", FakeInput);
+    vi.stubGlobal("HTMLSelectElement", FakeEl);
+    vi.stubGlobal("document", { activeElement: null, readyState: "complete", addEventListener: vi.fn() });
+    vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+
+    try {
+      const qryInput = new FakeInput();
+      qryInput.attrs.set("data-draft", "qry");
+      const listeners = new Map<string, EventListener>();
+      const root = {
+        innerHTML: "",
+        addEventListener: (ev: string, fn: EventListener) => listeners.set(ev, fn),
+        removeEventListener: (ev: string) => listeners.delete(ev),
+        querySelector: (sel: string) => (sel === '[data-draft="qry"]' ? qryInput : null),
+        querySelectorAll: () => []
+      } as unknown as HTMLElement;
+      const posted: unknown[] = [];
+      const mounted = mountWebview(root, { postMessage: (m) => posted.push(m) });
+
+      // Default is leetcode-cn,luogu,codeforces -> remove luogu & codeforces, attempting to remove last leetcode-cn keeps it!
+      const toggle = (src: string) => {
+        const el = new FakeEl();
+        el.dataset.action = "search-toggle-src";
+        el.dataset.src = src;
+        listeners.get("click")?.({ target: el } as unknown as Event);
+      };
+      toggle("luogu");
+      toggle("codeforces");
+      toggle("leetcode-cn");
+      expect(mounted.store.getState().drafts.ssrcs).toBe("leetcode-cn");
+
+      // Select all 5, then search
+      const allBtn = new FakeEl();
+      allBtn.dataset.action = "search-toggle-all";
+      listeners.get("click")?.({ target: allBtn } as unknown as Event);
+      expect(mounted.store.getState().drafts.ssrcs?.split(",")).toHaveLength(5);
+
+      qryInput.value = "binary search";
+      listeners.get("input")?.({ target: qryInput } as unknown as Event);
+      const searchBtn = new FakeEl();
+      searchBtn.dataset.action = "problem-search";
+      listeners.get("click")?.({ target: searchBtn } as unknown as Event);
+      expect(posted[posted.length - 1]).toEqual({
+        type: "problem/search",
+        payload: {
+          sources: ["leetcode-cn", "leetcode-global", "luogu", "codeforces", "atcoder"],
+          keyword: "binary search"
+        }
+      });
+
+      // Clicking All again toggles cleanly back to default 3
+      listeners.get("click")?.({ target: allBtn } as unknown as Event);
+      expect(mounted.store.getState().drafts.ssrcs).toBe("leetcode-cn,luogu,codeforces");
+      mounted.dispose();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("renders multi-OJ Sync OJ button gating, 4 OJ handle inputs, userscript button, and dispatches verdict/bridge actions", () => {
+    const base = makeRichSnapshot();
+
+    for (const src of ["codeforces", "leetcode-cn", "leetcode-global", "atcoder"] as const) {
+      const html = renderWorkspaceView(
+        createInitialWebviewState({
+          ...base,
+          activeProblem: { ...base.activeProblem!, source: src, sourceId: src === "codeforces" ? "1900A" : "two-sum" }
+        })
+      );
+      expect(html).toContain('data-action="submit-sync-verdict"');
+      expect(html).toContain("同步官方结果");
+    }
+
+    for (const src of ["luogu", "nowcoder"] as const) {
+      const html = renderWorkspaceView(
+        createInitialWebviewState({
+          ...base,
+          activeProblem: { ...base.activeProblem!, source: src, sourceId: src === "luogu" ? "P1001" : "acm-100" }
+        })
+      );
+      expect(html).not.toContain('data-action="submit-sync-verdict"');
+    }
+
+    const busyHtml = renderWorkspaceView(
+      createInitialWebviewState({
+        ...base,
+        verdictSyncing: true,
+        activeProblem: { ...base.activeProblem!, source: "leetcode-cn", sourceId: "two-sum" }
+      })
+    );
+    expect(busyHtml).toContain("同步中...");
+    expect(busyHtml).toContain("disabled");
+
+    const envHtml = renderSettingsView(
+      createInitialWebviewState({
+        ...base,
+        aiConfig: {
+          ...base.aiConfig,
+          ojHandles: {
+            codeforces: "tourist",
+            leetcodeCn: "endlesscheng",
+            leetcodeGlobal: "lee215",
+            atcoder: "chokudai"
+          }
+        }
+      })
+    );
+    expect(envHtml).toContain('data-draft="ai.codeforcesHandle" value="tourist"');
+    expect(envHtml).toContain('data-draft="ai.oj.leetcodeCn" value="endlesscheng"');
+    expect(envHtml).toContain('data-draft="ai.oj.leetcodeGlobal" value="lee215"');
+    expect(envHtml).toContain('data-draft="ai.oj.atcoder" value="chokudai"');
+
+    const probHtml = renderProblemsView(createInitialWebviewState(base));
+    expect(probHtml).toContain('data-action="bridge-copy-userscript"');
+
+    class FakeEl {
+      dataset: Record<string, string> = {};
+      attrs = new Map<string, string>();
+      getAttribute(k: string) { return this.attrs.get(k) ?? null; }
+      closest(sel: string) { return sel === "[data-action]" && this.dataset.action ? this : null; }
+      focus() { /* noop */ }
+    }
+    class FakeInput extends FakeEl { value = ""; }
+    vi.stubGlobal("Element", FakeEl);
+    vi.stubGlobal("HTMLInputElement", FakeInput);
+    vi.stubGlobal("HTMLTextAreaElement", FakeInput);
+    vi.stubGlobal("HTMLSelectElement", FakeEl);
+    vi.stubGlobal("document", { activeElement: null, readyState: "complete", addEventListener: vi.fn() });
+    vi.stubGlobal("window", { addEventListener: vi.fn(), removeEventListener: vi.fn() });
+
+    try {
+      const listeners = new Map<string, EventListener>();
+      const root = {
+        innerHTML: "",
+        addEventListener: (ev: string, fn: EventListener) => listeners.set(ev, fn),
+        removeEventListener: (ev: string) => listeners.delete(ev),
+        querySelector: () => null,
+        querySelectorAll: () => []
+      } as unknown as HTMLElement;
+      const posted: unknown[] = [];
+      const mounted = mountWebview(root, { postMessage: (m) => posted.push(m) });
+
+      const syncBtn = new FakeEl();
+      syncBtn.dataset.action = "submit-sync-verdict";
+      listeners.get("click")?.({ target: syncBtn } as unknown as Event);
+      expect(posted.at(-1)).toEqual({ type: "submit/syncVerdict" });
+
+      const copyScriptBtn = new FakeEl();
+      copyScriptBtn.dataset.action = "bridge-copy-userscript";
+      listeners.get("click")?.({ target: copyScriptBtn } as unknown as Event);
+      expect(posted.at(-1)).toEqual({ type: "bridge/copyUserscript" });
+
+      const cnInput = new FakeInput();
+      cnInput.attrs.set("data-draft", "ai.oj.leetcodeCn");
+      cnInput.value = "endlesscheng";
+      listeners.get("input")?.({ target: cnInput } as unknown as Event);
+
+      const glInput = new FakeInput();
+      glInput.attrs.set("data-draft", "ai.oj.leetcodeGlobal");
+      glInput.value = "lee215";
+      listeners.get("input")?.({ target: glInput } as unknown as Event);
+
+      const acInput = new FakeInput();
+      acInput.attrs.set("data-draft", "ai.oj.atcoder");
+      acInput.value = "chokudai";
+      listeners.get("input")?.({ target: acInput } as unknown as Event);
+
+      const saveBtn = new FakeEl();
+      saveBtn.dataset.action = "ai-save-config";
+      listeners.get("click")?.({ target: saveBtn } as unknown as Event);
+      expect(posted.at(-1)).toMatchObject({
+        type: "ai/saveConfig",
+        payload: {
+          ojHandles: {
+            leetcodeCn: "endlesscheng",
+            leetcodeGlobal: "lee215",
+            atcoder: "chokudai"
+          }
+        }
+      });
+
+      mounted.dispose();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

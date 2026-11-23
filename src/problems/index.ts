@@ -78,9 +78,14 @@ export {
 export {
   LocalhostBridge,
   isAllowedLoopbackHost,
+  isAllowedVerdictCorsOrigin,
+  normalizeBridgeVerdictPayload,
+  normalizeBridgeVerdictText,
   normalizeCompetitiveCompanionPayload,
+  type BridgeVerdictPayload,
   type CompetitiveCompanionPayload,
-  type LocalhostBridgeOptions
+  type LocalhostBridgeOptions,
+  type NormalizedBridgeVerdict
 } from "./bridge/localhostBridge";
 
 export {

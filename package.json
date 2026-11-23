@@ -365,6 +365,26 @@
           "default": "",
           "description": "Optional public Codeforces handle for zero-login official verdict polling."
         },
+        "algoCoach.oj.leetcodeCnHandle": {
+          "type": "string",
+          "default": "",
+          "description": "Optional public LeetCode CN userSlug for zero-login official verdict polling."
+        },
+        "algoCoach.oj.leetcodeGlobalHandle": {
+          "type": "string",
+          "default": "",
+          "description": "Optional public LeetCode Global username for zero-login official verdict polling."
+        },
+        "algoCoach.oj.atcoderHandle": {
+          "type": "string",
+          "default": "",
+          "description": "Optional public AtCoder username for zero-login official verdict polling via Kenkoooo API."
+        },
+        "algoCoach.oj.autoPollVerdict": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically poll public OJ verdict APIs for up to 90s after clicking Copy & Open on supported platforms when a public handle is configured."
+        },
         "algoCoach.runner.timeoutMs": {
           "type": "number",
           "minimum": 500,

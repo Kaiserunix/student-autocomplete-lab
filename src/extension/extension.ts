@@ -105,6 +105,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const configAdapter = new VscodeWorkspaceConfigAdapter();
   const mementoAdapter = new VscodeMementoAdapter(context.globalState);
   const secretKeyStore = new SecretKeyStore(context.secrets);
+  const bridgeVerdictToken = await secretKeyStore.ensureBridgeVerdictToken();
 
   // Domain services & persistent stores
   const problemRepository = new ProblemRepository({
@@ -259,9 +260,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       const preferredPort = configAdapter.get<number>(AI_CONFIG_KEYS.bridgePort, 27121) ?? 27121;
       const bridge = new LocalhostBridge({
         preferredPort,
+        verdictToken: bridgeVerdictToken,
         onProblem: async (doc) => {
           await sidebarController.handleBridgeProblem(doc);
           knownProblemKeys = (await problemRepository.listCachedProblems()).map((p) => p.problemKey);
+        },
+        onVerdict: async (verdict) => {
+          await sidebarController.handleBridgeVerdict(verdict);
         }
       });
 
