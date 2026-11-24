@@ -1,157 +1,170 @@
 <div align="center">
 
-# Algo Coach (`algo-coach`)
+# Algo Coach
 
-**不替你交卷的 VS Code 多平台算法私教 · Native 6-OJ · Anti-Spoiler · FSRS**
+**不替你交卷的 VS Code 算法刷题私教 · 支持 6 大刷题平台 · 防剧透 · 本地跑样例**
 
 **简体中文** · [English](README.en.md)
 
 [![Version](https://img.shields.io/badge/version-v0.2.1-0078d4?style=flat-square)](package.json)
 [![VS Code](https://img.shields.io/badge/VS%20Code-%5E1.93.0-2c2c32?style=flat-square)](package.json)
-[![Tests](https://img.shields.io/badge/vitest-35%20files%20%C2%B7%20242%20passed-2ea043?style=flat-square)](.github/workflows/ci.yml)
-[![Bundle](https://img.shields.io/badge/webview-80.0%20KB%20(zero--WASM)-3794ff?style=flat-square)](test/webview/antiGptSlop.test.ts)
+[![OJ Support](https://img.shields.io/badge/OJ-6%20Platforms-2ea043?style=flat-square)](#支持哪-6-大刷题平台)
+[![Languages](https://img.shields.io/badge/Langs-C%2B%2B%20%7C%20Python%20%7C%20C%20%7C%20Rust%20%7C%20Java-3794ff?style=flat-square)](#3-分钟安装上手)
 [![License](https://img.shields.io/badge/license-MIT-6e7681?style=flat-square)](LICENSE)
 
-[为什么不剧透](#为什么不直接给完整答案架构级防剧透隔离) · [界面与空间动线](#4-空间架构与分屏读题器) · [6-OJ 能力矩阵](#原生-6-oj-抓题与提交流程完全去-mcp) · [30 秒快速开始](#快速开始与本地验证) · [双模型配置](#deepseek--ollama-双模型配置)
+[3 分钟安装上手](#3-分钟安装上手) · [为什么不剧透](#为什么不直接给完整答案) · [支持哪 6 大平台](#支持哪-6-大刷题平台) · [怎么配置 AI（可选）](#想用-ai-教练怎么配置可选) · [常见问题](#新手常见问题)
 
 </div>
 
 ---
 
-**用 Copilot 刷算法题，一按 `Tab` 整道题全剧透了？切浏览器导题、配环境、手工测边界、来回抄评测结果太繁琐？**
+**写算法题时，是不是经常遇到这些烦恼？**
+- 开着 AI 补全刷题，一按 `Tab` 整道题的核心思路和代码全剧透了，刷完还是不会写；
+- 每次做题要在浏览器和编辑器之间来回切：复制题面、手动建文件、手敲输入输出测样例、交题前还得删掉本地调试代码；
+- 刷完就忘，过两周再遇到同类型题还是卡壳。
 
-Algo Coach 把 **「盲视题面的 1–3 行防剧透短补全」**、**「L1–L5 苏格拉底阶梯教练」**、**「原生 6-OJ 抓题 + 多平台聚合搜题 + 分屏读题器」** 与 **「5 语言本地跑样例 + 官方结果同步 + FSRS 遗忘复习」** 融为一套本地优先的 VS Code 工作流——省掉重复模板手敲与切页摩擦，把真正的算法思考留给你自己。
+**Algo Coach** 把**找题、分屏读题、本地跑样例、防剧透补全、阶梯式教练提示、一键提交与错题遗忘复习**全部整合在 VS Code 里——帮你省掉重复繁琐的操作，把真正能让你变强的思考留给你自己。
 
-![Algo Coach Hero Showcase](docs/assets/carbon-hero.png)
-
----
-
-## 为什么不直接给完整答案？（架构级防剧透隔离）
-
-“看懂一份题解”与“自己独立 AC”之间隔着关键几次推演。Algo Coach 在代码架构层对 **短补全通道** 与 **教学通道** 实施物理隔离，并由 [arch boundary check](scripts/checkArchBoundaries.mjs) 与隔离单元测试持续守卫：
-
-![Anti-Spoiler 3-Zone Lexical Engine](docs/assets/carbon-anti-spoiler.png)
-
-| 通道 | ✅ 可见上下文 | 🚫 架构级严格隔离（永不可见） |
-| :--- | :--- | :--- |
-| **短补全（Ghost Text / FIM，1–3 行）** | 光标附近源码、语言标识、个人 Clean Code 习惯 | **题面原文、参考题解、错题本、掌握度、教练对话与自然语言注释** |
-| **L1–L5 教练（侧栏主动触发）** | 当前题面、代码摘要、历史提示层级与 OLM 画像 | 不跳过阶梯直接吐完整题解（仅二次确认「放弃并查看讲解」后解锁） |
-
-- **`<20KB` 零 WASM 词法三区引擎** (`src/core/autocomplete/`)：
-  - **Green Zone**（头文件、快读、STL API）：`450–600ms` 触发，1–3 行机械补全。
-  - **Neutral Zone**（常规声明与输入输出）：`900–1200ms` 触发，严格限 1 行。
-  - **Red Zone**（注释后首行、核心函数体、`if`/`while`/`for` 条件槽、`dp`/`mid`/`ans` 赋值右值）：**自动静默**，仅允许显式 `Alt+\` 触发。
-- **防盲按护栏**：支持 `Tab` 逐词接受（`strictWordAccept`）、主动回忆微摩擦（`multi-choice` / `lead-and-reveal`）及 WA 后 6 秒冷却 / 连按熔断。
+![Algo Coach 实机预览](docs/assets/carbon-hero.png)
 
 ---
 
-## 4+⚙ 空间架构与分屏读题器
+## 3 分钟安装上手
 
-采用高内聚 `4 主 Tab + 右上角 ⚙` 空间结构（`做题 | 教练 | 选题 | 成长` + `⚙`），100% 绑定 VS Code 原生 `--vscode-*` 主题令牌（零硬编码色值、零渐变、零 Unicode Emoji），`260px` 极窄侧栏实测零截断：
+> 前置要求：已安装 [VS Code](https://code.visualstudio.com/)（`1.93+`）与 [Node.js](https://nodejs.org/)（`20+`）。
 
-![Algo Coach 4+Gear Sidebar Showcase](docs/assets/carbon-ui-tour.png)
+![快速安装命令](docs/assets/carbon-quickstart.png)
 
-| 视图 | 核心高频动线与设计细节 |
-| :--- | :--- |
-| **做题 (`Solve`)** | 顶部 `76px` 紧凑题面锚点（默认折叠长题面，一键展开或开启宽屏 **分屏读题器**），**本地样例**上提至首屏；WA Diff 底部直连 `手推这组错例`，全 AC 直连 `面试复杂度复盘`；提交卡同时提供 **仅复制代码** / **复制链接** 防呆回退（未在默认浏览器登录时免折腾）、**4 平台免登录官方结果同步（含提交后 90s 后台轮询）** 与手动回填（Toast **1 键撤销**）。 |
-| **教练 (`Coach`)** | 题号上下文条 + 离线未配 AI 时展示一键跳转引导；L1–L5 确定性阶梯 + 30 秒 Pattern Mapper + 错例干跑；偏好与语气折叠收敛为抽屉；每条回复附带透明 **上下文审计回执** 与错因屏蔽按钮。 |
-| **选题 (`Bank`)** | 顶部融合 **导题 / 搜题 Omnibar**（支持 **5 平台芯片多选 + 全选 + 并发轮询聚合** 与单源异常独立降级提示）与 `127.0.0.1:27121` 桥接在线状态灯；下设二级 Tab：**已存** / **今日计划**（FSRS 到期复习 + 0 Token 三桶去重推荐）/ **题单**（Hot 100 · Blind 75 · NeetCode 150 · 3 题离线热身包）；抽屉内支持 **1 键复制 6 平台油猴回传脚本**。 |
-| **成长 (`Stats`)** | 纯粹 3 卡分析（7 天轨迹 KPI / 知识点掌握度 / 活跃盲区与近期错题）+ 最近 5 条评测 **1 键作废并重算画像**。 |
-| **⚙ 设置** | 一键 `返回` 上一视图，内置 **模型与环境**（DeepSeek / Ollama 免密本地预设 + **4 平台公开 OJ 用户名** + 3 步健康自检 + Toolchain Doctor）与 **防剧透与体验**（训练开关 + 补全编码习惯 + Web Audio 音效）。 |
-
-- **宽屏分屏读题器 (`src/extension/problemReaderPanel.ts`)**：编辑器右侧无边框原生画布，内置 `<12KB` 零依赖 Markdown + LaTeX 公式排版（`markdownMath.ts`），支持样例一键复制与 `Alt` 提示联动。
-
----
-
-## 原生 6-OJ 抓题与提交流程（完全去 MCP）
-
-无需安装外部 MCP Server 或 Python CLI 适配器，所有 6 大平台均原生直读题面与样例，保留完整超时控制与反爬挑战检测：
-
-| 平台 | 原生抓题与搜题 | 快捷输入格式 | 运行、提交与官方结果回传 |
-| :--- | :--- | :--- | :--- |
-| **力扣中国 (`leetcode.cn`)** | ✅ Guest GraphQL 完整题面、函数签名 + 关键词搜题 + 精选路线 | `#1`、`#146`、`lc#1`、`力扣1`、`LCR 007`、slug、URL | 函数 Harness 跑样例 + **免登录 `recentSubmissions` 同步（含 90s 后台轮询）** + 可选油猴脚本 |
-| **LeetCode Global** | ✅ Guest GraphQL 零登录完整题面、函数签名 + 关键词搜题 | `lc-global:1`、slug、URL | 函数 Harness 跑样例 + **免登录 `recentSubmissionList` 同步（含 90s 后台轮询）** + 可选油猴脚本 |
-| **Codeforces** | ✅ 原生抓题完整题面与样例 + `problemset.problems` 公开搜题 | `1900A`、`CF1900A`、URL | Stdio 跑样例 + **免登录 `user.status` 同步（含 90s 后台轮询）** + 可选油猴脚本 |
-| **AtCoder** | ✅ 原生任务页题面与样例 + `kenkoooo` 公开题库搜题 | `abc350_c`、URL | Stdio 跑样例 + **免登录 `kenkoooo v3` 同步（含 90s 后台轮询）** + 可选油猴脚本 |
-| **洛谷 (`luogu.com.cn`)** | ✅ Lentille 结构化完整题面、LaTeX 与多组样例 + 搜题 | `P1001`、`P1873`、`B2001`、URL | Stdio 跑样例 + **6 平台油猴脚本实时回传** 或 手动 1 键回填（支持撤销） |
-| **牛客 (`nowcoder.com`)** | ✅ 原生解析题面、公式图片自动转 LaTeX 与样例 | 题目 URL / `acm-<id>` | Stdio 跑样例 + **6 平台油猴脚本实时回传** 或 手动 1 键回填（支持撤销） |
-
-> **两种官方结果自动回传路径（零 Cookie / 零密码 / 零绕过人机验证）**：
-> - **方案 A（默认，免登录公开同步）**：在 `⚙ 设置` 填入公开用户名（Codeforces / 力扣中国 / LeetCode 国际 / AtCoder），点击「复制并打开提交页」后自动在后台最多轮询 90 秒（也可随时点击「同步官方结果」手动拉取）。
-> - **方案 B（可选，全 6 平台油猴实时回传）**：在 `选题 → 粘贴题面 / 插件同步` 一键复制已注入本机端口与随机令牌（`x-algo-coach-token`，持久化于 `SecretStorage`）的 Tampermonkey 脚本 [algo-coach-verdict-bridge.user.js](resources/companion/algo-coach-verdict-bridge.user.js)；交题后由你在自己已登录的浏览器标签页完成官网人机验证，脚本仅读取页面可见判题结果并回传至本机 `LocalhostBridge` 受严格 `Origin` 白名单保护的 `POST /verdict`。
-> - **可靠兜底**：继续兼容 `POST /` **Competitive Companion** 浏览器推题（`127.0.0.1:27121` 端口顺延 + DNS Rebinding 防护）与离线 Markdown / 剪贴板智能合并器。扩展绝不读取浏览器 Cookie，绝不绕过 CAPTCHA / Turnstile。
-
----
-
-## 本地 5 语言评测器 · FSRS · 可独立关闭的体验模块
-
-- **本地 5 语言评测器 (`src/runner/`)**：原生支持 **C++ / Python / C / Rust / Java**，同时支持 ACM/OI Stdio 与 LeetCode Function Harness（临时驱动保持源码零污染），配备 `sha256` 编译缓存、进程树 TLE 强杀、1 MiB OLE 截断与 **Toolchain Doctor**。
-- **双层学习档案 (`src/core/learner/`)**：单一事实源 `learningEvents.v2.jsonl`（幂等追加）+ `userOverrides.v2.json`（人类显式屏蔽、作废与习惯）；内置 **`ts-fsrs`** 调度遗忘曲线，推荐理由全确定性透明生成。
-- **三档模式预设 + 全可关闭模块 (`src/experience/`)**：`starter`（新手入门）/ `focus`（专注刷题·默认）/ `contest`（竞赛面试）。
-  - **新手教程包**：5 步原生 VS Code Walkthrough、3 道免 AI 离线热身题、可 100% 无损还原的彩虹括号与缩进线预设。
-  - **DMC Stylish Rank**：`D · Draft` → `SSS · Unblemished`，配套定制金属质感 WebP 徽章与 6 OJ 几何 SVG 徽标；手敲封顶 `B`、过原题样例破境 `A/S`、官方 AC 解锁 `SSS`。
-  - **程序化 Web Audio 机械键盘音效（默认全关）**：零外部音频资产，状态栏一键静音，失焦自动静音。
-
----
-
-## 快速开始与本地验证
-
-环境要求：VS Code `^1.93.0`、Node.js `>=20.0.0`。
-
-![Quick Start Verify](docs/assets/carbon-quickstart.png)
-
-```powershell
+```bash
 git clone https://github.com/Kaiserunix/student-autocomplete-lab.git
 cd student-autocomplete-lab
-npm ci
-npm run verify   # tsc --noEmit + 架构边界守卫 + 35 文件 242 项 Vitest 单测 + esbuild 打包
+npm ci && npm run build
+npx --yes @vscode/vsce package --no-dependencies
+code --install-extension algo-coach-0.2.1.vsix
 ```
 
-- 在 VS Code 打开仓库根目录，按 `F5` 运行 **Run Algo Coach Extension** 即可启动 Extension Development Host 调试；
-- 如需打包为本地 `.vsix` 安装至主力 VS Code，可运行 `npx --yes @vscode/vsce package --no-dependencies` 并使用 `code --install-extension algo-coach-0.2.1.vsix`。
+### 装好后怎么开始刷第一题？
 
-### DeepSeek / Ollama 双模型配置
-
-在右上角 `⚙ 设置 → 模型与环境` 支持一键套用 **DeepSeek 预设** 或 **Ollama 本地（免密）** 并运行 3 步连通自检；所有 API Key 仅存 VS Code `SecretStorage`，绝不写入代码仓或状态快照：
-
-| 角色 | 推荐模型（DeepSeek 示例） | Base URL | Ollama 本地示例（免 Key） |
-| :--- | :--- | :--- | :--- |
-| **Chat（教练对话 / 复盘）** | `deepseek-chat` / `deepseek-reasoner` | `https://api.deepseek.com/v1` | `http://localhost:11434/v1` |
-| **FIM（防剧透补全 · 选填）** | `deepseek-chat` | `https://api.deepseek.com/beta` *(FIM 必须 `/beta`)* | `http://localhost:11434/v1` |
+1. **打开侧边栏**：点击 VS Code 左侧活动栏里的 **Algo Coach** 图标。
+2. **先拿热身题试手（不需要配置 AI，也不需要登录）**：
+   - 点击 **「加载 3 题热身包」**，立刻离线体验标准输入输出、函数题和二分调试；
+   - 或者切到 **「选题」**，直接输入题号（例如 `#1`、`P1873`、`1900A`、`abc350_c`）或粘贴题目链接导入真题。
+3. **写代码 & 一键本地跑样例**：
+   - 点顶部 **「分屏读题」** 可以在代码旁边宽屏看题面与数学公式；
+   - 写完代码按 **`Ctrl+Alt+R`**（或点 **「运行样例」**），支持 **C++ / Python / C / Rust / Java** 本地评测，出错会直接标出实际输出与期望输出的逐行差异。
+4. **卡壳时找教练，不直接看答案**：
+   - 样例 WA 或没思路时，点 **「手推这组错例」** 或切到 **「教练」**，从 L1（大方向）到 L5（关键步骤）逐级拿提示；实在想看完整讲解时，也有二次确认防止手滑。
+5. **一键提交到官方 OJ**：
+   - 样例全通过后，点击 **「复制并打开提交页」**——插件会自动帮你**删掉本地调试代码**、把干净题解复制到剪贴板，并打开官网提交页，你只需 `Ctrl+V` 提交即可。
 
 ---
 
+## 为什么不直接给完整答案？
+
+“看懂别人的题解”和“自己能独立 AC”之间，差的是自己推导关键一步的过程。Algo Coach 把**代码补全**和**教练答疑**彻底分开：
+
+![防剧透三区补全示意](docs/assets/carbon-anti-spoiler.png)
+
+- **写模板帮你省力（绿区 / 蓝区）**：写 `#include`、快读模板、常用容器初始化时，自动给你 1–3 行短补全，省掉机械手敲。
+- **写核心逻辑主动闭嘴（红区）**：写完思路注释后、进入 `while`/`for` 条件判断、给 `dp` / `mid` / `ans` 赋关键公式时，补全会**自动静默**，绝不抢答（如果真需要语法提示，可以手动按 `Alt+\`）。
+- **防手滑护栏**：支持按 `Tab` 逐词接受，避免一顺手把整段逻辑糊上去。
+
+---
+
+## 界面怎么用？4 个标签页一目了然
+
+![Algo Coach 刷题全流程](docs/assets/carbon-ui-tour.png)
+
+| 标签页 | 用来做什么 | 新手最常用的功能 |
+| :--- | :--- | :--- |
+| **做题** | 主战场：读题、跑样例、提交 | 一键**分屏读题**、切换 C++/Python/Java/Rust/C、`Ctrl+Alt+R` 跑样例、添加自建边界样例、一键复制干净代码并打开提交页 |
+| **教练** | 卡壳时的苏格拉底私教 | 勾选当前卡点（没思路 / 超时 / WA / 实现卡壳），按 **L1 → L5** 逐步拿提示、让教练**手推错例**、AC 后做**复杂度复盘** |
+| **选题** | 找题、搜题、看今天该复习什么 | 输入题号/链接导入、**勾选多个平台一键聚合搜题**、查看**今日到期复习**与**精选路线单**（Hot 100 / Blind 75 / NeetCode 150） |
+| **成长** | 记录你的进步与薄弱点 | 7 天刷题统计、各知识点掌握度、常犯盲区与错题本、误记提交结果一键撤销 |
+| **⚙ 设置** | 模式切换、AI 与编译环境 | 切换「新手入门 / 专注刷题 / 竞赛面试」预设、一键套用 DeepSeek / Ollama、填写公开用户名、检测本地编译器 |
+
+---
+
+## 支持哪 6 大刷题平台？
+
+无需安装任何第三方插件或命令行工具，6 大平台全部原生支持：
+
+| 平台 | 直接输入什么就能导题 | 支持关键词搜题 | 本地跑样例 | 官方提交结果回传 |
+| :--- | :--- | :---: | :---: | :--- |
+| **力扣中国 (`leetcode.cn`)** | `#1`、`#146`、`力扣1`、`LCR 007`、链接 | ✅ | ✅ 函数模式 | 填公开主页 ID 免登录自动同步（提交后自动轮询 90 秒） |
+| **LeetCode 国际 (`leetcode.com`)** | `lc-global:1`、题目链接 | ✅ | ✅ 函数模式 | 填公开用户名免登录自动同步（提交后自动轮询 90 秒） |
+| **Codeforces** | `1900A`、`CF1900A`、题目链接 | ✅ | ✅ 标准输入输出 | 填公开用户名免登录自动同步（提交后自动轮询 90 秒） |
+| **AtCoder** | `abc350_c`、题目链接 | ✅ | ✅ 标准输入输出 | 填公开用户名免登录自动同步（提交后自动轮询 90 秒） |
+| **洛谷 (`luogu.com.cn`)** | `P1001`、`P1873`、`B2001`、题目链接 | ✅ | ✅ 标准输入输出 | 可选安装油猴脚本自动回传，或交完点一下 `AC / WA / TLE / RE` |
+| **牛客 (`nowcoder.com`)** | 题目链接、`acm-<题号>` | — | ✅ 标准输入输出 | 可选安装油猴脚本自动回传，或交完点一下 `AC / WA / TLE / RE` |
+
+> **安全说明：为什么不需要登录 OJ 账号也能用？**
+> - 插件**绝不读取你的浏览器 Cookie**、**绝不保存你的 OJ 密码**、**绝不绕过人机验证**，零封号风险。
+> - **自动同步官方结果**有两种方式任选：
+>   1. **免登录同步（推荐，零安装）**：在 `⚙ 设置 → OJ 公开用户名` 填入你的公开用户名（支持 CF / 力扣中国 / LeetCode 国际 / AtCoder），网页交完题后插件会自动拉取最新结果。
+>   2. **浏览器回传脚本（可选，支持全部 6 平台）**：如果你刷洛谷或牛客也想自动回传，可在 `选题 → 粘贴题面 / 6 平台同步` 一键复制附带本机安全令牌的 Tampermonkey 脚本，在你自己已登录的浏览器交完题后，脚本会自动把页面上的 AC/WA 结果传回 VS Code。
+> - 如果你平时登录 OJ 的不是系统默认浏览器，点击提交卡片里的 **「复制链接」+「仅复制代码」** 粘贴到你的常用浏览器即可。
+
+---
+
+## 想用 AI 教练怎么配置？（可选）
+
+**不配置 AI 也能正常导题、分屏读题、本地跑样例、使用基础离线引导和错题复习。** 如果想解锁更聪明的 AI 教练和防剧透补全，打开右上角 `⚙ 设置 → 模型与环境`，二选一即可：
+
+1. **云端 DeepSeek（性价比最高）**：点底部的 **「DeepSeek 预设」**，填入你的 DeepSeek API Key，点 **「保存配置」** → **「连通自检」** 看到通过即可。
+2. **本地免费 Ollama（完全离线，免 Key）**：本地启动 [Ollama](https://ollama.com/) 并拉取代码模型（如 `qwen2.5-coder:7b`），点 **「Ollama 本地」** → **「保存配置」** 即可免密使用。
+
+> 也支持 OpenAI 官方、Anthropic Claude 及任意 OpenAI 兼容接口；所有 API Key 均加密保存在 VS Code 系统密钥库中，不会明文写入任何文件。
+
+---
+
+## 新手常见问题
+
 <details>
-<summary><strong>目录结构与相对 v0.1.0-beta.1 的核心演进（点击展开）</strong></summary>
+<summary><strong>1. 我本地没有装 C++ / Python 编译器，跑样例报错怎么办？</strong></summary>
+
+打开 `⚙ 设置 → 模型与环境 → 本地编译环境`，点击 **「检测」**，插件会自动扫描你的 C++ / Python / C / Rust / Java 环境，并告诉你缺少什么以及怎么安装。如果暂时不想配本地环境，也可以直接点 **「复制并打开提交页」** 到官网评测。
+
+</details>
+
+<details>
+<summary><strong>2. 怎么打开或关闭打字音效、刷题段位铭牌、快捷键提示？</strong></summary>
+
+打开 `⚙ 设置 → 防剧透与体验`，所有体验模块（打字机音效、AC 庆祝和弦、刷题段位铭牌、新手热身包、快捷键提示）都可以单独开关。打字音效默认关闭，避免打扰。
+
+</details>
+
+<details>
+<summary><strong>3. 交题后点错了 AC / WA 怎么撤回？</strong></summary>
+
+刚点完时，底部提示条会直接出现 **「撤销」** 按钮；如果提示条已经消失，可以切到 **「成长」** 最底部的 **「撤销误记结果」** 抽屉里随时撤销，学习统计和复习计划会自动重算。
+
+</details>
+
+<details>
+<summary><strong>4. 开发者说明：本地调试、运行测试与目录结构</strong></summary>
+
+```bash
+# 运行完整验证（TypeScript 类型检查 + 架构边界守卫 + 35 个测试文件 258 项单测 + esbuild 打包）
+npm run verify
+```
+
+在 VS Code 中打开本项目根目录，直接按 `F5` 即可启动扩展调试窗口（Extension Development Host）。
 
 ```text
 src/
-├─ core/
-│  ├─ contracts/          # 共享领域契约与 Webview 协议（零 vscode 依赖）
-│  ├─ ai/                 # 多 Provider 客户端、Chat/FIM 双角色路由与 3 步健康自检
-│  ├─ autocomplete/       # 3 区词法分类、自适应触发/熔断、物理隔离网关、输出过滤
-│  ├─ contextProjection/  # 无状态上下文编排、DeepSeek FIM 保真渲染与脱敏审计
-│  ├─ coach/              # L1–L5 阶梯、Pattern Mapper、错例手推、输出防剧透硬门
-│  └─ learner/            # OLM + ts-fsrs + 幂等事件流 + 人类覆盖层 + 三桶推荐
-├─ problems/              # 原生 6-OJ 完整抓题 Adapter、统一 httpClient、Bridge (/ & /verdict)
-├─ runner/                # 5 语言本地评测器（Stdio + LeetCode Harness + Toolchain Doctor）
-├─ submitBridge/          # 合规 HTTPS 提交桥、调试块剥离、4 平台免登录轮询与 6 平台油猴脚本生成
-├─ experience/            # 场景预设、新手教程包、快捷键教练、DMC 段位、音效策略
-├─ extension/             # 薄 VS Code 宿主（SidebarController + ProblemReaderPanel 等）
-└─ webview/               # 4+⚙ 原生主题侧栏、分屏读题器、零依赖 LaTeX 排版、Web Audio 合成器
-resources/
-├─ ui/                    # 4 阶段位 WebP 徽章、空态插画与 6 平台 OJ SVG 徽标
-└─ companion/             # 6 平台可见 DOM 判题结果回传 Tampermonkey 模板脚本
-docs/assets/              # README Carbon 实机展示素材
+├─ core/          # 领域逻辑（AI 路由、防剧透补全、教练阶梯、FSRS 复习与学习档案）
+├─ problems/      # 6 大平台原生抓题/搜题适配器与本机桥接服务
+├─ runner/        # 5 语言本地评测器（标准输入输出 + 力扣函数模式）
+├─ submitBridge/  # 调试代码剥离、合规提交桥、4 平台免登录同步与 6 平台回传脚本
+├─ experience/    # 模式预设、新手热身包、快捷键提示、段位与音效策略
+├─ extension/     # VS Code 扩展宿主入口、侧栏控制器与分屏读题器
+└─ webview/       # 侧边栏与分屏读题界面、Markdown+公式排版、Web Audio 合成器
 ```
 
-**相对线上 `v0.1.0-beta.1` 的核心演进：**
-1. 移除全部外部 MCP / Python CLI / 高风险实验性自动交题与 OAuth 模块，统一为原生 6-OJ 抓题 + 合规提交桥 + 零 `vscode` 依赖洁净领域层。
-2. 新增 5 语言本地评测器（Stdio + LeetCode Function Harness）、`ts-fsrs` 遗忘曲线调度与 30 秒 Pattern Mapper / WA 错例手推闭环。
-3. 完成 **4 主 Tab + 右上角 ⚙** 空间重构与宽屏分屏读题器，内置 Anti-GPT-Slop 静态红线守卫（`webview.js` `80.0 KB` / `reader.js` `24.5 KB`）。
-4. 新增 **可选 5 平台聚合搜题**、**提交页防呆回退**（仅复制代码 / 复制链接），以及 **方案 A（CF / LC-CN / LC-Global / AtCoder 4 平台免登录同步 + 90s 后台自动轮询）+ 方案 B（Token 鉴权 `/verdict` + 6 平台油猴脚本）**。
-
 </details>
+
+---
 
 ## License
 
