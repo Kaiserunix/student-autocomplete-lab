@@ -127,13 +127,13 @@ export function renderProblemsView(st: WebviewState): string {
               : "";
           })
           .join("")
-      : emptyBox(T("回填结果后生成推荐。", "Record verdicts for recs."));
+      : emptyBox(T("回填结果后生成推荐。", "Record verdicts to get recommendations."));
     body = sec(T("今日到期复习", "Due for Review"), dueHtml, cnt(dueN)) + sec(T("下一步推荐", "Recommended Next"), d("c g2", recHtml), cnt(deduped.length));
   } else if (sub === "sheets") {
     const starter = snap.flags.starterPackEnabled
       ? sec(
           T("新手热身包", "Starter Warmup"),
-          d("mu", E(T("离线体验 IO、函数模式与调试。", "Offline IO, function & binary search."))) +
+          d("mu", E(T("离线体验标准输入输出、函数题与调试。", "Try stdio, function mode & debugging offline."))) +
             d("r rw g1 mt1", btn(`${icon("play")} ${T("加载 3 题热身包", "Load 3-Problem Warmup")}`, "starter-load-warmup", "t") + btn(`${icon("book")} ${T("新手教程", "Walkthrough")}`, "starter-open-walkthrough"))
         )
       : "";
@@ -164,8 +164,8 @@ export function renderProblemsView(st: WebviewState): string {
       ) +
         d(
           "sub-sep c g1",
-          sp("lx fw", "Companion / 油猴") +
-            d("mu", E(T("推题 & 6 平台回传。", "Push & 6-OJ verdict sync."))) +
+          sp("lx fw", E(T("浏览器插件与回传脚本", "Browser Bridge & Userscript"))) +
+            d("mu", E(T("支持网页一键导题与 6 平台结果自动回传。", "One-click import & 6-OJ verdict sync."))) +
             d("r rw g1", btn(`${icon("copy", 11)} ${T("复制 6 平台油猴脚本", "Copy 6-OJ Userscript")}`, "bridge-copy-userscript", "g", "sm")) +
             (b.lastError ? d("fn er", E(b.lastError)) : "")
         )

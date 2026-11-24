@@ -170,10 +170,10 @@ function renderReaderDiff(c: SampleCaseResult, l: UiLang, coachBusy: boolean): s
     (c.diffSummary ? d("mu", E(c.diffSummary)) : "") +
       d("mu mo", E(T("- 实际 · + 预期", "- Actual · + Expected"))) +
       d("dl well mo", rows) +
-      (c.stderr ? sp("lx", "stderr") + h("pre", "pre well", E(c.stderr)) : "") +
+      (c.stderr ? sp("lx", E(T("错误输出", "Stderr"))) + h("pre", "pre well", E(c.stderr)) : "") +
       d(
         "fail-dock",
-        btn(`${icon("trace", 11)} ${T("用此反例让教练 Dry-Run", "Dry-Run Counterexample")}`, "coach-dry-run-case", "t", "xs", `data-case-id="${E(c.id)}" data-verdict="${E(c.verdict)}"`, coachBusy)
+        btn(`${icon("trace", 11)} ${T("用此反例让教练手推", "Trace Counterexample")}`, "coach-dry-run-case", "t", "xs", `data-case-id="${E(c.id)}" data-verdict="${E(c.verdict)}"`, coachBusy)
       )
   );
 }
@@ -192,9 +192,9 @@ export function renderReaderSamplesSection(
   const skip = run?.skippedReason;
   const skipLbl =
     skip === "missing_toolchain"
-      ? T("缺少编译环境", "Missing Toolchain")
+      ? T("缺少编译环境", "Missing Compiler")
       : skip === "unsupported_harness"
-        ? T("暂不支持包装", "Unsupported Harness")
+        ? T("暂不支持本地评测", "Local Run Unavailable")
         : T("暂不支持该语言", "Unsupported Language");
   const ceBanner =
     run && !run.compileOk
@@ -259,7 +259,7 @@ export function renderReaderSamplesSection(
                         ? d("r rb g1", sp("lx", E(T("实际输出", "Actual Output"))) + copyButton(res.actual, T(`样例 #${idx + 1} 实际输出`, `Sample #${idx + 1} actual`), l)) +
                           h("pre", "rd-pre well mo", E(res.actual))
                         : "") +
-                        (res.stderr ? sp("lx", "stderr") + h("pre", "rd-pre well mo", E(res.stderr)) : "")
+                        (res.stderr ? sp("lx", E(T("错误输出", "Stderr"))) + h("pre", "rd-pre well mo", E(res.stderr)) : "")
                     )
                   : "")
           );

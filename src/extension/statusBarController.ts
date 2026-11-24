@@ -66,7 +66,7 @@ export class StatusBarController implements vscode.Disposable {
     this.presetItem.text = `$(mortar-board) Algo Coach: ${label}`;
     this.presetItem.tooltip =
       flags.uiLanguage === "zh-CN"
-        ? `当前模式: ${label}（幽灵代码: ${flags.ghostTextMode}，严厉度: ${flags.coachStrictness}）。点击切换 Preset。`
+        ? `当前模式: ${label}（幽灵代码: ${flags.ghostTextMode}，严厉度: ${flags.coachStrictness}）。点击切换模式。`
         : `Active preset: ${label} (Ghost Text: ${flags.ghostTextMode}, Strictness: ${flags.coachStrictness}). Click to switch.`;
     this.presetItem.show();
   }

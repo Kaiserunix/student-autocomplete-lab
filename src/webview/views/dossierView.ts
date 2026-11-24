@@ -29,7 +29,7 @@ export function renderDossierView(st: WebviewState): string {
     ? miscs
         .map((m) => {
           const mu = m.muted || Boolean(ov.mutedMisconceptionIds[m.misconceptionId]);
-          const detail = T(`加权 ${m.recentWeightedCount.toFixed(1)} · ${m.uniqueProblemKeys.length} 题`, `Wt ${m.recentWeightedCount.toFixed(1)} · ${m.uniqueProblemKeys.length} prob`);
+          const detail = T(`近期出现 ${Math.round(m.recentWeightedCount)} 次 · ${m.uniqueProblemKeys.length} 题`, `${m.recentWeightedCount.toFixed(1)}× · ${m.uniqueProblemKeys.length} problems`);
           return dataRow(
             d("r g1 rw", sp(`mo${mu ? " sk" : ""}`, E(m.misconceptionId)) + badge(mu ? T("已屏蔽", "Muted") : T("活跃", "Active"), mu ? "m" : "wn")),
             d("mu", E(detail)),
@@ -57,14 +57,14 @@ export function renderDossierView(st: WebviewState): string {
 
   const recentList = (snap.recentEvents ?? []).length
     ? (snap.recentEvents ?? [])
-        .map((ev) => dataRow(d("r g1", badge(ev.verdict, ev.verdict === "AC" ? "ok" : "er", true) + sp("lt f1", E(ev.title))), d("mu mo", E(ev.timestamp.slice(0, 16).replace("T", " "))), btn(T("作废", "Void"), "learner-void-id", "g", "xs", `data-event-id="${E(ev.eventId)}"`)))
+        .map((ev) => dataRow(d("r g1", badge(ev.verdict, ev.verdict === "AC" ? "ok" : "er", true) + sp("lt f1", E(ev.title))), d("mu mo", E(ev.timestamp.slice(0, 16).replace("T", " "))), btn(T("撤销", "Undo"), "learner-void-id", "g", "xs", `data-event-id="${E(ev.eventId)}"`)))
         .join("")
     : "";
 
   const voidDrawer = drawer(
     "dossier-void",
-    T("作废误填评测事件", "Void Event"),
-    recentList ? d("c g1", recentList) : emptyBox(T("暂无近期可作废事件。", "No recent events to void.")),
+    T("撤销误记结果", "Undo Recorded Result"),
+    recentList ? d("c g1", recentList) : emptyBox(T("暂无近期可撤销的提交记录。", "No recent records to undo.")),
     cnt(ov.voidedEventIds.length)
   );
 

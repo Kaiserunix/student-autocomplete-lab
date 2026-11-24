@@ -79,9 +79,9 @@ function renderAudit(r: CoachResponsePayload, l: UiLang, idx: number): string {
           d("r g1 au", badge(t(l, KIND_LBL[it.kind][0], KIND_LBL[it.kind][1])) + sp("lt f1", E(it.label)) + (it.muteable ? btn(T("屏蔽", "Mute"), "learner-mute-misconception", "g", "xs", `data-misconception-id="${E(it.sourceKey ?? it.id)}" data-muted="true"`) : ""))
         )
         .join("")
-    : d("mu", E(T("未注入画像", "No profile items")));
-  const summaryText = `${T("审计", "Audit")} · ${its.length}/3 · ${r.audit.characterBudgetUsed}/${r.audit.characterBudgetMax}`;
-  return h("details", "dt", h("summary", "", `${icon("shd", 11)} ${E(summaryText)}`) + d("ab", rows + d("fn mo", `${E(r.audit.route)} · ${E(r.audit.renderer)}`)), `data-drawer="audit-${idx}"`);
+    : d("mu", E(T("未使用历史记录", "No history used")));
+  const summaryText = `${T("参考记录", "Context")} · ${its.length}/3`;
+  return h("details", "dt", h("summary", "", `${icon("shd", 11)} ${E(summaryText)}`) + d("ab", rows), `data-drawer="audit-${idx}"`);
 }
 
 const renderEntry = (r: CoachResponsePayload, l: UiLang, idx: number): string => {
@@ -116,7 +116,7 @@ export function renderCoachControlsCard(st: WebviewState): string {
   const giveUp = giveUpUnlocked
     ? ""
     : st.giveUpConfirmPending
-      ? d("al al-wn", d("at", `${icon("warn")} ${E(T("确认放弃看完整讲解？", "Confirm Give Up?"))}`) + d("mu", E(T("段位封顶 C · 净码。", "Caps rank at C."))) + d("r g1 mt1", btn(T("确认", "Confirm"), "coach-giveup-confirm", "d", "sm", "", busy) + btn(T("取消", "Cancel"), "coach-giveup-cancel")))
+      ? d("al al-wn", d("at", `${icon("warn")} ${E(T("确认放弃看完整讲解？", "Confirm Give Up?"))}`) + d("mu", E(T("确认后本题段位上限为 C。", "Caps rank at C."))) + d("r g1 mt1", btn(T("确认", "Confirm"), "coach-giveup-confirm", "d", "sm", "", busy) + btn(T("取消", "Cancel"), "coach-giveup-cancel")))
       : btn(T("放弃并查看讲解", "Give Up & Guide"), "coach-giveup-arm", "g", "xs", "", busy);
 
   const hintLbl = lv >= 5 ? T("已达最高提示 L5", "Max Hint L5") : T(`提示 L${next}`, `Hint L${next}`);
@@ -124,14 +124,14 @@ export function renderCoachControlsCard(st: WebviewState): string {
   const ctxTitle = snap.activeProblem
     ? d("coach-ctx r g1", badge(snap.activeProblem.sourceId, "m", true) + sp("lt f1 fw", E(snap.activeProblem.title)))
     : "";
-  const aiTip = noAi ? d("coach-offline r rb g1", sp("mu", E(T("离线模式（未配 AI）", "Offline (no AI key)"))) + btn(T("配置 AI", "Setup AI"), "settings-open-env", "g", "xs")) : "";
+  const aiTip = noAi ? d("coach-offline r rb g1", sp("mu", E(T("离线模式（未配 AI）", "Offline (no AI key)"))) + btn(T("配置 AI", "Setup AI"), "settings-open-env", "s", "xs")) : "";
 
   const ctl = d(
     "c g2",
     ctxTitle +
       aiTip +
       d("ld-head", d("ld", ladder)) +
-      d("c g1", sp("lx", T("当前卡点", "Where stuck?")) + d("g2", stucks)) +
+      d("c g1", sp("lx", T("当前卡点", "Where stuck?")) + d("g2-k", stucks)) +
       d(
         "r rw g1",
         btn(`${icon("bulb", 11)} ${hintLbl}`, "coach-hint", "p", "sm", "", busy || lv >= 5) +

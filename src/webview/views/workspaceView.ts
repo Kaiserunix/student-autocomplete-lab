@@ -80,7 +80,7 @@ function renderDiff(c: SampleCaseResult, lv: HintLevel, nextHint: HintLevel, l: 
       (c.diffSummary ? d("mu", E(c.diffSummary)) : "") +
       d("mu mo", E(T("- 实际 · + 预期", "- Actual · + Expected"))) +
       d("dl well mo", rows) +
-      (c.stderr ? sp("lx", "stderr") + h("pre", "pre well", E(c.stderr)) : "") +
+      (c.stderr ? sp("lx", E(T("错误输出", "Stderr"))) + h("pre", "pre well", E(c.stderr)) : "") +
       renderFailureActions(c.verdict, c.id, lv, nextHint, l, coachBusy)
   );
 }
@@ -97,8 +97,8 @@ const ioBox = (label: string, x: string, l: UiLang): string =>
   d("f1 c g1", d("r rb g1", sp("lx", E(label)) + (x ? copyMiniBtn(x, label, t(l, "复制", "Copy")) : "")) + h("pre", "pre well", E(x || t(l, "(空)", "(empty)"))));
 
 const SKIP_INFO: Record<string, [string, string, string, string]> = {
-  missing_toolchain: ["缺少编译环境", "Missing Toolchain", "未检测到编译器，不计惩罚，请检测。", "Compiler missing (no penalty). Run Doctor."],
-  unsupported_harness: ["暂不支持包装", "Unsupported Harness", "暂不支持函数包装，可直接提交。", "Harness unsupported; submit directly."],
+  missing_toolchain: ["缺少编译环境", "Missing Compiler", "未检测到本地编译器，请先检测环境。", "No local compiler found. Run check."],
+  unsupported_harness: ["暂不支持本地评测", "Local Run Unavailable", "当前函数题暂不支持本地运行，可直接去网页提交。", "Local run unavailable; submit on OJ."],
   unsupported_language: ["暂不支持语言", "Unsupported Language", "请切换为 C++/Python/C/Rust/Java。", "Switch to C++/Python/C/Rust/Java."]
 };
 
@@ -144,7 +144,7 @@ function renderUnifiedSamples(
             d("mu", E(T(si[2], si[3]))) +
             (run.compileStderr ? h("pre", "pre well mt1", E(run.compileStderr)) : "") +
             (skip === "missing_toolchain"
-              ? d("fail-dock", btn(`${icon("ref", 11)} ${T("检测编译环境", "Toolchain Doctor")}`, "settings-open-toolchain", "t", "xs"))
+              ? d("fail-dock", btn(`${icon("ref", 11)} ${T("检测编译环境", "Check Compilers")}`, "settings-open-toolchain", "t", "xs"))
               : "")
         )
       : d(
@@ -182,7 +182,7 @@ function renderUnifiedSamples(
               ? d(
                   "c g1 mt1",
                   (res.actual ? ioBox(T("实际输出", "Actual Output"), res.actual, l) : "") +
-                    (res.stderr ? ioBox("stderr", res.stderr, l) : "")
+                    (res.stderr ? ioBox(T("错误输出", "Stderr"), res.stderr, l) : "")
                 )
               : "";
           const extra = !res
@@ -195,7 +195,7 @@ function renderUnifiedSamples(
         .join("")
     : emptyBox(T("当前题目暂无样例，可点上方添加。", "No samples yet. Add one above."));
 
-  return summary + rows + (showRun && run?.memoryNote ? d("fn", E(run.memoryNote)) : "");
+  return summary + rows;
 }
 
 export function renderWorkspaceRankCard(st: WebviewState): string {

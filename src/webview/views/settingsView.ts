@@ -61,7 +61,7 @@ export function renderSettingsView(st: WebviewState): string {
     const flagsList: ReadonlyArray<[keyof FeatureFlags, string, string]> = [
       ["patternMapperEnabled", T("审题模式", "Pattern Map"), T("编码前识别题型", "Pre-code check")],
       ["mockInterviewEnabled", T("模拟面试复盘", "Mock Review"), T("教练页常驻复盘", "Show in Coach")],
-      ["stylishRankEnabled", T("DMC 段位铭牌", "DMC Rank"), T("手写与样例实时评级", "Live gauge")],
+      ["stylishRankEnabled", T("刷题段位铭牌", "Practice Rank"), T("手写与样例实时评级", "Live gauge")],
       ["starterPackEnabled", T("新手热身题包", "Starter Pack"), T("题单展示热身包", "Warmup in Sheets")],
       ["shortcutHintsEnabled", T("快捷键提示", "Shortcut Tips"), T("学会后自动消失", "Auto-graduates")]
     ];
@@ -152,7 +152,7 @@ export function renderSettingsView(st: WebviewState): string {
     const keyBadge = isLocal
       ? badge(T("免密本地", "Local"), "ok")
       : badge(c.hasApiKey ? T("密钥已存", "Saved") : T("未配置", "No Key"), c.hasApiKey ? "ok" : "m");
-    const keyPh = isLocal ? T("免 Key", "Optional") : c.hasApiKey ? T("留空保持", "Keep key") : "API Key";
+    const keyPh = isLocal ? T("无需填写", "Optional") : c.hasApiKey ? T("留空保持", "Keep key") : "API Key";
     return d(
       isSecond ? "ai-role ai-role-sep" : "ai-role",
       d("r rb g1", sp("ai-role-t", E(title)) + keyBadge) +
@@ -163,7 +163,7 @@ export function renderSettingsView(st: WebviewState): string {
     );
   };
 
-  const stepLabel = (s: "models" | "chat" | "fim") => (s === "models" ? T("模型列表", "MODELS") : s === "chat" ? T("对话", "CHAT") : T("补全", "FIM"));
+  const stepLabel = (s: "models" | "chat" | "fim") => (s === "models" ? T("模型列表", "MODELS") : s === "chat" ? T("对话", "CHAT") : T("补全", "COMPLETION"));
   const lhc = snap.lastHealthCheck;
   const hc = lhc
     ? d(
@@ -185,22 +185,22 @@ export function renderSettingsView(st: WebviewState): string {
   const aiExtra = h(
     "details",
     "dt",
-    h("summary", "", `${icon("chev", 11)} ${E(T("可选：补全模型", "Optional: FIM"))}`) +
-      d("c g2 mt1", roleBox("fim", T("防剧透补全模型", "Anti-Spoiler FIM"), `${DS}beta`)),
+    h("summary", "", `${icon("chev", 11)} ${E(T("可选：补全模型", "Optional: Autocomplete"))}`) +
+      d("c g2 mt1", roleBox("fim", T("防剧透补全模型", "Anti-Spoiler Autocomplete"), `${DS}beta`)),
     'data-drawer="settings-ai-extra"'
   );
 
   const oj = ai.ojHandles;
   const ojRows: Array<[string, string, string, string]> = [
-    ["codeforcesHandle", "Codeforces", "tourist", oj?.codeforces ?? ai.codeforcesHandle],
-    ["oj.leetcodeCn", T("力扣中国", "LC CN"), "userSlug", oj?.leetcodeCn ?? ""],
-    ["oj.leetcodeGlobal", T("LeetCode 国际", "LC Global"), "username", oj?.leetcodeGlobal ?? ""],
-    ["oj.atcoder", "AtCoder", "handle", oj?.atcoder ?? ""]
+    ["codeforcesHandle", "Codeforces", T("用户名", "Username"), oj?.codeforces ?? ai.codeforcesHandle],
+    ["oj.leetcodeCn", T("力扣中国", "LC CN"), T("主页 ID", "Profile ID"), oj?.leetcodeCn ?? ""],
+    ["oj.leetcodeGlobal", T("LeetCode 国际", "LC Global"), T("用户名", "Username"), oj?.leetcodeGlobal ?? ""],
+    ["oj.atcoder", "AtCoder", T("用户名", "Username"), oj?.atcoder ?? ""]
   ];
   const cfField = d(
     "ai-role ai-role-sep",
     sp("lx", T("OJ 公开用户名", "Public OJ Handles")) +
-      ojRows.map(([k, lbl, ph, fb]) => fieldLine(lbl, inp(`ai.${k}`, g(`ai.${k}`, fb), ph, "in mo"))).join("")
+      d("g2-k", ojRows.map(([k, lbl, ph, fb]) => fieldLine(lbl, inp(`ai.${k}`, g(`ai.${k}`, fb), ph, "in mo"))).join(""))
   );
 
   const aiCard = sec(
@@ -238,7 +238,7 @@ export function renderSettingsView(st: WebviewState): string {
     : emptyBox(T("点击「检测」扫描编译器。", "Click Detect for compilers."));
   const toolchainDrawer = drawer(
     "settings-toolchain",
-    T("本地编译环境", "Toolchain Doctor"),
+    T("本地编译环境", "Local Compilers"),
     d("r rb g1", sp("mu", E(T("扫描本地编译器。", "Probe compilers."))) + btn(`${icon("ref", 11)} ${T("检测", "Detect")}`, "runner-check-toolchains", "s", "xs")) + d("mt1", tcHtml),
     tcBadge,
     tcs.length > 0 || f.preset === "starter"
