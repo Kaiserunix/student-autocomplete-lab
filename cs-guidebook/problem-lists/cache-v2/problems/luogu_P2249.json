@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P2249",
+  "source": "luogu",
+  "sourceId": "P2249",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P2249",
+  "title": "【深基13.例1】查找",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set2",
+    "Set2-基本功",
+    "二分查找",
+    "lower_bound"
+  ],
+  "conceptTags": [
+    "array.binary_search"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:27:00.000Z"
+  }
+}

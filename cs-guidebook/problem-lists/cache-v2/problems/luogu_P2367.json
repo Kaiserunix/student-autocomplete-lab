@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P2367",
+  "source": "luogu",
+  "sourceId": "P2367",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P2367",
+  "title": "语文成绩",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set2",
+    "Set2-基本功",
+    "差分",
+    "前缀和"
+  ],
+  "conceptTags": [
+    "array.prefix_sum"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:28:00.000Z"
+  }
+}

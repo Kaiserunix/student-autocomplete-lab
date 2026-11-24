@@ -1,0 +1,307 @@
+[
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1093",
+    "source": "luogu",
+    "sourceId": "P1093",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1093",
+    "title": "[NOIP 2007 普及组] 奖学金",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "排序",
+      "结构体"
+    ],
+    "conceptTags": [
+      "basics.sorting"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:30:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P8218",
+    "source": "luogu",
+    "sourceId": "P8218",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P8218",
+    "title": "【深进1.例1】求区间和",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "前缀和"
+    ],
+    "conceptTags": [
+      "array.prefix_sum"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:29:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P2367",
+    "source": "luogu",
+    "sourceId": "P2367",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P2367",
+    "title": "语文成绩",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "差分",
+      "前缀和"
+    ],
+    "conceptTags": [
+      "array.prefix_sum"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:28:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P2249",
+    "source": "luogu",
+    "sourceId": "P2249",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P2249",
+    "title": "【深基13.例1】查找",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "二分查找",
+      "lower_bound"
+    ],
+    "conceptTags": [
+      "array.binary_search"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:27:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1873",
+    "source": "luogu",
+    "sourceId": "P1873",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1873",
+    "title": "[COCI 2011/2012 #5] EKO / 砍树",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "binary-search",
+      "二分答案"
+    ],
+    "conceptTags": [
+      "array.binary_search"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:26:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1803",
+    "source": "luogu",
+    "sourceId": "P1803",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1803",
+    "title": "凌乱的yyy / 线段覆盖",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "贪心",
+      "区间调度"
+    ],
+    "conceptTags": [
+      "greedy.interval_and_sort"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:25:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1090",
+    "source": "luogu",
+    "sourceId": "P1090",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1090",
+    "title": "[NOIP 2004 提高组] 合并果子",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及/提高-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "贪心",
+      "优先队列",
+      "堆"
+    ],
+    "conceptTags": [
+      "ds.heap",
+      "greedy.exchange_argument"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:24:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "lc-cn:minimum-size-subarray-sum",
+    "source": "leetcode-cn",
+    "sourceId": "minimum-size-subarray-sum",
+    "canonicalUrl": "https://leetcode.cn/problems/minimum-size-subarray-sum/",
+    "title": "长度最小的子数组",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "function",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "Medium",
+      "normalizedTier": 3
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "滑动窗口",
+      "双指针"
+    ],
+    "conceptTags": [
+      "array.sliding_window"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:23:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "cf:706B",
+    "source": "codeforces",
+    "sourceId": "706B",
+    "canonicalUrl": "https://codeforces.com/contest/706/problem/B",
+    "title": "Interesting drink",
+    "locale": "en-US",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "CF 1100",
+      "numericRating": 1100,
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "binary search",
+      "sortings"
+    ],
+    "conceptTags": [
+      "array.binary_search",
+      "basics.sorting"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:22:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "atcoder:abc350_c",
+    "source": "atcoder",
+    "sourceId": "abc350_c",
+    "canonicalUrl": "https://atcoder.jp/contests/abc350/tasks/abc350_c",
+    "title": "Sort",
+    "locale": "en-US",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "AtCoder ~780",
+      "numericRating": 780,
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "permutation",
+      "greedy"
+    ],
+    "conceptTags": [
+      "basics.io_and_simulation",
+      "greedy.exchange_argument"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:21:00.000Z"
+    }
+  }
+]

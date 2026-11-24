@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P3379",
+  "source": "luogu",
+  "sourceId": "P3379",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P3379",
+  "title": "【模板】最近公共祖先（LCA）",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及/提高-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set4",
+    "Set4-进阶综合",
+    "LCA",
+    "树上倍增"
+  ],
+  "conceptTags": [
+    "tree.dp_and_lca"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:03:00.000Z"
+  }
+}

@@ -1,0 +1,142 @@
+[
+  {
+    "name": "[NOIP 2007 普及组] 奖学金",
+    "group": "CS-Guidebook · Set 2 STL排序二分前缀与贪心",
+    "url": "https://www.luogu.com.cn/problem/P1093",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "排序",
+      "结构体"
+    ]
+  },
+  {
+    "name": "【深进1.例1】求区间和",
+    "group": "CS-Guidebook · Set 2 STL排序二分前缀与贪心",
+    "url": "https://www.luogu.com.cn/problem/P8218",
+    "timeLimit": 1000,
+    "memoryLimit": 128,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "前缀和"
+    ]
+  },
+  {
+    "name": "语文成绩",
+    "group": "CS-Guidebook · Set 2 STL排序二分前缀与贪心",
+    "url": "https://www.luogu.com.cn/problem/P2367",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "差分",
+      "前缀和"
+    ]
+  },
+  {
+    "name": "【深基13.例1】查找",
+    "group": "CS-Guidebook · Set 2 STL排序二分前缀与贪心",
+    "url": "https://www.luogu.com.cn/problem/P2249",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "二分查找",
+      "lower_bound"
+    ]
+  },
+  {
+    "name": "[COCI 2011/2012 #5] EKO / 砍树",
+    "group": "CS-Guidebook · Set 2 STL排序二分前缀与贪心",
+    "url": "https://www.luogu.com.cn/problem/P1873",
+    "timeLimit": 1000,
+    "memoryLimit": 128,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "binary-search",
+      "二分答案"
+    ]
+  },
+  {
+    "name": "凌乱的yyy / 线段覆盖",
+    "group": "CS-Guidebook · Set 2 STL排序二分前缀与贪心",
+    "url": "https://www.luogu.com.cn/problem/P1803",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "贪心",
+      "区间调度"
+    ]
+  },
+  {
+    "name": "[NOIP 2004 提高组] 合并果子",
+    "group": "CS-Guidebook · Set 2 STL排序二分前缀与贪心",
+    "url": "https://www.luogu.com.cn/problem/P1090",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "贪心",
+      "优先队列",
+      "堆"
+    ]
+  },
+  {
+    "name": "长度最小的子数组",
+    "group": "CS-Guidebook · Set 2 STL排序二分前缀与贪心",
+    "url": "https://leetcode.cn/problems/minimum-size-subarray-sum/",
+    "timeLimit": 1000,
+    "memoryLimit": 256,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "滑动窗口",
+      "双指针"
+    ]
+  },
+  {
+    "name": "Interesting drink",
+    "group": "CS-Guidebook · Set 2 STL排序二分前缀与贪心",
+    "url": "https://codeforces.com/contest/706/problem/B",
+    "timeLimit": 2000,
+    "memoryLimit": 256,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "binary search",
+      "sortings"
+    ]
+  },
+  {
+    "name": "Sort",
+    "group": "CS-Guidebook · Set 2 STL排序二分前缀与贪心",
+    "url": "https://atcoder.jp/contests/abc350/tasks/abc350_c",
+    "timeLimit": 2000,
+    "memoryLimit": 1024,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set2",
+      "Set2-基本功",
+      "permutation",
+      "greedy"
+    ]
+  }
+]

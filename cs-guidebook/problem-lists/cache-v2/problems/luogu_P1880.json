@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P1880",
+  "source": "luogu",
+  "sourceId": "P1880",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P1880",
+  "title": "[NOI1995] 石子合并",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及+/提高",
+    "normalizedTier": 3
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set4",
+    "Set4-进阶综合",
+    "区间DP",
+    "破环成链"
+  ],
+  "conceptTags": [
+    "dp.interval",
+    "array.prefix_sum"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:02:00.000Z"
+  }
+}

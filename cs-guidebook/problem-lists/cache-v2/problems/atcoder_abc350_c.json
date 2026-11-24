@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "atcoder:abc350_c",
+  "source": "atcoder",
+  "sourceId": "abc350_c",
+  "canonicalUrl": "https://atcoder.jp/contests/abc350/tasks/abc350_c",
+  "title": "Sort",
+  "locale": "en-US",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "AtCoder ~780",
+    "numericRating": 780,
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set2",
+    "Set2-基本功",
+    "permutation",
+    "greedy"
+  ],
+  "conceptTags": [
+    "basics.io_and_simulation",
+    "greedy.exchange_argument"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:21:00.000Z"
+  }
+}

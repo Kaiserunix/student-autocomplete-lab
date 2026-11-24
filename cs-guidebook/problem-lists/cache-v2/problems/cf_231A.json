@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "cf:231A",
+  "source": "codeforces",
+  "sourceId": "231A",
+  "canonicalUrl": "https://codeforces.com/contest/231/problem/A",
+  "title": "Team",
+  "locale": "en-US",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "CF 800",
+    "numericRating": 800,
+    "normalizedTier": 1
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set1",
+    "Set1-热身",
+    "implementation",
+    "greedy"
+  ],
+  "conceptTags": [
+    "basics.io_and_simulation"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:33:00.000Z"
+  }
+}

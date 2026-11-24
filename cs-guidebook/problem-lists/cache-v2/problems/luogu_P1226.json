@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P1226",
+  "source": "luogu",
+  "sourceId": "P1226",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P1226",
+  "title": "【模板】快速幂",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set4",
+    "Set4-进阶综合",
+    "快速幂",
+    "数论",
+    "位运算"
+  ],
+  "conceptTags": [
+    "math.number_theory",
+    "math.bit_manipulation"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:10:00.000Z"
+  }
+}

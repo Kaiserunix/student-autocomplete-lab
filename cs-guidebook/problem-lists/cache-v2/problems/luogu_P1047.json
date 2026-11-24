@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P1047",
+  "source": "luogu",
+  "sourceId": "P1047",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P1047",
+  "title": "[NOIP 2005 普及组] 校门外的树",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "入门",
+    "normalizedTier": 1
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set1",
+    "Set1-热身",
+    "模拟",
+    "布尔标记"
+  ],
+  "conceptTags": [
+    "basics.io_and_simulation"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:38:00.000Z"
+  }
+}

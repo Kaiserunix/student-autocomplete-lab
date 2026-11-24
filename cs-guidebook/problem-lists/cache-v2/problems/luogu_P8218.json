@@ -1,0 +1,29 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P8218",
+  "source": "luogu",
+  "sourceId": "P8218",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P8218",
+  "title": "【深进1.例1】求区间和",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set2",
+    "Set2-基本功",
+    "前缀和"
+  ],
+  "conceptTags": [
+    "array.prefix_sum"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:29:00.000Z"
+  }
+}

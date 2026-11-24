@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P1216",
+  "source": "luogu",
+  "sourceId": "P1216",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P1216",
+  "title": "[IOI 1994 / USACO1.5] 数字三角形 Number Triangles",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set3",
+    "Set3-搜索图论DP",
+    "动态规划",
+    "线性DP"
+  ],
+  "conceptTags": [
+    "dp.linear"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:16:00.000Z"
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P5707",
+  "source": "luogu",
+  "sourceId": "P5707",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P5707",
+  "title": "【深基2.例12】上学迟到",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "入门",
+    "normalizedTier": 1
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set1",
+    "Set1-热身",
+    "模拟",
+    "时间计算",
+    "取整"
+  ],
+  "conceptTags": [
+    "basics.io_and_simulation"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:40:00.000Z"
+  }
+}

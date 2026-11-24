@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P1219",
+  "source": "luogu",
+  "sourceId": "P1219",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P1219",
+  "title": "[USACO1.5] 八皇后 Checker Challenge",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及/提高-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set3",
+    "Set3-搜索图论DP",
+    "DFS",
+    "回溯",
+    "剪枝"
+  ],
+  "conceptTags": [
+    "recursion.backtracking"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:20:00.000Z"
+  }
+}

@@ -1,0 +1,308 @@
+[
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1219",
+    "source": "luogu",
+    "sourceId": "P1219",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1219",
+    "title": "[USACO1.5] 八皇后 Checker Challenge",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及/提高-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "DFS",
+      "回溯",
+      "剪枝"
+    ],
+    "conceptTags": [
+      "recursion.backtracking"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:20:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1443",
+    "source": "luogu",
+    "sourceId": "P1443",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1443",
+    "title": "马的遍历",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "BFS",
+      "网格最短路"
+    ],
+    "conceptTags": [
+      "graph.traversal"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:19:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "cf:520B",
+    "source": "codeforces",
+    "sourceId": "520B",
+    "canonicalUrl": "https://codeforces.com/contest/520/problem/B",
+    "title": "Two Buttons",
+    "locale": "en-US",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "CF 1400",
+      "numericRating": 1400,
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "bfs",
+      "graphs",
+      "greedy"
+    ],
+    "conceptTags": [
+      "graph.traversal"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:18:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "atcoder:dp_a",
+    "source": "atcoder",
+    "sourceId": "dp_a",
+    "canonicalUrl": "https://atcoder.jp/contests/dp/tasks/dp_a",
+    "title": "Frog 1",
+    "locale": "en-US",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "AtCoder ~120",
+      "numericRating": 120,
+      "normalizedTier": 1
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "dp",
+      "linear-dp"
+    ],
+    "conceptTags": [
+      "dp.linear"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:17:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1216",
+    "source": "luogu",
+    "sourceId": "P1216",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1216",
+    "title": "[IOI 1994 / USACO1.5] 数字三角形 Number Triangles",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "动态规划",
+      "线性DP"
+    ],
+    "conceptTags": [
+      "dp.linear"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:16:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1048",
+    "source": "luogu",
+    "sourceId": "P1048",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1048",
+    "title": "[NOIP 2005 普及组] 采药",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "0-1背包",
+      "动态规划"
+    ],
+    "conceptTags": [
+      "dp.knapsack"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:15:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1616",
+    "source": "luogu",
+    "sourceId": "P1616",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1616",
+    "title": "疯狂的采药",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "完全背包",
+      "动态规划"
+    ],
+    "conceptTags": [
+      "dp.knapsack"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:14:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P4779",
+    "source": "luogu",
+    "sourceId": "P4779",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P4779",
+    "title": "【模板】单源最短路径（标准版）",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及/提高-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "最短路",
+      "Dijkstra"
+    ],
+    "conceptTags": [
+      "graph.shortest_path"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:13:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P3366",
+    "source": "luogu",
+    "sourceId": "P3366",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P3366",
+    "title": "【模板】最小生成树",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及/提高-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "最小生成树",
+      "Kruskal",
+      "并查集"
+    ],
+    "conceptTags": [
+      "graph.mst",
+      "ds.dsu"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:12:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:B3644",
+    "source": "luogu",
+    "sourceId": "B3644",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/B3644",
+    "title": "【模板】拓扑排序 / 家谱树",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及/提高-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "拓扑排序",
+      "DAG"
+    ],
+    "conceptTags": [
+      "graph.topo_sort"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:11:00.000Z"
+    }
+  }
+]

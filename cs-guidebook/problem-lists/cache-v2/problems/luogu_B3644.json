@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:B3644",
+  "source": "luogu",
+  "sourceId": "B3644",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/B3644",
+  "title": "【模板】拓扑排序 / 家谱树",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及/提高-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set3",
+    "Set3-搜索图论DP",
+    "拓扑排序",
+    "DAG"
+  ],
+  "conceptTags": [
+    "graph.topo_sort"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:11:00.000Z"
+  }
+}

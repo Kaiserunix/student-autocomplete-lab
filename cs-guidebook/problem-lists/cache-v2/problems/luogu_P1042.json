@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P1042",
+  "source": "luogu",
+  "sourceId": "P1042",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P1042",
+  "title": "[NOIP 2003 普及组] 乒乓球",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set1",
+    "Set1-热身",
+    "模拟",
+    "多规则状态"
+  ],
+  "conceptTags": [
+    "basics.io_and_simulation"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:35:00.000Z"
+  }
+}

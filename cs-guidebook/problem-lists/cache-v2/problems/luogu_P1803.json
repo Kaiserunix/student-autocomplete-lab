@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P1803",
+  "source": "luogu",
+  "sourceId": "P1803",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P1803",
+  "title": "凌乱的yyy / 线段覆盖",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set2",
+    "Set2-基本功",
+    "贪心",
+    "区间调度"
+  ],
+  "conceptTags": [
+    "greedy.interval_and_sort"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:25:00.000Z"
+  }
+}

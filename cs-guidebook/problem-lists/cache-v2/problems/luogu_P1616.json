@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P1616",
+  "source": "luogu",
+  "sourceId": "P1616",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P1616",
+  "title": "疯狂的采药",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set3",
+    "Set3-搜索图论DP",
+    "完全背包",
+    "动态规划"
+  ],
+  "conceptTags": [
+    "dp.knapsack"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:14:00.000Z"
+  }
+}

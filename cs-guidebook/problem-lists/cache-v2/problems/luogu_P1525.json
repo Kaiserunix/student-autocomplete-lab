@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P1525",
+  "source": "luogu",
+  "sourceId": "P1525",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P1525",
+  "title": "[NOIP 2010 提高组] 关押罪犯",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及+/提高",
+    "normalizedTier": 3
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set4",
+    "Set4-进阶综合",
+    "扩展域并查集",
+    "贪心"
+  ],
+  "conceptTags": [
+    "ds.dsu",
+    "greedy.interval_and_sort"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:04:00.000Z"
+  }
+}

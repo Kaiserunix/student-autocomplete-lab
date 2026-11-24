@@ -1,0 +1,33 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "cf:1526C2",
+  "source": "codeforces",
+  "sourceId": "1526C2",
+  "canonicalUrl": "https://codeforces.com/contest/1526/problem/C2",
+  "title": "Potions (Hard Version)",
+  "locale": "en-US",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "CF 1600",
+    "numericRating": 1600,
+    "normalizedTier": 3
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set4",
+    "Set4-进阶综合",
+    "greedy",
+    "data structures",
+    "regret-heap"
+  ],
+  "conceptTags": [
+    "ds.heap",
+    "greedy.exchange_argument"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:01:00.000Z"
+  }
+}

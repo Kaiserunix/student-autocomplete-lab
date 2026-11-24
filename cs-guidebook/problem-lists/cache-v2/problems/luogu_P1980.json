@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P1980",
+  "source": "luogu",
+  "sourceId": "P1980",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P1980",
+  "title": "[NOIP 2013 普及组] 计数问题",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "入门",
+    "normalizedTier": 1
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set1",
+    "Set1-热身",
+    "枚举",
+    "数位拆解"
+  ],
+  "conceptTags": [
+    "basics.loop_boundary"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:37:00.000Z"
+  }
+}

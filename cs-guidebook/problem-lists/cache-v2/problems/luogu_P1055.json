@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P1055",
+  "source": "luogu",
+  "sourceId": "P1055",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P1055",
+  "title": "[NOIP 2008 普及组] ISBN 号码",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "入门",
+    "normalizedTier": 1
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set1",
+    "Set1-热身",
+    "字符串",
+    "模拟"
+  ],
+  "conceptTags": [
+    "string.basic"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:36:00.000Z"
+  }
+}

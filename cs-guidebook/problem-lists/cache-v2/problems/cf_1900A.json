@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "cf:1900A",
+  "source": "codeforces",
+  "sourceId": "1900A",
+  "canonicalUrl": "https://codeforces.com/contest/1900/problem/A",
+  "title": "Cover in Water",
+  "locale": "en-US",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "CF 800",
+    "numericRating": 800,
+    "normalizedTier": 1
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set1",
+    "Set1-热身",
+    "greedy",
+    "strings"
+  ],
+  "conceptTags": [
+    "greedy.interval_and_sort"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:32:00.000Z"
+  }
+}

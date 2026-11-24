@@ -1,0 +1,310 @@
+[
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1226",
+    "source": "luogu",
+    "sourceId": "P1226",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1226",
+    "title": "【模板】快速幂",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set4",
+      "Set4-进阶综合",
+      "快速幂",
+      "数论",
+      "位运算"
+    ],
+    "conceptTags": [
+      "math.number_theory",
+      "math.bit_manipulation"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:10:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P3383",
+    "source": "luogu",
+    "sourceId": "P3383",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P3383",
+    "title": "【模板】线性筛素数",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set4",
+      "Set4-进阶综合",
+      "欧拉筛",
+      "素数",
+      "数论"
+    ],
+    "conceptTags": [
+      "math.number_theory"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:09:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P5788",
+    "source": "luogu",
+    "sourceId": "P5788",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P5788",
+    "title": "【模板】单调栈",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及/提高-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set4",
+      "Set4-进阶综合",
+      "单调栈"
+    ],
+    "conceptTags": [
+      "ds.monotonic_stack"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:08:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1886",
+    "source": "luogu",
+    "sourceId": "P1886",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1886",
+    "title": "【模板】单调队列 / 滑动窗口",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及/提高-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set4",
+      "Set4-进阶综合",
+      "单调队列",
+      "滑动窗口"
+    ],
+    "conceptTags": [
+      "ds.monotonic_stack",
+      "array.sliding_window"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:07:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P3374",
+    "source": "luogu",
+    "sourceId": "P3374",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P3374",
+    "title": "【模板】树状数组 1",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及/提高-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set4",
+      "Set4-进阶综合",
+      "树状数组",
+      "Fenwick"
+    ],
+    "conceptTags": [
+      "ds.segment_tree"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:06:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P3372",
+    "source": "luogu",
+    "sourceId": "P3372",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P3372",
+    "title": "【模板】线段树 1",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及+/提高",
+      "normalizedTier": 3
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set4",
+      "Set4-进阶综合",
+      "线段树",
+      "懒标记"
+    ],
+    "conceptTags": [
+      "ds.segment_tree"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:05:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1525",
+    "source": "luogu",
+    "sourceId": "P1525",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1525",
+    "title": "[NOIP 2010 提高组] 关押罪犯",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及+/提高",
+      "normalizedTier": 3
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set4",
+      "Set4-进阶综合",
+      "扩展域并查集",
+      "贪心"
+    ],
+    "conceptTags": [
+      "ds.dsu",
+      "greedy.interval_and_sort"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:04:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P3379",
+    "source": "luogu",
+    "sourceId": "P3379",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P3379",
+    "title": "【模板】最近公共祖先（LCA）",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及/提高-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set4",
+      "Set4-进阶综合",
+      "LCA",
+      "树上倍增"
+    ],
+    "conceptTags": [
+      "tree.dp_and_lca"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:03:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1880",
+    "source": "luogu",
+    "sourceId": "P1880",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1880",
+    "title": "[NOI1995] 石子合并",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及+/提高",
+      "normalizedTier": 3
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set4",
+      "Set4-进阶综合",
+      "区间DP",
+      "破环成链"
+    ],
+    "conceptTags": [
+      "dp.interval",
+      "array.prefix_sum"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:02:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "cf:1526C2",
+    "source": "codeforces",
+    "sourceId": "1526C2",
+    "canonicalUrl": "https://codeforces.com/contest/1526/problem/C2",
+    "title": "Potions (Hard Version)",
+    "locale": "en-US",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "CF 1600",
+      "numericRating": 1600,
+      "normalizedTier": 3
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set4",
+      "Set4-进阶综合",
+      "greedy",
+      "data structures",
+      "regret-heap"
+    ],
+    "conceptTags": [
+      "ds.heap",
+      "greedy.exchange_argument"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:01:00.000Z"
+    }
+  }
+]

@@ -1,0 +1,145 @@
+[
+  {
+    "name": "[USACO1.5] 八皇后 Checker Challenge",
+    "group": "CS-Guidebook · Set 3 搜索图论与入门DP",
+    "url": "https://www.luogu.com.cn/problem/P1219",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "DFS",
+      "回溯",
+      "剪枝"
+    ]
+  },
+  {
+    "name": "马的遍历",
+    "group": "CS-Guidebook · Set 3 搜索图论与入门DP",
+    "url": "https://www.luogu.com.cn/problem/P1443",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "BFS",
+      "网格最短路"
+    ]
+  },
+  {
+    "name": "Two Buttons",
+    "group": "CS-Guidebook · Set 3 搜索图论与入门DP",
+    "url": "https://codeforces.com/contest/520/problem/B",
+    "timeLimit": 2000,
+    "memoryLimit": 256,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "bfs",
+      "graphs",
+      "greedy"
+    ]
+  },
+  {
+    "name": "Frog 1",
+    "group": "CS-Guidebook · Set 3 搜索图论与入门DP",
+    "url": "https://atcoder.jp/contests/dp/tasks/dp_a",
+    "timeLimit": 2000,
+    "memoryLimit": 1024,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "dp",
+      "linear-dp"
+    ]
+  },
+  {
+    "name": "[IOI 1994 / USACO1.5] 数字三角形 Number Triangles",
+    "group": "CS-Guidebook · Set 3 搜索图论与入门DP",
+    "url": "https://www.luogu.com.cn/problem/P1216",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "动态规划",
+      "线性DP"
+    ]
+  },
+  {
+    "name": "[NOIP 2005 普及组] 采药",
+    "group": "CS-Guidebook · Set 3 搜索图论与入门DP",
+    "url": "https://www.luogu.com.cn/problem/P1048",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "0-1背包",
+      "动态规划"
+    ]
+  },
+  {
+    "name": "疯狂的采药",
+    "group": "CS-Guidebook · Set 3 搜索图论与入门DP",
+    "url": "https://www.luogu.com.cn/problem/P1616",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "完全背包",
+      "动态规划"
+    ]
+  },
+  {
+    "name": "【模板】单源最短路径（标准版）",
+    "group": "CS-Guidebook · Set 3 搜索图论与入门DP",
+    "url": "https://www.luogu.com.cn/problem/P4779",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "最短路",
+      "Dijkstra"
+    ]
+  },
+  {
+    "name": "【模板】最小生成树",
+    "group": "CS-Guidebook · Set 3 搜索图论与入门DP",
+    "url": "https://www.luogu.com.cn/problem/P3366",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "最小生成树",
+      "Kruskal",
+      "并查集"
+    ]
+  },
+  {
+    "name": "【模板】拓扑排序 / 家谱树",
+    "group": "CS-Guidebook · Set 3 搜索图论与入门DP",
+    "url": "https://www.luogu.com.cn/problem/B3644",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set3",
+      "Set3-搜索图论DP",
+      "拓扑排序",
+      "DAG"
+    ]
+  }
+]

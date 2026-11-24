@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "atcoder:abc340_b",
+  "source": "atcoder",
+  "sourceId": "abc340_b",
+  "canonicalUrl": "https://atcoder.jp/contests/abc340/tasks/abc340_b",
+  "title": "Append",
+  "locale": "en-US",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "AtCoder ~50",
+    "numericRating": 50,
+    "normalizedTier": 1
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set1",
+    "Set1-热身",
+    "implementation",
+    "vector"
+  ],
+  "conceptTags": [
+    "basics.io_and_simulation"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:31:00.000Z"
+  }
+}

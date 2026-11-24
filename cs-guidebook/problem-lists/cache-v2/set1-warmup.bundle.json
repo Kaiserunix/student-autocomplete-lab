@@ -1,0 +1,307 @@
+[
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P5707",
+    "source": "luogu",
+    "sourceId": "P5707",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P5707",
+    "title": "【深基2.例12】上学迟到",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "入门",
+      "normalizedTier": 1
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "模拟",
+      "时间计算",
+      "取整"
+    ],
+    "conceptTags": [
+      "basics.io_and_simulation"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:40:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1046",
+    "source": "luogu",
+    "sourceId": "P1046",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1046",
+    "title": "[NOIP 2005 普及组] 陶陶摘苹果",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "入门",
+      "normalizedTier": 1
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "数组",
+      "条件计数"
+    ],
+    "conceptTags": [
+      "basics.loop_boundary"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:39:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1047",
+    "source": "luogu",
+    "sourceId": "P1047",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1047",
+    "title": "[NOIP 2005 普及组] 校门外的树",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "入门",
+      "normalizedTier": 1
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "模拟",
+      "布尔标记"
+    ],
+    "conceptTags": [
+      "basics.io_and_simulation"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:38:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1980",
+    "source": "luogu",
+    "sourceId": "P1980",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1980",
+    "title": "[NOIP 2013 普及组] 计数问题",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "入门",
+      "normalizedTier": 1
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "枚举",
+      "数位拆解"
+    ],
+    "conceptTags": [
+      "basics.loop_boundary"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:37:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1055",
+    "source": "luogu",
+    "sourceId": "P1055",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1055",
+    "title": "[NOIP 2008 普及组] ISBN 号码",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "入门",
+      "normalizedTier": 1
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "字符串",
+      "模拟"
+    ],
+    "conceptTags": [
+      "string.basic"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:36:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "luogu:P1042",
+    "source": "luogu",
+    "sourceId": "P1042",
+    "canonicalUrl": "https://www.luogu.com.cn/problem/P1042",
+    "title": "[NOIP 2003 普及组] 乒乓球",
+    "locale": "zh-CN",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "普及-",
+      "normalizedTier": 2
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "模拟",
+      "多规则状态"
+    ],
+    "conceptTags": [
+      "basics.io_and_simulation"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:35:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "cf:4A",
+    "source": "codeforces",
+    "sourceId": "4A",
+    "canonicalUrl": "https://codeforces.com/contest/4/problem/A",
+    "title": "Watermelon",
+    "locale": "en-US",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "CF 800",
+      "numericRating": 800,
+      "normalizedTier": 1
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "math",
+      "implementation"
+    ],
+    "conceptTags": [
+      "basics.loop_boundary"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:34:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "cf:231A",
+    "source": "codeforces",
+    "sourceId": "231A",
+    "canonicalUrl": "https://codeforces.com/contest/231/problem/A",
+    "title": "Team",
+    "locale": "en-US",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "CF 800",
+      "numericRating": 800,
+      "normalizedTier": 1
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "implementation",
+      "greedy"
+    ],
+    "conceptTags": [
+      "basics.io_and_simulation"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:33:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "cf:1900A",
+    "source": "codeforces",
+    "sourceId": "1900A",
+    "canonicalUrl": "https://codeforces.com/contest/1900/problem/A",
+    "title": "Cover in Water",
+    "locale": "en-US",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "CF 800",
+      "numericRating": 800,
+      "normalizedTier": 1
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "greedy",
+      "strings"
+    ],
+    "conceptTags": [
+      "greedy.interval_and_sort"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:32:00.000Z"
+    }
+  },
+  {
+    "schemaVersion": "problem-doc/v2",
+    "problemKey": "atcoder:abc340_b",
+    "source": "atcoder",
+    "sourceId": "abc340_b",
+    "canonicalUrl": "https://atcoder.jp/contests/abc340/tasks/abc340_b",
+    "title": "Append",
+    "locale": "en-US",
+    "completeness": "metadata_only",
+    "ioMode": "stdio",
+    "samples": [],
+    "difficulty": {
+      "rawLabel": "AtCoder ~50",
+      "numericRating": 50,
+      "normalizedTier": 1
+    },
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "implementation",
+      "vector"
+    ],
+    "conceptTags": [
+      "basics.io_and_simulation"
+    ],
+    "provenance": {
+      "ingestChannel": "builtin-adapter",
+      "fetchedAt": "2026-09-01T00:31:00.000Z"
+    }
+  }
+]

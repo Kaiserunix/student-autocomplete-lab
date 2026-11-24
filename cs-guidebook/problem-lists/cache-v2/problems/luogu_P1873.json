@@ -1,0 +1,30 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P1873",
+  "source": "luogu",
+  "sourceId": "P1873",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P1873",
+  "title": "[COCI 2011/2012 #5] EKO / 砍树",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set2",
+    "Set2-基本功",
+    "binary-search",
+    "二分答案"
+  ],
+  "conceptTags": [
+    "array.binary_search"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:26:00.000Z"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P1090",
+  "source": "luogu",
+  "sourceId": "P1090",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P1090",
+  "title": "[NOIP 2004 提高组] 合并果子",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及/提高-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set2",
+    "Set2-基本功",
+    "贪心",
+    "优先队列",
+    "堆"
+  ],
+  "conceptTags": [
+    "ds.heap",
+    "greedy.exchange_argument"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:24:00.000Z"
+  }
+}

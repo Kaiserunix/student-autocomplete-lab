@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P3366",
+  "source": "luogu",
+  "sourceId": "P3366",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P3366",
+  "title": "【模板】最小生成树",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及/提高-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set3",
+    "Set3-搜索图论DP",
+    "最小生成树",
+    "Kruskal",
+    "并查集"
+  ],
+  "conceptTags": [
+    "graph.mst",
+    "ds.dsu"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:12:00.000Z"
+  }
+}

@@ -1,0 +1,143 @@
+[
+  {
+    "name": "【深基2.例12】上学迟到",
+    "group": "CS-Guidebook · Set 1 语法模拟与边界热身",
+    "url": "https://www.luogu.com.cn/problem/P5707",
+    "timeLimit": 1000,
+    "memoryLimit": 128,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "模拟",
+      "时间计算",
+      "取整"
+    ]
+  },
+  {
+    "name": "[NOIP 2005 普及组] 陶陶摘苹果",
+    "group": "CS-Guidebook · Set 1 语法模拟与边界热身",
+    "url": "https://www.luogu.com.cn/problem/P1046",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "数组",
+      "条件计数"
+    ]
+  },
+  {
+    "name": "[NOIP 2005 普及组] 校门外的树",
+    "group": "CS-Guidebook · Set 1 语法模拟与边界热身",
+    "url": "https://www.luogu.com.cn/problem/P1047",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "模拟",
+      "布尔标记"
+    ]
+  },
+  {
+    "name": "[NOIP 2013 普及组] 计数问题",
+    "group": "CS-Guidebook · Set 1 语法模拟与边界热身",
+    "url": "https://www.luogu.com.cn/problem/P1980",
+    "timeLimit": 1000,
+    "memoryLimit": 125,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "枚举",
+      "数位拆解"
+    ]
+  },
+  {
+    "name": "[NOIP 2008 普及组] ISBN 号码",
+    "group": "CS-Guidebook · Set 1 语法模拟与边界热身",
+    "url": "https://www.luogu.com.cn/problem/P1055",
+    "timeLimit": 1000,
+    "memoryLimit": 128,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "字符串",
+      "模拟"
+    ]
+  },
+  {
+    "name": "[NOIP 2003 普及组] 乒乓球",
+    "group": "CS-Guidebook · Set 1 语法模拟与边界热身",
+    "url": "https://www.luogu.com.cn/problem/P1042",
+    "timeLimit": 1000,
+    "memoryLimit": 128,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "模拟",
+      "多规则状态"
+    ]
+  },
+  {
+    "name": "Watermelon",
+    "group": "CS-Guidebook · Set 1 语法模拟与边界热身",
+    "url": "https://codeforces.com/contest/4/problem/A",
+    "timeLimit": 1000,
+    "memoryLimit": 64,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "math",
+      "implementation"
+    ]
+  },
+  {
+    "name": "Team",
+    "group": "CS-Guidebook · Set 1 语法模拟与边界热身",
+    "url": "https://codeforces.com/contest/231/problem/A",
+    "timeLimit": 2000,
+    "memoryLimit": 256,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "implementation",
+      "greedy"
+    ]
+  },
+  {
+    "name": "Cover in Water",
+    "group": "CS-Guidebook · Set 1 语法模拟与边界热身",
+    "url": "https://codeforces.com/contest/1900/problem/A",
+    "timeLimit": 1000,
+    "memoryLimit": 256,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "greedy",
+      "strings"
+    ]
+  },
+  {
+    "name": "Append",
+    "group": "CS-Guidebook · Set 1 语法模拟与边界热身",
+    "url": "https://atcoder.jp/contests/abc340/tasks/abc340_b",
+    "timeLimit": 2000,
+    "memoryLimit": 1024,
+    "rawTags": [
+      "CS-Guidebook",
+      "Set1",
+      "Set1-热身",
+      "implementation",
+      "vector"
+    ]
+  }
+]

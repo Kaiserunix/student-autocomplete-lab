@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "problem-doc/v2",
+  "problemKey": "luogu:P3383",
+  "source": "luogu",
+  "sourceId": "P3383",
+  "canonicalUrl": "https://www.luogu.com.cn/problem/P3383",
+  "title": "【模板】线性筛素数",
+  "locale": "zh-CN",
+  "completeness": "metadata_only",
+  "ioMode": "stdio",
+  "samples": [],
+  "difficulty": {
+    "rawLabel": "普及-",
+    "normalizedTier": 2
+  },
+  "rawTags": [
+    "CS-Guidebook",
+    "Set4",
+    "Set4-进阶综合",
+    "欧拉筛",
+    "素数",
+    "数论"
+  ],
+  "conceptTags": [
+    "math.number_theory"
+  ],
+  "provenance": {
+    "ingestChannel": "builtin-adapter",
+    "fetchedAt": "2026-09-01T00:09:00.000Z"
+  }
+}
